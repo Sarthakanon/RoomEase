@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../services/firebase_auth_service.dart';
+import '../../../services/firestore_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,6 +22,63 @@ class _LoginScreenState extends State<LoginScreen> {
   // Firebase Auth Service
   final FirebaseAuthService _authService = FirebaseAuthService();
 
+  // Google Sign-In function
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userCredential = await _authService.signInWithGoogle();
+
+      if (userCredential != null && mounted) {
+        // Check if user has any roomspaces
+        final firestoreService = FirestoreService();
+        final roomspaces = await firestoreService.getUserRoomspaces(
+          userCredential.user!.uid,
+        );
+
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome ${userCredential.user?.displayName ?? ""}!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Route based on roomspace status
+        if (roomspaces.isEmpty) {
+          // First time login - go to roomspace selection
+          Navigator.pushReplacementNamed(context, '/roomspace-selection');
+        } else {
+          // Has roomspace - go to home
+          Navigator.pushReplacementNamed(context, '/home');
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   // Login function
   Future<void> _login() async {
     // Check if form is valid
@@ -38,6 +96,12 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         if (userCredential != null && mounted) {
+          // Check if user has any roomspaces
+          final firestoreService = FirestoreService();
+          final roomspaces = await firestoreService.getUserRoomspaces(
+            userCredential.user!.uid,
+          );
+
           setState(() {
             _isLoading = false;
           });
@@ -50,8 +114,14 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           );
 
-          // Go to home screen
-          Navigator.pushReplacementNamed(context, '/home');
+          // Route based on roomspace status
+          if (roomspaces.isEmpty) {
+            // First time login - go to roomspace selection
+            Navigator.pushReplacementNamed(context, '/roomspace-selection');
+          } else {
+            // Has roomspace - go to home
+            Navigator.pushReplacementNamed(context, '/home');
+          }
         }
       } catch (e) {
         if (mounted) {
@@ -370,6 +440,62 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ),
                                   ),
+                            SizedBox(height: 24),
+
+                            // Divider with "OR"
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Divider(color: Colors.grey[300]),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 16),
+                                  child: Text(
+                                    'OR',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Divider(color: Colors.grey[300]),
+                                ),
+                              ],
+                            ),
+
+                            SizedBox(height: 24),
+
+                            // Google Sign-In Button
+                            OutlinedButton.icon(
+                              onPressed: _isLoading ? null : _signInWithGoogle,
+                              icon: Icon(
+                                Icons.g_mobiledata,
+                                size: 28,
+                                color: Colors.red,
+                              ),
+                              label: Text(
+                                'Continue with Google',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: Size(double.infinity, 44),
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                side: BorderSide(
+                                  color: Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                backgroundColor: Colors.white,
+                              ),
+                            ),
+
                             SizedBox(height: 24),
                             // Enhanced sign up link
                             Row(
