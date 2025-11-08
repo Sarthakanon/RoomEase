@@ -1,20 +1,43 @@
 import 'package:flutter/material.dart';
-// import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/auth/presentation/signup_screen.dart';
 import 'features/auth/presentation/forgot_password_screen.dart';
+import 'features/roomspace/presentation/roomspace_selection_screen.dart';
+import 'features/roomspace/presentation/create_roomspace_screen.dart';
+import 'features/roomspace/presentation/join_roomspace_screen.dart';
+import 'features/settings/presentation/settings_screen.dart';
+import 'services/roomspace_service.dart';
 // import 'features/home/home_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Firebase initialization commented out for now
-  // await Firebase.initializeApp(); 
+
+  // Initialize Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Configure system UI overlay style for status bar
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.white,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
+
+  // Initialize mock data for testing
+  RoomspaceService.initializeMockData();
+
   runApp(const RoomEaseApp());
 }
 
 class RoomEaseApp extends StatelessWidget {
-  const RoomEaseApp({Key? key}) : super(key: key);
+  const RoomEaseApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -43,9 +66,7 @@ class RoomEaseApp extends StatelessWidget {
               fontSize: 16,
               fontWeight: FontWeight.w500,
             ),
-            bodyMedium: GoogleFonts.poppins(
-              fontSize: 14,
-            ),
+            bodyMedium: GoogleFonts.poppins(fontSize: 14),
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -69,7 +90,10 @@ class RoomEaseApp extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: Colors.indigo, width: 2),
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
         ),
       ),
       initialRoute: '/login',
@@ -77,8 +101,86 @@ class RoomEaseApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/signup': (context) => const SignupScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
-        // '/home': (context) => const HomeScreen(), // Create this screen later
+        '/roomspace-selection': (context) => const RoomspaceSelectionScreen(),
+        '/create-roomspace': (context) => const CreateRoomspaceScreen(),
+        '/join-roomspace': (context) => const JoinRoomspaceScreen(),
+        '/settings': (context) => const SettingsScreen(),
+        '/home': (context) => const PlaceholderHomeScreen(),
       },
+    );
+  }
+}
+
+// Temporary placeholder home screen
+class PlaceholderHomeScreen extends StatelessWidget {
+  const PlaceholderHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('RoomEase Home'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/settings');
+            },
+            icon: Icon(Icons.settings),
+          ),
+        ],
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 120,
+              height: 120,
+              child: Image.asset('png/logo.png', fit: BoxFit.contain),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Welcome to RoomEase!',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Your roomspace dashboard will be here',
+              style: TextStyle(color: Colors.grey[600], fontSize: 16),
+            ),
+            SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/settings');
+                  },
+                  icon: Icon(Icons.settings),
+                  label: Text('Settings'),
+                ),
+                SizedBox(width: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pushReplacementNamed(context, '/login');
+                  },
+                  child: Text('Back to Login'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
