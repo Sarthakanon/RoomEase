@@ -1,7 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 class FirebaseAuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   // Get current user
   User? get currentUser => _auth.currentUser;
@@ -21,6 +23,10 @@ class FirebaseAuthService {
 
       // Update display name
       await userCredential.user?.updateDisplayName(name);
+
+      // Send email verification
+      await userCredential.user?.sendEmailVerification();
+
       await userCredential.user?.reload();
 
       return userCredential;
@@ -41,11 +47,78 @@ class FirebaseAuthService {
         email: email,
         password: password,
       );
+
+      // Check if email is verified
+      if (!userCredential.user!.emailVerified) {
+        await _auth.signOut();
+        throw 'Please verify your email before logging in. Check your inbox for the verification link.';
+      }
+
       return userCredential;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     } catch (e) {
+      if (e is String) {
+        throw e;
+      }
       throw 'An unexpected error occurred. Please try again.';
+    }
+  }
+
+  // Resend email verification
+  Future<void> resendEmailVerification() async {
+    try {
+      User? user = _auth.currentUser;
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+      } else if (user == null) {
+        throw 'No user is currently signed in.';
+      } else {
+        throw 'Email is already verified.';
+      }
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    } catch (e) {
+      if (e is String) {
+        throw e;
+      }
+      throw 'Failed to send verification email. Please try again.';
+    }
+  }
+
+  // Check if email is verified
+  Future<bool> isEmailVerified() async {
+    await _auth.currentUser?.reload();
+    return _auth.currentUser?.emailVerified ?? false;
+  }
+
+  // Sign in with Google
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      // Trigger the authentication flow
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+
+      if (googleUser == null) {
+        // User canceled the sign-in
+        return null;
+      }
+
+      // Obtain the auth details from the request
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      // Create a new credential
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase with the Google credential
+      return await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    } catch (e) {
+      throw 'Failed to sign in with Google. Please try again.';
     }
   }
 
