@@ -138,23 +138,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             // App name with better typography
                             Text(
                               'RoomEase',
-                              style: Theme.of(context).textTheme.displayMedium
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                            SizedBox(height: 8),
+                            SizedBox(height: 6),
                             // Page title with better styling
                             Text(
                               'Reset Password',
-                              style: Theme.of(context).textTheme.bodyLarge
-                                  ?.copyWith(
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Colors.amber,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             SizedBox(height: 24),
 
@@ -191,26 +189,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                 decoration: InputDecoration(
                                   labelText: 'Email Address',
                                   labelStyle: TextStyle(
-                                    color: Colors.grey[500],
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w400,
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
                                   ),
                                   hintText: 'Enter your email',
                                   hintStyle: TextStyle(
                                     color: Colors.grey[400],
-                                    fontSize: 14,
+                                    fontSize: 12,
                                   ),
                                   prefixIcon: Icon(
                                     Icons.email_outlined,
                                     color: Theme.of(
                                       context,
-                                    ).colorScheme.primary,
+                                    ).colorScheme.tertiary,
+                                    size: 18,
                                   ),
                                   filled: true,
                                   fillColor: Colors.grey[50],
                                   contentPadding: EdgeInsets.symmetric(
-                                    vertical: 16,
-                                    horizontal: 16,
+                                    vertical: 12,
+                                    horizontal: 12,
                                   ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -290,7 +288,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                       child: Text(
                                         'Send Reset Link',
                                         style: TextStyle(
-                                          fontSize: 16,
+                                          fontSize: 14,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -362,7 +360,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                 child: Text(
                                   'Back to Sign In',
                                   style: TextStyle(
-                                    fontSize: 16,
+                                    fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),

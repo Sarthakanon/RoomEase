@@ -28,6 +28,66 @@ class _SignupScreenState extends State<SignupScreen> {
   final FirebaseAuthService _authService = FirebaseAuthService();
   final FirestoreService _firestoreService = FirestoreService();
 
+  // Google Sign-In function
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final userCredential = await _authService.signInWithGoogle();
+
+      if (userCredential != null && userCredential.user != null) {
+        // Create user document in Firestore if it doesn't exist
+        final user = UserModel(
+          id: userCredential.user!.uid,
+          name: userCredential.user!.displayName ?? 'User',
+          email: userCredential.user!.email!,
+          photoUrl: userCredential.user!.photoURL,
+          createdAt: DateTime.now(),
+        );
+
+        await _firestoreService.createUser(user);
+
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Welcome ${userCredential.user?.displayName ?? ""}!',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Go to roomspace selection screen
+          Navigator.pushReplacementNamed(context, '/roomspace-selection');
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   // Signup function
   Future<void> _signup() async {
     // Check if form is valid
@@ -61,16 +121,68 @@ class _SignupScreenState extends State<SignupScreen> {
               _isLoading = false;
             });
 
-            // Show success message
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Account created successfully!'),
-                backgroundColor: Colors.green,
+            // Show email verification dialog
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                title: Row(
+                  children: [
+                    Icon(
+                      Icons.email,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 24,
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(child: Text('Verify Your Email')),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'A verification email has been sent to:',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      _emailController.text.trim(),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Please check your inbox and click the verification link to activate your account.',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'You can login after verifying your email.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.pushReplacementNamed(context, '/login');
+                    },
+                    child: Text('Go to Login'),
+                  ),
+                ],
               ),
             );
-
-            // Go to roomspace selection screen
-            Navigator.pushReplacementNamed(context, '/roomspace-selection');
           }
         }
       } catch (e) {
@@ -158,22 +270,20 @@ class _SignupScreenState extends State<SignupScreen> {
                             SizedBox(height: 16),
                             Text(
                               'RoomEase',
-                              style: Theme.of(context).textTheme.displayMedium
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                            SizedBox(height: 8),
+                            SizedBox(height: 6),
                             Text(
                               'Create Your Account',
-                              style: Theme.of(context).textTheme.bodyLarge
-                                  ?.copyWith(
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Colors.amber,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             SizedBox(height: 24),
 
@@ -187,15 +297,17 @@ class _SignupScreenState extends State<SignupScreen> {
                               decoration: InputDecoration(
                                 labelText: 'Full Name',
                                 labelStyle: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
+                                  color: Colors.grey[600],
+                                  fontSize: 12,
                                 ),
                                 hintText: 'Enter your full name',
-                                hintStyle: TextStyle(color: Colors.grey[400]),
+                                hintStyle: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: 12,
+                                ),
                                 prefixIcon: Icon(
                                   Icons.person_outline,
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: Theme.of(context).colorScheme.tertiary,
                                   size: 18,
                                 ),
                                 filled: true,
@@ -255,15 +367,17 @@ class _SignupScreenState extends State<SignupScreen> {
                               decoration: InputDecoration(
                                 labelText: 'Email Address',
                                 labelStyle: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
+                                  color: Colors.grey[600],
+                                  fontSize: 12,
                                 ),
                                 hintText: 'Enter your email',
-                                hintStyle: TextStyle(color: Colors.grey[400]),
+                                hintStyle: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: 12,
+                                ),
                                 prefixIcon: Icon(
                                   Icons.email_outlined,
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: Theme.of(context).colorScheme.tertiary,
                                   size: 18,
                                 ),
                                 filled: true,
@@ -327,9 +441,8 @@ class _SignupScreenState extends State<SignupScreen> {
                               decoration: InputDecoration(
                                 labelText: 'Password',
                                 labelStyle: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
+                                  color: Colors.grey[600],
+                                  fontSize: 12,
                                 ),
                                 hintText: 'Create a password',
                                 hintStyle: TextStyle(
@@ -338,7 +451,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                 ),
                                 prefixIcon: Icon(
                                   Icons.lock_outline,
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: Theme.of(context).colorScheme.tertiary,
                                   size: 18,
                                 ),
                                 filled: true,
@@ -382,8 +495,22 @@ class _SignupScreenState extends State<SignupScreen> {
                                 if (value == null || value.isEmpty) {
                                   return 'Please enter a password';
                                 }
-                                if (value.length < 6) {
-                                  return 'Password must be at least 6 characters';
+                                if (value.length < 8) {
+                                  return 'Password must be at least 8 characters';
+                                }
+                                // Check for uppercase letter
+                                if (!value.contains(RegExp(r'[A-Z]'))) {
+                                  return 'Password must contain at least 1 uppercase letter';
+                                }
+                                // Check for number
+                                if (!value.contains(RegExp(r'[0-9]'))) {
+                                  return 'Password must contain at least 1 number';
+                                }
+                                // Check for special character
+                                if (!value.contains(
+                                  RegExp(r'[!@#$%^&*(),.?":{}|<>]'),
+                                )) {
+                                  return 'Password must contain at least 1 special character';
                                 }
                                 return null;
                               },
@@ -401,9 +528,8 @@ class _SignupScreenState extends State<SignupScreen> {
                               decoration: InputDecoration(
                                 labelText: 'Confirm Password',
                                 labelStyle: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
+                                  color: Colors.grey[600],
+                                  fontSize: 12,
                                 ),
                                 hintText: 'Confirm your password',
                                 hintStyle: TextStyle(
@@ -412,7 +538,7 @@ class _SignupScreenState extends State<SignupScreen> {
                                 ),
                                 prefixIcon: Icon(
                                   Icons.lock_outline,
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: Theme.of(context).colorScheme.tertiary,
                                   size: 18,
                                 ),
                                 filled: true,
@@ -496,11 +622,67 @@ class _SignupScreenState extends State<SignupScreen> {
                                     child: Text(
                                       'Create Account',
                                       style: TextStyle(
-                                        fontSize: 16,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ),
+                            SizedBox(height: 24),
+
+                            // Divider with "OR"
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Divider(color: Colors.grey[300]),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 16),
+                                  child: Text(
+                                    'OR',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Divider(color: Colors.grey[300]),
+                                ),
+                              ],
+                            ),
+
+                            SizedBox(height: 24),
+
+                            // Google Sign-In Button
+                            OutlinedButton.icon(
+                              onPressed: _isLoading ? null : _signInWithGoogle,
+                              icon: Icon(
+                                Icons.g_mobiledata,
+                                size: 28,
+                                color: Colors.red,
+                              ),
+                              label: Text(
+                                'Continue with Google',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: Size(double.infinity, 44),
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                side: BorderSide(
+                                  color: Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                backgroundColor: Colors.white,
+                              ),
+                            ),
+
                             SizedBox(height: 24),
 
                             // Enhanced login link
