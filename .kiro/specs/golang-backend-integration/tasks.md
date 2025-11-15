@@ -236,16 +236,24 @@
     - Add error handling for 401 responses
     - _Requirements: 6.3, 6.4_
 
-- [ ] 12. Update authentication flow
-  - [ ] 12.1 Update login screen
+- [x] 12. Update authentication flow
+
+
+  - [x] 12.1 Update login screen
+
+
 
     - After Firebase login, call backend login API
     - Store session cookie
     - Handle backend errors
     - _Requirements: 6.1_
+
+
   
   - [ ] 12.2 Update signup screen
     - After Firebase signup, call backend login API
+
+
     - Store session cookie
     - _Requirements: 6.1_
   
