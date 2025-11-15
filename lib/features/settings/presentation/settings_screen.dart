@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../services/firebase_auth_service.dart';
+import '../../../services/api_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,6 +22,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Firebase Auth Service
   final FirebaseAuthService _authService = FirebaseAuthService();
+  // API Service for backend
+  final ApiService _apiService = ApiService();
 
   void _showLogoutDialog() {
     showDialog(
@@ -45,7 +48,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Navigator.of(context).pop();
 
               try {
-                // Sign out from Firebase
+                // Logout from backend first
+                await _apiService.logout();
+
+                // Then sign out from Firebase
                 await _authService.signOut();
 
                 if (mounted) {
