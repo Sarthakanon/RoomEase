@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../services/firebase_auth_service.dart';
-import '../../../services/firestore_service.dart';
-import '../../../services/api_service.dart';
-import '../../../models/user_model.dart';
+import '../controllers/auth_controller.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -13,76 +10,30 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
-  // Form key for validation
   final _formKey = GlobalKey<FormState>();
-
-  // Text controllers
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _authController = AuthController();
 
-  // Loading state
-  bool _isLoading = false;
-
-  // Services
-  final FirebaseAuthService _authService = FirebaseAuthService();
-  final FirestoreService _firestoreService = FirestoreService();
-  final ApiService _apiService = ApiService();
-
-  // Google Sign-In function
   Future<void> _signInWithGoogle() async {
-    setState(() {
-      _isLoading = true;
-    });
+    if (!mounted) return;
 
     try {
-      final userCredential = await _authService.signInWithGoogle();
+      final userCredential = await _authController.loginWithGoogle();
 
-      if (userCredential != null && userCredential.user != null) {
-        // Create user document in Firestore if it doesn't exist
-        final user = UserModel(
-          id: userCredential.user!.uid,
-          name: userCredential.user!.displayName ?? 'User',
-          email: userCredential.user!.email!,
-          photoUrl: userCredential.user!.photoURL,
-          createdAt: DateTime.now(),
+      if (userCredential != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome ${userCredential.user?.displayName ?? ""}!'),
+            backgroundColor: Colors.green,
+          ),
         );
-
-        await _firestoreService.createUser(user);
-
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-
-          // Show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Welcome ${userCredential.user?.displayName ?? ""}!',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          // Go to roomspace selection screen
-          Navigator.pushReplacementNamed(context, '/roomspace-selection');
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        Navigator.pushReplacementNamed(context, '/roomspace-selection');
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-
-        // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
@@ -90,124 +41,85 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  // Signup function
   Future<void> _signup() async {
-    // Check if form is valid
-    if (_formKey.currentState!.validate()) {
-      if (!mounted) return;
+    if (!_formKey.currentState!.validate() || !mounted) return;
 
-      // Show loading
-      setState(() {
-        _isLoading = true;
-      });
+    try {
+      final userCredential = await _authController.signUpWithEmail(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+        name: _nameController.text.trim(),
+      );
 
-      try {
-        // Create user with Firebase Auth
-        final userCredential = await _authService.signUpWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-          name: _nameController.text.trim(),
-        );
-
-        if (userCredential != null && userCredential.user != null) {
-          // Get Firebase ID token
-          final idToken = await userCredential.user!.getIdToken();
-
-          if (idToken != null) {
-            // Send token to backend to create session and store user in PostgreSQL
-            await _apiService.login(idToken);
-          }
-
-          // Create user document in Firestore
-          final user = UserModel(
-            id: userCredential.user!.uid,
-            name: _nameController.text.trim(),
-            email: _emailController.text.trim(),
-            createdAt: DateTime.now(),
-          );
-
-          await _firestoreService.createUser(user);
-
-          if (!mounted) return;
-
-          setState(() {
-            _isLoading = false;
-          });
-
-          // Show email verification dialog
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: Row(
-                children: [
-                  Icon(
-                    Icons.email,
+      if (userCredential != null && mounted) {
+        // Show email verification dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Icon(
+                  Icons.email,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 24,
+                ),
+                SizedBox(width: 12),
+                Expanded(child: Text('Verify Your Email')),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'A verification email has been sent to:',
+                  style: TextStyle(fontSize: 14),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  _emailController.text.trim(),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
                     color: Theme.of(context).colorScheme.primary,
-                    size: 24,
                   ),
-                  SizedBox(width: 12),
-                  Expanded(child: Text('Verify Your Email')),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'A verification email has been sent to:',
-                    style: TextStyle(fontSize: 14),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Please check your inbox and click the verification link to activate your account.',
+                  style: TextStyle(fontSize: 14),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'You can login after verifying your email.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange,
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    _emailController.text.trim(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Please check your inbox and click the verification link to activate your account.',
-                    style: TextStyle(fontSize: 14),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'You can login after verifying your email.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.orange,
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    Navigator.pushReplacementNamed(context, '/login');
-                  },
-                  child: Text('Go to Login'),
                 ),
               ],
             ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-
-          // Show error message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-          );
-        }
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.pushReplacementNamed(context, '/login');
+                },
+                child: Text('Go to Login'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -603,7 +515,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             SizedBox(height: 24),
 
                             // Enhanced signup button
-                            _isLoading
+                            _authController.isLoading
                                 ? SizedBox(
                                     height: 50,
                                     child: Center(
@@ -667,7 +579,9 @@ class _SignupScreenState extends State<SignupScreen> {
 
                             // Google Sign-In Button
                             OutlinedButton.icon(
-                              onPressed: _isLoading ? null : _signInWithGoogle,
+                              onPressed: _authController.isLoading
+                                  ? null
+                                  : _signInWithGoogle,
                               icon: Icon(
                                 Icons.g_mobiledata,
                                 size: 28,
