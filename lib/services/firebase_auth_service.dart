@@ -59,7 +59,7 @@ class FirebaseAuthService {
       throw _handleAuthException(e);
     } catch (e) {
       if (e is String) {
-        throw e;
+        rethrow;
       }
       throw 'An unexpected error occurred. Please try again.';
     }
@@ -80,7 +80,7 @@ class FirebaseAuthService {
       throw _handleAuthException(e);
     } catch (e) {
       if (e is String) {
-        throw e;
+        rethrow;
       }
       throw 'Failed to send verification email. Please try again.';
     }
