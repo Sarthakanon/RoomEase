@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../services/firebase_auth_service.dart';
-import '../../../services/firestore_service.dart';
-import '../../../services/api_service.dart';
+import '../controllers/auth_controller.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,83 +10,38 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Form key to validate the form
   final _formKey = GlobalKey<FormState>();
-  // Controllers for the text fields
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  // Loading state
-  bool _isLoading = false;
+  final _authController = AuthController();
 
-  // Firebase Auth Service
-  final FirebaseAuthService _authService = FirebaseAuthService();
-  // API Service for backend
-  final ApiService _apiService = ApiService();
-
-  // Google Sign-In function
   Future<void> _signInWithGoogle() async {
     if (!mounted) return;
 
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
-      final userCredential = await _authService.signInWithGoogle();
+      final userCredential = await _authController.loginWithGoogle();
 
       if (userCredential != null && mounted) {
-        // Get Firebase ID token
-        final idToken = await userCredential.user!.getIdToken();
+        final roomspaces = await _authController.getUserRoomspaces(
+          userCredential.user!.uid,
+        );
 
-        if (idToken != null) {
-          // Send token to backend to create session and store user in PostgreSQL
-          await _apiService.login(idToken);
+        if (!mounted) return;
 
-          // Check if user has any roomspaces
-          final firestoreService = FirestoreService();
-          final roomspaces = await firestoreService.getUserRoomspaces(
-            userCredential.user!.uid,
-          );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome ${userCredential.user?.displayName ?? ""}!'),
+            backgroundColor: Colors.green,
+          ),
+        );
 
-          if (!mounted) return;
-
-          setState(() {
-            _isLoading = false;
-          });
-
-          // Show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Welcome ${userCredential.user?.displayName ?? ""}!',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          // Route based on roomspace status
-          if (roomspaces.isEmpty) {
-            // First time login - go to roomspace selection
-            Navigator.pushReplacementNamed(context, '/roomspace-selection');
-          } else {
-            // Has roomspace - go to home
-            Navigator.pushReplacementNamed(context, '/home');
-          }
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        Navigator.pushReplacementNamed(
+          context,
+          roomspaces.isEmpty ? '/roomspace-selection' : '/home',
+        );
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-
-        // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
@@ -96,73 +49,39 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Login function
   Future<void> _login() async {
-    // Check if form is valid
-    if (_formKey.currentState!.validate()) {
-      if (!mounted) return;
+    if (!_formKey.currentState!.validate() || !mounted) return;
 
-      // Show loading indicator
-      setState(() {
-        _isLoading = true;
-      });
+    try {
+      final userCredential = await _authController.loginWithEmail(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+      );
 
-      try {
-        // Sign in with Firebase
-        final userCredential = await _authService.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+      if (userCredential != null && mounted) {
+        final roomspaces = await _authController.getUserRoomspaces(
+          userCredential.user!.uid,
         );
 
-        if (userCredential != null && mounted) {
-          // Get Firebase ID token
-          final idToken = await userCredential.user!.getIdToken();
+        if (!mounted) return;
 
-          if (idToken != null) {
-            // Send token to backend to create session and store user in PostgreSQL
-            await _apiService.login(idToken);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome back!'),
+            backgroundColor: Colors.green,
+          ),
+        );
 
-            // Check if user has any roomspaces
-            final firestoreService = FirestoreService();
-            final roomspaces = await firestoreService.getUserRoomspaces(
-              userCredential.user!.uid,
-            );
-
-            if (!mounted) return;
-
-            setState(() {
-              _isLoading = false;
-            });
-
-            // Show success message
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Welcome back!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-
-            // Route based on roomspace status
-            if (roomspaces.isEmpty) {
-              // First time login - go to roomspace selection
-              Navigator.pushReplacementNamed(context, '/roomspace-selection');
-            } else {
-              // Has roomspace - go to home
-              Navigator.pushReplacementNamed(context, '/home');
-            }
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-
-          // Show error message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-          );
-        }
+        Navigator.pushReplacementNamed(
+          context,
+          roomspaces.isEmpty ? '/roomspace-selection' : '/home',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -433,7 +352,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             SizedBox(height: 20),
                             // Enhanced login button
-                            _isLoading
+                            _authController.isLoading
                                 ? SizedBox(
                                     height: 50,
                                     child: Center(
@@ -497,7 +416,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             // Google Sign-In Button
                             OutlinedButton.icon(
-                              onPressed: _isLoading ? null : _signInWithGoogle,
+                              onPressed: _authController.isLoading
+                                  ? null
+                                  : _signInWithGoogle,
                               icon: Icon(
                                 Icons.g_mobiledata,
                                 size: 28,
