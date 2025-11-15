@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../services/firebase_auth_service.dart';
 import '../../../services/firestore_service.dart';
+import '../../../services/api_service.dart';
 import '../../../models/user_model.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class _SignupScreenState extends State<SignupScreen> {
   // Services
   final FirebaseAuthService _authService = FirebaseAuthService();
   final FirestoreService _firestoreService = FirestoreService();
+  final ApiService _apiService = ApiService();
 
   // Google Sign-In function
   Future<void> _signInWithGoogle() async {
@@ -92,6 +94,8 @@ class _SignupScreenState extends State<SignupScreen> {
   Future<void> _signup() async {
     // Check if form is valid
     if (_formKey.currentState!.validate()) {
+      if (!mounted) return;
+
       // Show loading
       setState(() {
         _isLoading = true;
@@ -106,6 +110,14 @@ class _SignupScreenState extends State<SignupScreen> {
         );
 
         if (userCredential != null && userCredential.user != null) {
+          // Get Firebase ID token
+          final idToken = await userCredential.user!.getIdToken();
+
+          if (idToken != null) {
+            // Send token to backend to create session and store user in PostgreSQL
+            await _apiService.login(idToken);
+          }
+
           // Create user document in Firestore
           final user = UserModel(
             id: userCredential.user!.uid,
@@ -116,74 +128,74 @@ class _SignupScreenState extends State<SignupScreen> {
 
           await _firestoreService.createUser(user);
 
-          if (mounted) {
-            setState(() {
-              _isLoading = false;
-            });
+          if (!mounted) return;
 
-            // Show email verification dialog
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                title: Row(
-                  children: [
-                    Icon(
-                      Icons.email,
+          setState(() {
+            _isLoading = false;
+          });
+
+          // Show email verification dialog
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.email,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 24,
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(child: Text('Verify Your Email')),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'A verification email has been sent to:',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    _emailController.text.trim(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
                       color: Theme.of(context).colorScheme.primary,
-                      size: 24,
                     ),
-                    SizedBox(width: 12),
-                    Expanded(child: Text('Verify Your Email')),
-                  ],
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'A verification email has been sent to:',
-                      style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Please check your inbox and click the verification link to activate your account.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'You can login after verifying your email.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.orange,
                     ),
-                    SizedBox(height: 8),
-                    Text(
-                      _emailController.text.trim(),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'Please check your inbox and click the verification link to activate your account.',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'You can login after verifying your email.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.orange,
-                      ),
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      Navigator.pushReplacementNamed(context, '/login');
-                    },
-                    child: Text('Go to Login'),
                   ),
                 ],
               ),
-            );
-          }
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.pushReplacementNamed(context, '/login');
+                  },
+                  child: Text('Go to Login'),
+                ),
+              ],
+            ),
+          );
         }
       } catch (e) {
         if (mounted) {
