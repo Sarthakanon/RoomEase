@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../services/firebase_auth_service.dart';
 import '../../../services/firestore_service.dart';
+import '../../../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,9 +22,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // Firebase Auth Service
   final FirebaseAuthService _authService = FirebaseAuthService();
+  // API Service for backend
+  final ApiService _apiService = ApiService();
 
   // Google Sign-In function
   Future<void> _signInWithGoogle() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
     });
@@ -32,31 +37,43 @@ class _LoginScreenState extends State<LoginScreen> {
       final userCredential = await _authService.signInWithGoogle();
 
       if (userCredential != null && mounted) {
-        // Check if user has any roomspaces
-        final firestoreService = FirestoreService();
-        final roomspaces = await firestoreService.getUserRoomspaces(
-          userCredential.user!.uid,
-        );
+        // Get Firebase ID token
+        final idToken = await userCredential.user!.getIdToken();
 
-        setState(() {
-          _isLoading = false;
-        });
+        if (idToken != null) {
+          // Send token to backend to create session and store user in PostgreSQL
+          await _apiService.login(idToken);
 
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Welcome ${userCredential.user?.displayName ?? ""}!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+          // Check if user has any roomspaces
+          final firestoreService = FirestoreService();
+          final roomspaces = await firestoreService.getUserRoomspaces(
+            userCredential.user!.uid,
+          );
 
-        // Route based on roomspace status
-        if (roomspaces.isEmpty) {
-          // First time login - go to roomspace selection
-          Navigator.pushReplacementNamed(context, '/roomspace-selection');
-        } else {
-          // Has roomspace - go to home
-          Navigator.pushReplacementNamed(context, '/home');
+          if (!mounted) return;
+
+          setState(() {
+            _isLoading = false;
+          });
+
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Welcome ${userCredential.user?.displayName ?? ""}!',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Route based on roomspace status
+          if (roomspaces.isEmpty) {
+            // First time login - go to roomspace selection
+            Navigator.pushReplacementNamed(context, '/roomspace-selection');
+          } else {
+            // Has roomspace - go to home
+            Navigator.pushReplacementNamed(context, '/home');
+          }
         }
       } else {
         if (mounted) {
@@ -83,6 +100,8 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     // Check if form is valid
     if (_formKey.currentState!.validate()) {
+      if (!mounted) return;
+
       // Show loading indicator
       setState(() {
         _isLoading = true;
@@ -96,31 +115,41 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         if (userCredential != null && mounted) {
-          // Check if user has any roomspaces
-          final firestoreService = FirestoreService();
-          final roomspaces = await firestoreService.getUserRoomspaces(
-            userCredential.user!.uid,
-          );
+          // Get Firebase ID token
+          final idToken = await userCredential.user!.getIdToken();
 
-          setState(() {
-            _isLoading = false;
-          });
+          if (idToken != null) {
+            // Send token to backend to create session and store user in PostgreSQL
+            await _apiService.login(idToken);
 
-          // Show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Welcome back!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+            // Check if user has any roomspaces
+            final firestoreService = FirestoreService();
+            final roomspaces = await firestoreService.getUserRoomspaces(
+              userCredential.user!.uid,
+            );
 
-          // Route based on roomspace status
-          if (roomspaces.isEmpty) {
-            // First time login - go to roomspace selection
-            Navigator.pushReplacementNamed(context, '/roomspace-selection');
-          } else {
-            // Has roomspace - go to home
-            Navigator.pushReplacementNamed(context, '/home');
+            if (!mounted) return;
+
+            setState(() {
+              _isLoading = false;
+            });
+
+            // Show success message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Welcome back!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+
+            // Route based on roomspace status
+            if (roomspaces.isEmpty) {
+              // First time login - go to roomspace selection
+              Navigator.pushReplacementNamed(context, '/roomspace-selection');
+            } else {
+              // Has roomspace - go to home
+              Navigator.pushReplacementNamed(context, '/home');
+            }
           }
         }
       } catch (e) {
