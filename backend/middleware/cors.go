@@ -10,13 +10,15 @@ import (
 
 // CORSMiddleware returns a CORS middleware configured for the application
 func CORSMiddleware(allowedOrigins string) gin.HandlerFunc {
-	origins := strings.Split(allowedOrigins, ",")
-	
 	config := cors.Config{
-		AllowOrigins:     origins,
+		AllowOriginFunc: func(origin string) bool {
+			// Allow all localhost origins during development
+			return strings.HasPrefix(origin, "http://localhost:") || 
+				   strings.HasPrefix(origin, "http://127.0.0.1:")
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization", "Cookie"},
-		ExposeHeaders:    []string{"Content-Length"},
+		ExposeHeaders:    []string{"Content-Length", "Set-Cookie"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}
