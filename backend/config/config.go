@@ -15,11 +15,7 @@ type Config struct {
 	SessionTimeout         string
 	SessionSecret          string
 	Environment            string
-	PostgresHost           string
-	PostgresPort           string
-	PostgresUser           string
-	PostgresPassword       string
-	PostgresDatabase       string
+	PostgresDatabaseURL    string
 }
 
 // AppConfig is the global configuration instance
@@ -39,11 +35,7 @@ func LoadConfig() *Config {
 		SessionTimeout:         getEnv("SESSION_TIMEOUT", "24h"),
 		SessionSecret:          getEnv("SESSION_SECRET", "your-secret-key"),
 		Environment:            getEnv("ENVIRONMENT", "development"),
-		PostgresHost:           getEnv("POSTGRES_HOST", "localhost"),
-		PostgresPort:           getEnv("POSTGRES_PORT", "5432"),
-		PostgresUser:           getEnv("POSTGRES_USER", "postgres"),
-		PostgresPassword:       getEnv("POSTGRES_PASSWORD", "postgres"),
-		PostgresDatabase:       getEnv("POSTGRES_DATABASE", "roomease"),
+		PostgresDatabaseURL:    getEnv("POSTGRES_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/roomease"),
 	}
 
 	AppConfig = config

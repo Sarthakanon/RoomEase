@@ -22,29 +22,29 @@ func main() {
 		log.Fatalf("Failed to initialize Firebase: %v", err)
 	}
 
-	// Initialize PostgreSQL
-	if err := config.InitPostgreSQL(
-		cfg.PostgresHost,
-		cfg.PostgresPort,
-		cfg.PostgresUser,
-		cfg.PostgresPassword,
-		cfg.PostgresDatabase,
-	); err != nil {
-		log.Fatalf("Failed to initialize PostgreSQL: %v", err)
+	// Initialize PostgreSQL (non-fatal for development)
+	var dbService *services.PostgresService
+	if err := config.InitPostgreSQL(cfg.PostgresDatabaseURL); err != nil {
+		log.Printf("⚠️  WARNING: Failed to initialize PostgreSQL: %v", err)
+		log.Println("⚠️  Server will start WITHOUT database connectivity")
+		log.Println("⚠️  Database-dependent endpoints will not work")
+	} else {
+		defer config.ClosePostgreSQL()
+		
+		// Initialize services
+		dbService = services.NewPostgresService()
+
+		// Run database migrations
+		if err := dbService.AutoMigrate(); err != nil {
+			log.Printf("⚠️  WARNING: Failed to run migrations: %v", err)
+		} else {
+			log.Println("✅ Database migrations completed successfully")
+		}
 	}
-	defer config.ClosePostgreSQL()
 
 	// Initialize session store
 	sessionStore := services.NewInMemorySessionStore()
 	middleware.SessionStore = sessionStore
-
-	// Initialize services
-	dbService := services.NewPostgresService()
-
-	// Run database migrations
-	if err := dbService.AutoMigrate(); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
-	}
 
 	// Create Gin router
 	router := gin.Default()
