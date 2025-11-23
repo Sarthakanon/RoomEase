@@ -1,22 +1,25 @@
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
-import 'package:cookie_jar/cookie_jar.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
-  
+
   factory ApiService() {
     return _instance;
   }
 
   late final Dio _dio;
-  late final CookieJar _cookieJar;
 
-  static const String baseUrl = 'http://localhost:8080';
+  // Platform-specific base URL
+  static String get baseUrl {
+    if (kIsWeb) {
+      return 'http://localhost:8080'; // Web uses localhost
+    } else {
+      return 'http://10.0.2.2:8080'; // Android emulator
+    }
+  }
 
   ApiService._internal() {
-    _cookieJar = CookieJar();
-    
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
@@ -29,13 +32,8 @@ class ApiService {
       ),
     );
 
-    _dio.interceptors.add(CookieManager(_cookieJar));
     _dio.interceptors.add(
-      LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        error: true,
-      ),
+      LogInterceptor(requestBody: true, responseBody: true, error: true),
     );
   }
 
@@ -43,21 +41,16 @@ class ApiService {
     return _dio;
   }
 
-  CookieJar get cookieJar {
-    return _cookieJar;
-  }
-
   Future<void> clearCookies() async {
-    await _cookieJar.deleteAll();
+    // Cookies are handled automatically by the browser on web
+    // and by Dio on mobile platforms
   }
 
   Future<Map<String, dynamic>> login(String firebaseToken) async {
     try {
       final response = await _dio.post(
         '/api/auth/login',
-        data: {
-          'firebase_token': firebaseToken,
-        },
+        data: {'firebase_token': firebaseToken},
       );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
@@ -111,7 +104,10 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> post(String path, {Map<String, dynamic>? data}) async {
+  Future<Map<String, dynamic>> post(
+    String path, {
+    Map<String, dynamic>? data,
+  }) async {
     try {
       final response = await _dio.post(path, data: data);
       return response.data as Map<String, dynamic>;
@@ -125,7 +121,10 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> put(String path, {Map<String, dynamic>? data}) async {
+  Future<Map<String, dynamic>> put(
+    String path, {
+    Map<String, dynamic>? data,
+  }) async {
     try {
       final response = await _dio.put(path, data: data);
       return response.data as Map<String, dynamic>;
@@ -157,7 +156,10 @@ class ApiService {
     return await get('/api/user/profile');
   }
 
-  Future<Map<String, dynamic>> updateUserProfile({String? name, String? phone}) async {
+  Future<Map<String, dynamic>> updateUserProfile({
+    String? name,
+    String? phone,
+  }) async {
     final data = <String, dynamic>{};
     if (name != null) {
       data['name'] = name;
@@ -172,10 +174,11 @@ class ApiService {
     return await get('/api/roomspaces');
   }
 
-  Future<Map<String, dynamic>> createRoomspace({required String name, String? description}) async {
-    final data = <String, dynamic>{
-      'name': name,
-    };
+  Future<Map<String, dynamic>> createRoomspace({
+    required String name,
+    String? description,
+  }) async {
+    final data = <String, dynamic>{'name': name};
     if (description != null) {
       data['description'] = description;
     }
