@@ -11,7 +11,7 @@ import 'features/roomspace/presentation/create_roomspace_screen.dart';
 import 'features/roomspace/presentation/join_roomspace_screen.dart';
 import 'features/settings/presentation/settings_screen.dart';
 import 'services/roomspace_service.dart';
-// import 'features/home/home_screen.dart';
+import 'features/home/mobile_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -105,82 +105,8 @@ class RoomEaseApp extends StatelessWidget {
         '/create-roomspace': (context) => const CreateRoomspaceScreen(),
         '/join-roomspace': (context) => const JoinRoomspaceScreen(),
         '/settings': (context) => const SettingsScreen(),
-        '/home': (context) => const PlaceholderHomeScreen(),
+        '/home': (context) => const MobileDashboard(),
       },
-    );
-  }
-}
-
-// Temporary placeholder home screen
-class PlaceholderHomeScreen extends StatelessWidget {
-  const PlaceholderHomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('RoomEase Home'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light,
-          statusBarBrightness: Brightness.dark,
-        ),
-        actions: [
-          IconButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/settings');
-            },
-            icon: Icon(Icons.settings),
-          ),
-        ],
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 120,
-              height: 120,
-              child: Image.asset('png/logo.png', fit: BoxFit.contain),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Welcome to RoomEase!',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Your roomspace dashboard will be here',
-              style: TextStyle(color: Colors.grey[600], fontSize: 16),
-            ),
-            SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/settings');
-                  },
-                  icon: Icon(Icons.settings),
-                  label: Text('Settings'),
-                ),
-                SizedBox(width: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/login');
-                  },
-                  child: Text('Back to Login'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
