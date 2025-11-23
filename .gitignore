@@ -63,3 +63,4 @@ backend/vendor/
 *.exe
 *.test
 *.log
+backend/serviceAccount.json
