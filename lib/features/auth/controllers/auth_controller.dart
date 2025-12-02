@@ -133,9 +133,9 @@ class AuthController extends ChangeNotifier {
   Future<List<dynamic>> getUserRoomspaces(String uid) async {
     try {
       final response = await _apiService.getRoomspaces();
-      // The API returns {roomspaces: [...]}
-      if (response.containsKey('roomspaces')) {
-        return response['roomspaces'] as List<dynamic>;
+      // The API returns {data: [...]}
+      if (response.containsKey('data')) {
+        return response['data'] as List<dynamic>;
       }
       return [];
     } catch (e) {
