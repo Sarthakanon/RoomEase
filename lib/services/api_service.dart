@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
@@ -13,15 +14,28 @@ class ApiService {
   late final Dio _dio;
   late final CookieJar _cookieJar;
 
+  // Your computer's local network IP - update this when your IP changes
+  static const String _localNetworkIp = '192.168.1.89';
+
   // Platform-specific base URL
   static String get baseUrl {
     if (kIsWeb) {
-      return 'http://localhost:8080'; // Web uses localhost
-    } else {
-      // Use your computer's actual IP address
-      // Change this if your IP changes when switching networks
-      return 'http://172.20.10.5:8080'; // Android emulator
+      return 'http://localhost:8080';
     }
+
+    // For USB-connected device with adb reverse, use localhost
+    // For WiFi physical device, use local network IP
+    // For Android emulator, use 10.0.2.2
+    if (Platform.isAndroid) {
+      return 'http://localhost:8080'; // USB with adb reverse
+      // return 'http://$_localNetworkIp:8080'; // WiFi physical device
+      // return 'http://10.0.2.2:8080'; // Android emulator
+    } else if (Platform.isIOS) {
+      // iOS simulator uses localhost, physical device needs IP
+      return 'http://$_localNetworkIp:8080';
+    }
+
+    return 'http://localhost:8080';
   }
 
   ApiService._internal() {
