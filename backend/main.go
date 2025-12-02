@@ -59,6 +59,10 @@ func main() {
 	authHandler := handlers.NewAuthHandler(sessionStore, dbService)
 	userHandler := handlers.NewUserHandler(dbService)
 	roomspaceHandler := handlers.NewRoomspaceHandler(dbService)
+	healthHandler := handlers.NewHealthHandler()
+
+	// Health check endpoint (public)
+	router.GET("/health", healthHandler.Check)
 
 	// Public routes
 	router.POST("/api/auth/login", authHandler.Login)
