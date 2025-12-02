@@ -27,177 +27,77 @@ class _MobileScaffoldState extends State<MobileScaffold> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+      backgroundColor: const Color(0xFFF8F9FA), // Light grey background
+      body: widget.body,
+      // Keep false to prevent overlap
+      extendBody: false,
+      bottomNavigationBar: widget.showBottomNav && user != null
+          ? SafeArea(
+              child: Container(
+                // Limit the height to prevent full-screen expansion
+                height: 80,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
                 ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.home_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              widget.title ?? 'RoomEase',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C3E50),
-              ),
-            ),
-          ],
-        ),
-        actions:
-            widget.actions ??
-            [
-              if (user != null)
-                PopupMenuButton<String>(
-                  icon: CircleAvatar(
-                    radius: 16,
-                    backgroundColor: const Color(0xFF6366F1),
-                    backgroundImage: user.photoURL != null
-                        ? NetworkImage(user.photoURL!)
-                        : null,
-                    child: user.photoURL == null
-                        ? Text(
-                            user.displayName?.substring(0, 1).toUpperCase() ??
-                                'U',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          )
-                        : null,
-                  ),
-                  offset: const Offset(0, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'profile',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.person_outline, size: 20),
-                          const SizedBox(width: 12),
-                          Text(user.displayName ?? 'Profile'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'settings',
-                      child: Row(
-                        children: [
-                          Icon(Icons.settings_outlined, size: 20),
-                          SizedBox(width: 12),
-                          Text('Settings'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(),
-                    const PopupMenuItem(
-                      value: 'logout',
-                      child: Row(
-                        children: [
-                          Icon(Icons.logout, size: 20, color: Colors.red),
-                          SizedBox(width: 12),
-                          Text('Logout', style: TextStyle(color: Colors.red)),
-                        ],
-                      ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
                     ),
                   ],
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'profile':
-                        // Navigate to profile
-                        break;
-                      case 'settings':
-                        Navigator.pushNamed(context, '/settings');
-                        break;
-                      case 'logout':
-                        FirebaseAuth.instance.signOut();
-                        Navigator.pushReplacementNamed(context, '/login');
-                        break;
-                    }
-                  },
                 ),
-              const SizedBox(width: 8),
-            ],
-      ),
-      body: widget.body,
-      bottomNavigationBar: widget.showBottomNav && user != null
-          ? Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _NavBarItem(
-                        icon: Icons.dashboard_rounded,
-                        label: 'Home',
-                        isActive: widget.currentIndex == 0,
-                        onTap: () {
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _NavBarItem(
+                      icon: Icons.dashboard_rounded,
+                      label: 'Home',
+                      isActive: widget.currentIndex == 0,
+                      onTap: () {
+                        if (widget.currentIndex != 0) {
                           Navigator.pushReplacementNamed(context, '/home');
-                        },
-                      ),
-                      _NavBarItem(
-                        icon: Icons.meeting_room_rounded,
-                        label: 'Rooms',
-                        isActive: widget.currentIndex == 1,
-                        onTap: () {
+                        }
+                      },
+                    ),
+                    _NavBarItem(
+                      icon: Icons.meeting_room_rounded,
+                      label: 'Rooms',
+                      isActive: widget.currentIndex == 1,
+                      onTap: () {
+                        if (widget.currentIndex != 1) {
                           Navigator.pushNamed(context, '/roomspace-selection');
-                        },
-                      ),
-                      _NavBarItem(
-                        icon: Icons.receipt_long_rounded,
-                        label: 'Expenses',
-                        isActive: widget.currentIndex == 2,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Coming soon!')),
-                          );
-                        },
-                      ),
-                      _NavBarItem(
-                        icon: Icons.people_rounded,
-                        label: 'Members',
-                        isActive: widget.currentIndex == 3,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Coming soon!')),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                        }
+                      },
+                    ),
+                    _NavBarItem(
+                      icon: Icons.receipt_long_rounded,
+                      label: 'Expenses',
+                      isActive: widget.currentIndex == 2,
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Expenses Coming soon!'),
+                          ),
+                        );
+                      },
+                    ),
+                    _NavBarItem(
+                      icon: Icons.group_rounded,
+                      label: 'Members',
+                      isActive: widget.currentIndex == 3,
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Members Coming soon!')),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
             )
@@ -221,34 +121,47 @@ class _NavBarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    // Use theme primary color
+    final Color primaryColor = Theme.of(context).colorScheme.primary;
+
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: isActive
-              ? const Color(0xFF6366F1).withOpacity(0.1)
+              ? primaryColor.withValues(alpha: 0.1)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
         ),
-        child: Column(
+        child: Row(
+          // CRITICAL FIX: Minimize main axis size to prevent stretching
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              color: isActive ? const Color(0xFF6366F1) : Colors.grey[600],
+              color: isActive ? primaryColor : Colors.grey[400],
               size: 24,
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                color: isActive ? const Color(0xFF6366F1) : Colors.grey[600],
-              ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: isActive ? 8 : 0,
             ),
+            if (isActive)
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: primaryColor,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
