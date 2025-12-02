@@ -129,8 +129,42 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Check if user has roomspaces
+  /// Check if user has roomspaces from PostgreSQL backend
   Future<List<dynamic>> getUserRoomspaces(String uid) async {
-    return await _firestoreService.getUserRoomspaces(uid);
+    try {
+      final response = await _apiService.getRoomspaces();
+      // The API returns {roomspaces: [...]}
+      if (response.containsKey('roomspaces')) {
+        return response['roomspaces'] as List<dynamic>;
+      }
+      return [];
+    } catch (e) {
+      // If error, return empty list (user has no roomspaces)
+      return [];
+    }
+  }
+
+  /// Resend email verification
+  Future<void> resendEmailVerification() async {
+    try {
+      await _authService.resendEmailVerification();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Resend email verification with credentials
+  Future<void> resendEmailVerificationWithCredentials({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      await _authService.resendEmailVerificationWithCredentials(
+        email: email,
+        password: password,
+      );
+    } catch (e) {
+      rethrow;
+    }
   }
 }
