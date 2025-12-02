@@ -14,6 +14,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authController = AuthController();
+  bool _obscurePassword = true;
 
   Future<void> _signInWithGoogle() async {
     if (!mounted) return;
@@ -79,11 +80,112 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-        );
+        final errorMessage = e.toString();
+
+        // Check if error is about email verification
+        if (errorMessage.contains('verify your email') ||
+            errorMessage.contains('email verification')) {
+          _showEmailVerificationDialog();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+          );
+        }
       }
     }
+  }
+
+  void _showEmailVerificationDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.email_outlined, color: Colors.orange, size: 24),
+            SizedBox(width: 12),
+            Expanded(child: Text('Email Not Verified')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your email address has not been verified yet.',
+              style: TextStyle(fontSize: 14),
+            ),
+            SizedBox(height: 12),
+            Text('Please check your inbox at:', style: TextStyle(fontSize: 14)),
+            SizedBox(height: 8),
+            Text(
+              _emailController.text.trim(),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Click the verification link in the email to activate your account.',
+              style: TextStyle(fontSize: 14),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Didn\'t receive the email?',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.orange,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              try {
+                await _authController.resendEmailVerificationWithCredentials(
+                  email: _emailController.text.trim(),
+                  password: _passwordController.text.trim(),
+                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Verification email sent! Check your inbox.',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString()),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: Text('Resend Email'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -250,7 +352,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             // Password field
                             TextFormField(
                               controller: _passwordController,
-                              obscureText: true,
+                              obscureText: _obscurePassword,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.black,
@@ -270,6 +372,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                   Icons.lock_outline,
                                   color: Theme.of(context).colorScheme.tertiary,
                                   size: 18,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 18,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
                                 ),
                                 filled: true,
                                 fillColor: Colors.grey[50],
