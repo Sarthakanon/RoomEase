@@ -15,24 +15,21 @@ class RoomspaceService {
     );
   }
 
-  // Join an existing roomspace by room ID
+  // Join an existing roomspace by room ID (format: ROOM-123)
   Future<Map<String, dynamic>> joinRoomspace(String roomId) async {
-    // First, get all roomspaces to find the one with matching room_id
-    final roomspacesResponse = await _apiService.getRoomspaces();
-    final roomspaces = roomspacesResponse['roomspaces'] as List<dynamic>;
+    // Extract the numeric ID from the room ID format (ROOM-123 -> 123)
+    String numericId = roomId;
+    if (roomId.startsWith('ROOM-')) {
+      numericId = roomId.substring(5);
+    }
 
-    // Find roomspace with matching room_id
-    final roomspace = roomspaces.firstWhere(
-      (r) => r['room_id'] == roomId,
-      orElse: () => null,
-    );
-
-    if (roomspace == null) {
-      throw Exception('Roomspace not found');
+    final id = int.tryParse(numericId);
+    if (id == null) {
+      throw Exception('Invalid room ID format');
     }
 
     // Join the roomspace using its ID
-    return await _apiService.joinRoomspace(roomspace['id']);
+    return await _apiService.joinRoomspace(id);
   }
 
   // Get roomspace by ID
@@ -43,6 +40,6 @@ class RoomspaceService {
   // Get user's roomspaces
   Future<List<dynamic>> getUserRoomspaces() async {
     final response = await _apiService.getRoomspaces();
-    return response['roomspaces'] as List<dynamic>;
+    return response['data'] as List<dynamic>;
   }
 }
