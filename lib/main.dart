@@ -10,7 +10,6 @@ import 'features/roomspace/presentation/roomspace_selection_screen.dart';
 import 'features/roomspace/presentation/create_roomspace_screen.dart';
 import 'features/roomspace/presentation/join_roomspace_screen.dart';
 import 'features/settings/presentation/settings_screen.dart';
-import 'services/roomspace_service.dart';
 import 'features/home/mobile_dashboard.dart';
 
 void main() async {
@@ -29,9 +28,6 @@ void main() async {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-
-  // Initialize mock data for testing
-  RoomspaceService.initializeMockData();
 
   runApp(const RoomEaseApp());
 }
