@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -16,6 +17,11 @@ type Config struct {
 	SessionSecret          string
 	Environment            string
 	PostgresDatabaseURL    string
+	PostgresHost           string
+	PostgresPort           string
+	PostgresUser           string
+	PostgresPassword       string
+	PostgresDatabase       string
 }
 
 // AppConfig is the global configuration instance
@@ -28,6 +34,20 @@ func LoadConfig() *Config {
 		log.Println("No .env file found, using environment variables")
 	}
 
+	// Get individual PostgreSQL config values
+	postgresHost := getEnv("POSTGRES_HOST", "localhost")
+	postgresPort := getEnv("POSTGRES_PORT", "5432")
+	postgresUser := getEnv("POSTGRES_USER", "postgres")
+	postgresPassword := getEnv("POSTGRES_PASSWORD", "postgres")
+	postgresDatabase := getEnv("POSTGRES_DATABASE", "roomease")
+
+	// Build DATABASE_URL if not provided
+	databaseURL := getEnv("POSTGRES_DATABASE_URL", "")
+	if databaseURL == "" {
+		databaseURL = fmt.Sprintf("postgresql://%s:%s@%s:%s/%s",
+			postgresUser, postgresPassword, postgresHost, postgresPort, postgresDatabase)
+	}
+
 	config := &Config{
 		Port:                   getEnv("PORT", "8080"),
 		FirebaseCredentialPath: getEnv("FIREBASE_CREDENTIAL_PATH", "serviceAccount.json"),
@@ -35,7 +55,12 @@ func LoadConfig() *Config {
 		SessionTimeout:         getEnv("SESSION_TIMEOUT", "24h"),
 		SessionSecret:          getEnv("SESSION_SECRET", "your-secret-key"),
 		Environment:            getEnv("ENVIRONMENT", "development"),
-		PostgresDatabaseURL:    getEnv("POSTGRES_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/roomease"),
+		PostgresDatabaseURL:    databaseURL,
+		PostgresHost:           postgresHost,
+		PostgresPort:           postgresPort,
+		PostgresUser:           postgresUser,
+		PostgresPassword:       postgresPassword,
+		PostgresDatabase:       postgresDatabase,
 	}
 
 	AppConfig = config
