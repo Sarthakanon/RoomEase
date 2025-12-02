@@ -17,10 +17,12 @@ func CORSMiddleware(allowedOrigins string) gin.HandlerFunc {
 			if origin == "" {
 				return true // Allow requests without Origin header (mobile apps)
 			}
-			// Allow localhost origins
+			// Allow localhost and local network origins
 			return strings.HasPrefix(origin, "http://localhost:") || 
 				   strings.HasPrefix(origin, "http://127.0.0.1:") ||
-				   strings.HasPrefix(origin, "http://10.0.2.2:")
+				   strings.HasPrefix(origin, "http://10.0.2.2:") ||
+				   strings.HasPrefix(origin, "http://172.") ||
+				   strings.HasPrefix(origin, "http://192.168.")
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization", "Cookie"},
