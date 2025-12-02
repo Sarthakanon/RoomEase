@@ -16,6 +16,8 @@ class _SignupScreenState extends State<SignupScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _authController = AuthController();
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   Future<void> _signInWithGoogle() async {
     if (!mounted) return;
@@ -105,10 +107,39 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
             actions: [
               TextButton(
+                onPressed: () async {
+                  try {
+                    await _authController.resendEmailVerification();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Verification email sent!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(e.toString()),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: Text('Resend Email'),
+              ),
+              ElevatedButton(
                 onPressed: () {
                   Navigator.of(context).pop();
                   Navigator.pushReplacementNamed(context, '/login');
                 },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                ),
                 child: Text('Go to Login'),
               ),
             ],
@@ -357,7 +388,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             // Password field
                             TextFormField(
                               controller: _passwordController,
-                              obscureText: true,
+                              obscureText: _obscurePassword,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.black,
@@ -377,6 +408,19 @@ class _SignupScreenState extends State<SignupScreen> {
                                   Icons.lock_outline,
                                   color: Theme.of(context).colorScheme.tertiary,
                                   size: 18,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 18,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
                                 ),
                                 filled: true,
                                 fillColor: Colors.grey[50],
@@ -444,7 +488,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             // Confirm password field
                             TextFormField(
                               controller: _confirmPasswordController,
-                              obscureText: true,
+                              obscureText: _obscureConfirmPassword,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.black,
@@ -464,6 +508,20 @@ class _SignupScreenState extends State<SignupScreen> {
                                   Icons.lock_outline,
                                   color: Theme.of(context).colorScheme.tertiary,
                                   size: 18,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscureConfirmPassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 18,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscureConfirmPassword =
+                                          !_obscureConfirmPassword;
+                                    });
+                                  },
                                 ),
                                 filled: true,
                                 fillColor: Colors.grey[50],
