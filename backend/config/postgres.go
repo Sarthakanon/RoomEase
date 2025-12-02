@@ -12,8 +12,8 @@ var DB *gorm.DB
 
 // InitPostgreSQL initializes PostgreSQL connection using GORM with DATABASE_URL
 func InitPostgreSQL(databaseURL string) error {
-	// Add connection parameters to help with DNS resolution
-	dsn := databaseURL + "?sslmode=require&connect_timeout=10"
+	// Use sslmode=disable for local development
+	dsn := databaseURL + "?sslmode=disable&connect_timeout=10"
 	
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
