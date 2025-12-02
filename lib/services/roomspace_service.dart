@@ -1,118 +1,48 @@
 import '../models/roomspace_model.dart';
+import 'api_service.dart';
 
 class RoomspaceService {
-  // Mock data storage (in real app, this would be Firebase/API calls)
-  static final Map<String, Roomspace> _mockRoomspaces = {};
+  final ApiService _apiService = ApiService();
 
   // Create a new roomspace
-  static Future<String> createRoomspace({
+  Future<Map<String, dynamic>> createRoomspace({
     required String name,
-    required String address,
     String? description,
-    required String createdBy,
-    int maxMembers = 4,
   }) async {
-    // Simulate API delay
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Generate room ID
-    final roomId = _generateRoomId();
-    
-    final roomspace = Roomspace(
-      id: roomId,
+    return await _apiService.createRoomspace(
       name: name,
-      address: address,
       description: description,
-      memberIds: [createdBy],
-      maxMembers: maxMembers,
-      createdAt: DateTime.now(),
-      createdBy: createdBy,
     );
-
-    _mockRoomspaces[roomId] = roomspace;
-    return roomId;
   }
 
-  // Join an existing roomspace
-  static Future<bool> joinRoomspace({
-    required String roomId,
-    required String userId,
-  }) async {
-    // Simulate API delay
-    await Future.delayed(const Duration(seconds: 1));
+  // Join an existing roomspace by room ID
+  Future<Map<String, dynamic>> joinRoomspace(String roomId) async {
+    // First, get all roomspaces to find the one with matching room_id
+    final roomspacesResponse = await _apiService.getRoomspaces();
+    final roomspaces = roomspacesResponse['roomspaces'] as List<dynamic>;
 
-    final roomspace = _mockRoomspaces[roomId];
+    // Find roomspace with matching room_id
+    final roomspace = roomspaces.firstWhere(
+      (r) => r['room_id'] == roomId,
+      orElse: () => null,
+    );
+
     if (roomspace == null) {
-      return false; // Room not found
+      throw Exception('Roomspace not found');
     }
 
-    if (!roomspace.hasSpace) {
-      throw Exception('Roomspace is full');
-    }
-
-    if (roomspace.memberIds.contains(userId)) {
-      throw Exception('User is already a member');
-    }
-
-    // Add user to roomspace
-    final updatedMemberIds = [...roomspace.memberIds, userId];
-    _mockRoomspaces[roomId] = roomspace.copyWith(memberIds: updatedMemberIds);
-    
-    return true;
+    // Join the roomspace using its ID
+    return await _apiService.joinRoomspace(roomspace['id']);
   }
 
   // Get roomspace by ID
-  static Future<Roomspace?> getRoomspace(String roomId) async {
-    // Simulate API delay
-    await Future.delayed(const Duration(milliseconds: 500));
-    return _mockRoomspaces[roomId];
+  Future<Map<String, dynamic>> getRoomspace(int id) async {
+    return await _apiService.getRoomspace(id);
   }
 
   // Get user's roomspaces
-  static Future<List<Roomspace>> getUserRoomspaces(String userId) async {
-    // Simulate API delay
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    return _mockRoomspaces.values
-        .where((roomspace) => roomspace.memberIds.contains(userId))
-        .toList();
-  }
-
-  // Generate a random room ID
-  static String _generateRoomId() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = DateTime.now().millisecondsSinceEpoch;
-    var result = '';
-    
-    for (int i = 0; i < 8; i++) {
-      result += chars[(random + i) % chars.length];
-    }
-    
-    return result;
-  }
-
-  // Initialize with some mock data for testing
-  static void initializeMockData() {
-    _mockRoomspaces['ABC12345'] = Roomspace(
-      id: 'ABC12345',
-      name: 'Downtown Apartment',
-      address: '123 Main St, City Center',
-      description: 'Cozy apartment in the heart of the city',
-      memberIds: ['user1', 'user2'],
-      maxMembers: 4,
-      createdAt: DateTime.now().subtract(const Duration(days: 5)),
-      createdBy: 'user1',
-    );
-
-    _mockRoomspaces['XYZ67890'] = Roomspace(
-      id: 'XYZ67890',
-      name: 'College Dorm',
-      address: 'University Campus, Building A',
-      description: 'Student housing near campus',
-      memberIds: ['user3'],
-      maxMembers: 3,
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      createdBy: 'user3',
-    );
+  Future<List<dynamic>> getUserRoomspaces() async {
+    final response = await _apiService.getRoomspaces();
+    return response['roomspaces'] as List<dynamic>;
   }
 }
