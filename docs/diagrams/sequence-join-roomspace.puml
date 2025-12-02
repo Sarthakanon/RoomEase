@@ -1,0 +1,80 @@
+@startuml Join Roomspace Sequence Diagram
+
+skinparam linetype ortho
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+actor User
+participant "Flutter App" as App
+participant "Go Backend" as Backend
+participant "PostgreSQL" as DB
+
+User -> App: Click "Join Roomspace"
+activate App
+
+App --> User: Show join form
+
+User -> App: Enter Room ID
+App -> App: Validate Room ID format
+
+alt Room ID Valid Format
+    App -> Backend: POST /api/roomspaces/{id}/join
+    activate Backend
+    
+    Backend -> Backend: Verify session
+    
+    alt Session Valid
+        Backend -> DB: SELECT roomspace WHERE room_id = ?
+        activate DB
+        
+        alt Roomspace Exists
+            DB --> Backend: Roomspace data
+            deactivate DB
+            
+            Backend -> DB: Check if user already member
+            activate DB
+            
+            alt Not Already Member
+                DB --> Backend: User not found
+                deactivate DB
+                
+                Backend -> DB: INSERT INTO roomspace_members
+                activate DB
+                DB --> Backend: Member added
+                deactivate DB
+                
+                Backend --> App: 200 OK\n{roomspace_data}
+                deactivate Backend
+                
+                App -> App: Update local state
+                App --> User: Navigate to Dashboard\nShow "Joined successfully"
+                
+            else Already Member
+                DB --> Backend: User exists
+                deactivate DB
+                Backend --> App: 400 Bad Request\n"Already a member"
+                deactivate Backend
+                App --> User: Show error message
+            end
+            
+        else Roomspace Not Found
+            DB --> Backend: No roomspace found
+            deactivate DB
+            Backend --> App: 404 Not Found\n"Invalid Room ID"
+            deactivate Backend
+            App --> User: Show "Room not found"
+        end
+        
+    else Session Invalid
+        Backend --> App: 401 Unauthorized
+        deactivate Backend
+        App --> User: Redirect to Login
+    end
+    
+else Invalid Format
+    App --> User: Show "Invalid Room ID format"
+end
+
+deactivate App
+
+@enduml

@@ -1,0 +1,58 @@
+@startuml Roomspace Management Activity Diagram
+
+skinparam linetype ortho
+skinparam ActivityDiamondBackgroundColor #lightblue
+skinparam ActivityBackgroundColor #lightgreen
+
+start
+
+:User logged in;
+:Navigate to Dashboard;
+
+if (Has roomspace?) then (yes)
+  :Display roomspace info;
+  :Show quick actions;
+  
+  partition "Roomspace Actions" {
+    if (User action?) then (View Expenses)
+      :Display expense list;
+      :Show split details;
+    elseif (Add Expense) then
+      :Open expense form;
+      :Enter amount and description;
+      :Select split method;
+      :Save to database;
+      :Notify roommates;
+    elseif (Invite Member) then
+      :Generate invite link;
+      :Share room ID;
+    elseif (Leave Roomspace) then
+      :Confirm action;
+      :Remove user from roomspace;
+      :Navigate to roomspace selection;
+    endif
+  }
+  
+else (no)
+  if (Create or Join?) then (Create)
+    :Enter roomspace name;
+    :Enter description;
+    :Generate unique room ID;
+    :Save to PostgreSQL;
+    :Set user as admin;
+    :Navigate to Dashboard;
+  else (Join)
+    :Enter room ID;
+    
+    if (Room ID valid?) then (yes)
+      :Add user to roomspace;
+      :Navigate to Dashboard;
+    else (no)
+      :Show "Invalid room ID";
+    endif
+  endif
+endif
+
+stop
+
+@enduml

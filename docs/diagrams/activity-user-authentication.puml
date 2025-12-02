@@ -1,0 +1,56 @@
+@startuml User Authentication Activity Diagram
+
+skinparam linetype ortho
+skinparam ActivityDiamondBackgroundColor #lightblue
+skinparam ActivityBackgroundColor #lightgreen
+
+start
+
+:User opens app;
+
+if (Has account?) then (yes)
+  :Navigate to Login;
+  :Enter email and password;
+  
+  if (Credentials valid?) then (yes)
+    :Firebase authenticates user;
+    :Send token to backend;
+    
+    if (Backend validates token?) then (yes)
+      :Create session;
+      :Store user data in PostgreSQL;
+      :Navigate to Dashboard;
+      stop
+    else (no)
+      :Show error message;
+      stop
+    endif
+  else (no)
+    :Show "Invalid credentials";
+    stop
+  endif
+  
+else (no)
+  :Navigate to Sign Up;
+  :Enter name, email, password;
+  
+  if (Input valid?) then (yes)
+    :Create Firebase account;
+    :Send verification email;
+    :Show "Verify email" message;
+    
+    if (Email verified?) then (yes)
+      :Login automatically;
+      :Navigate to Dashboard;
+      stop
+    else (no)
+      :Wait for verification;
+      stop
+    endif
+  else (no)
+    :Show validation errors;
+    stop
+  endif
+endif
+
+@enduml

@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiService {
@@ -9,17 +11,22 @@ class ApiService {
   }
 
   late final Dio _dio;
+  late final CookieJar _cookieJar;
 
   // Platform-specific base URL
   static String get baseUrl {
     if (kIsWeb) {
       return 'http://localhost:8080'; // Web uses localhost
     } else {
-      return 'http://10.0.2.2:8080'; // Android emulator
+      // Use your computer's actual IP address
+      // Change this if your IP changes when switching networks
+      return 'http://172.20.10.5:8080'; // Android emulator
     }
   }
 
   ApiService._internal() {
+    _cookieJar = CookieJar();
+
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
@@ -32,6 +39,9 @@ class ApiService {
       ),
     );
 
+    // Add cookie manager to persist cookies
+    _dio.interceptors.add(CookieManager(_cookieJar));
+
     _dio.interceptors.add(
       LogInterceptor(requestBody: true, responseBody: true, error: true),
     );
@@ -42,8 +52,8 @@ class ApiService {
   }
 
   Future<void> clearCookies() async {
-    // Cookies are handled automatically by the browser on web
-    // and by Dio on mobile platforms
+    // Clear all cookies from the cookie jar
+    await _cookieJar.deleteAll();
   }
 
   Future<Map<String, dynamic>> login(String firebaseToken) async {

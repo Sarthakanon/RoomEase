@@ -1,0 +1,57 @@
+@startuml Create Roomspace Sequence Diagram
+
+skinparam linetype ortho
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+actor User
+participant "Flutter App" as App
+participant "Go Backend" as Backend
+participant "PostgreSQL" as DB
+
+User -> App: Click "Create Roomspace"
+activate App
+
+App --> User: Show create form
+
+User -> App: Enter name & description
+App -> App: Validate input
+
+alt Input Valid
+    App -> Backend: POST /api/roomspaces\n{name, description}
+    activate Backend
+    
+    Backend -> Backend: Verify session
+    
+    alt Session Valid
+        Backend -> Backend: Generate unique room ID
+        
+        Backend -> DB: INSERT INTO roomspaces
+        activate DB
+        DB --> Backend: Roomspace created
+        deactivate DB
+        
+        Backend -> DB: INSERT INTO roomspace_members\n(user as admin)
+        activate DB
+        DB --> Backend: Member added
+        deactivate DB
+        
+        Backend --> App: 201 Created\n{roomspace_id, room_id}
+        deactivate Backend
+        
+        App -> App: Update local state
+        App --> User: Navigate to Dashboard\nShow success message
+        
+    else Session Invalid
+        Backend --> App: 401 Unauthorized
+        deactivate Backend
+        App --> User: Redirect to Login
+    end
+    
+else Input Invalid
+    App --> User: Show validation errors
+end
+
+deactivate App
+
+@enduml

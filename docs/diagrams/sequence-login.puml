@@ -1,0 +1,52 @@
+@startuml Login Sequence Diagram
+
+skinparam linetype ortho
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+actor User
+participant "Flutter App" as App
+participant "Firebase Auth" as Firebase
+participant "Go Backend" as Backend
+participant "PostgreSQL" as DB
+
+User -> App: Enter credentials
+activate App
+
+App -> Firebase: signInWithEmailAndPassword()
+activate Firebase
+
+alt Credentials Valid
+    Firebase -> Firebase: Verify credentials
+    Firebase --> App: Return UserCredential + Token
+    deactivate Firebase
+    
+    App -> Backend: POST /api/auth/login\n{firebase_token}
+    activate Backend
+    
+    Backend -> Firebase: Verify token
+    activate Firebase
+    Firebase --> Backend: Token valid + User info
+    deactivate Firebase
+    
+    Backend -> DB: Check/Create user
+    activate DB
+    DB --> Backend: User data
+    deactivate DB
+    
+    Backend -> Backend: Create session
+    Backend --> App: 200 OK + Session cookie
+    deactivate Backend
+    
+    App -> App: Store session
+    App --> User: Navigate to Dashboard
+    
+else Invalid Credentials
+    Firebase --> App: AuthException
+    deactivate Firebase
+    App --> User: Show error message
+end
+
+deactivate App
+
+@enduml

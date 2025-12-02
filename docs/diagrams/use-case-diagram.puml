@@ -1,0 +1,67 @@
+@startuml RoomEase Use Case Diagram
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 80
+skinparam ranksep 100
+
+actor "User" as User
+actor "Roommate" as Roommate
+actor "Admin" as Admin
+
+rectangle "RoomEase System" {
+  usecase "Sign Up" as UC1
+  usecase "Login" as UC2
+  usecase "Logout" as UC3
+  usecase "Change Password" as UC4
+  usecase "Create Roomspace" as UC5
+  usecase "Join Roomspace" as UC6
+  usecase "Leave Roomspace" as UC7
+  usecase "View Dashboard" as UC8
+  usecase "Manage Profile" as UC9
+  usecase "Add Expense" as UC10
+  usecase "View Expenses" as UC11
+  usecase "Split Expenses" as UC12
+  usecase "View Roommates" as UC13
+  usecase "Invite Member" as UC14
+  usecase "Manage Settings" as UC15
+  usecase "View Notifications" as UC16
+}
+
+' User relationships
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+User --> UC7
+User --> UC8
+User --> UC9
+User --> UC15
+
+' Roommate relationships
+Roommate --> UC8
+Roommate --> UC10
+Roommate --> UC11
+Roommate --> UC12
+Roommate --> UC13
+Roommate --> UC14
+Roommate --> UC16
+
+' Admin relationships
+Admin --> UC5
+Admin --> UC14
+Admin --> UC7
+
+' Include relationships
+UC2 ..> UC8 : <<include>>
+UC5 ..> UC8 : <<include>>
+UC6 ..> UC8 : <<include>>
+
+' Extend relationships
+UC10 ..> UC12 : <<extend>>
+UC11 ..> UC12 : <<extend>>
+
+@enduml
