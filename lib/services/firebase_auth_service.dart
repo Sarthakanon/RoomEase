@@ -86,6 +86,36 @@ class FirebaseAuthService {
     }
   }
 
+  // Resend email verification with credentials (for unverified users trying to login)
+  Future<void> resendEmailVerificationWithCredentials({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      // Sign in temporarily to send verification email
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (userCredential.user != null && !userCredential.user!.emailVerified) {
+        await userCredential.user!.sendEmailVerification();
+        // Sign out after sending email
+        await _auth.signOut();
+      } else if (userCredential.user!.emailVerified) {
+        await _auth.signOut();
+        throw 'Email is already verified. Please try logging in again.';
+      }
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    } catch (e) {
+      if (e is String) {
+        rethrow;
+      }
+      throw 'Failed to send verification email. Please try again.';
+    }
+  }
+
   // Check if email is verified
   Future<bool> isEmailVerified() async {
     await _auth.currentUser?.reload();
