@@ -199,6 +199,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
