@@ -71,7 +71,7 @@ class _MobileScaffoldState extends State<MobileScaffold> {
                       isActive: widget.currentIndex == 1,
                       onTap: () {
                         if (widget.currentIndex != 1) {
-                          Navigator.pushNamed(context, '/roomspace-selection');
+                          Navigator.pushNamed(context, '/roomspace');
                         }
                       },
                     ),
@@ -88,13 +88,13 @@ class _MobileScaffoldState extends State<MobileScaffold> {
                       },
                     ),
                     _NavBarItem(
-                      icon: Icons.group_rounded,
-                      label: 'Members',
+                      icon: Icons.person_rounded,
+                      label: 'Profile',
                       isActive: widget.currentIndex == 3,
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Members Coming soon!')),
-                        );
+                        if (widget.currentIndex != 3) {
+                          Navigator.pushNamed(context, '/profile');
+                        }
                       },
                     ),
                   ],
