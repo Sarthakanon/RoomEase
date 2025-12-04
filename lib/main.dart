@@ -9,7 +9,11 @@ import 'features/auth/presentation/forgot_password_screen.dart';
 import 'features/roomspace/presentation/roomspace_selection_screen.dart';
 import 'features/roomspace/presentation/create_roomspace_screen.dart';
 import 'features/roomspace/presentation/join_roomspace_screen.dart';
+import 'features/roomspace/presentation/roomspace_details_screen.dart';
+import 'features/roomspace/presentation/roomspace_router.dart';
 import 'features/settings/presentation/settings_screen.dart';
+import 'features/profile/presentation/profile_screen.dart';
+import 'features/notifications/presentation/notification_screen.dart';
 import 'features/home/mobile_dashboard.dart';
 
 void main() async {
@@ -100,7 +104,11 @@ class RoomEaseApp extends StatelessWidget {
         '/roomspace-selection': (context) => const RoomspaceSelectionScreen(),
         '/create-roomspace': (context) => const CreateRoomspaceScreen(),
         '/join-roomspace': (context) => const JoinRoomspaceScreen(),
+        '/roomspace': (context) => const RoomspaceRouter(),
+        '/roomspace-details': (context) => const RoomspaceDetailsScreen(),
         '/settings': (context) => const SettingsScreen(),
+        '/profile': (context) => const ProfileScreen(),
+        '/notifications': (context) => const NotificationScreen(),
         '/home': (context) => const MobileDashboard(),
       },
     );
