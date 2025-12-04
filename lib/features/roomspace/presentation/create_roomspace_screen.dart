@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:math';
 import '../../../services/roomspace_service.dart';
 
 class CreateRoomspaceScreen extends StatefulWidget {
@@ -20,15 +19,6 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
   bool _isLoading = false;
   String? _generatedRoomId;
 
-  // Generate a random room ID
-  String _generateRoomId() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    Random rnd = Random();
-    return String.fromCharCodes(
-      Iterable.generate(8, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))),
-    );
-  }
-
   Future<void> _createRoomspace() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
@@ -47,12 +37,12 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
         if (mounted) {
           setState(() {
             _isLoading = false;
-            // Get the id from response and format it as a room ID
-            final roomId = response['data']?['id']?.toString() ?? 'N/A';
-            _generatedRoomId = 'ROOM-$roomId';
+            // Get the invite_code from response
+            _generatedRoomId =
+                response['data']?['invite_code']?.toString() ?? 'N/A';
           });
 
-          // Show success dialog with room ID
+          // Show success dialog with invite code
           _showSuccessDialog();
         }
       } catch (e) {
@@ -135,7 +125,7 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
                     ),
                     SizedBox(height: 20),
 
-                    // Room ID container
+                    // Invite Code container
                     Container(
                       width: double.infinity,
                       padding: EdgeInsets.all(16),
@@ -148,7 +138,7 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Room ID:',
+                            'Invite Code:',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: Colors.grey[600],
@@ -158,13 +148,14 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
                           SizedBox(height: 8),
                           SizedBox(
                             width: double.infinity,
-                            child: Text(
+                            child: SelectableText(
                               _generatedRoomId!,
                               style: TextStyle(
-                                fontSize: 20,
+                                fontSize: 24,
                                 fontWeight: FontWeight.bold,
                                 color: Theme.of(context).colorScheme.primary,
-                                letterSpacing: 1.5,
+                                letterSpacing: 2,
+                                fontFamily: 'monospace',
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -192,7 +183,7 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Share this Room ID with your roommates so they can join!',
+                              'Share this invite code with your roommates so they can join!',
                               style: TextStyle(
                                 color: Colors.blue.shade700,
                                 fontSize: 14,
