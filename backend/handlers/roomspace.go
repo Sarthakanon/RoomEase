@@ -115,7 +115,86 @@ func (h *RoomspaceHandler) GetRoomspace(c *gin.Context) {
 	})
 }
 
-// JoinRoomspace adds the current user to a roomspace
+// SearchRoomspaceByCode searches for a roomspace by invite code
+func (h *RoomspaceHandler) SearchRoomspaceByCode(c *gin.Context) {
+	code := c.Param("code")
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invite code is required",
+		})
+		return
+	}
+
+	// Search for roomspace
+	roomspace, err := h.dbService.GetRoomspaceByInviteCode(code)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Roomspace not found",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    roomspace,
+	})
+}
+
+// JoinRoomspaceByCode creates a join request for a roomspace using invite code
+func (h *RoomspaceHandler) JoinRoomspaceByCode(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	code := c.Param("code")
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invite code is required"})
+		return
+	}
+
+	// Find roomspace by code
+	roomspace, err := h.dbService.GetRoomspaceByInviteCode(code)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Roomspace not found"})
+		return
+	}
+
+	// Create join request instead of direct join
+	request, err := h.dbService.CreateJoinRequest(roomspace.ID, userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Notify all members about the join request
+	user, _ := h.dbService.GetUserByFirebaseUID(userID.(string))
+	userName := "Someone"
+	if user != nil {
+		userName = user.Name
+	}
+
+	members, _ := h.dbService.GetRoomspaceMembers(roomspace.ID)
+	for _, member := range members {
+		notification := &models.Notification{
+			RecipientUID: member.FirebaseUID,
+			Type:         models.NotificationTypeJoinRequest,
+			Title:        "New Join Request",
+			Message:      userName + " wants to join " + roomspace.Name,
+			Data:         `{"request_id":` + strconv.Itoa(int(request.ID)) + `,"roomspace_id":` + strconv.Itoa(int(roomspace.ID)) + `}`,
+		}
+		h.dbService.CreateNotification(notification)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Join request sent. Waiting for approval.",
+		"data":    request,
+	})
+}
+
+// JoinRoomspace adds the current user to a roomspace by ID
 func (h *RoomspaceHandler) JoinRoomspace(c *gin.Context) {
 	// Get user ID from context
 	userID, exists := c.Get("user_id")
@@ -147,5 +226,87 @@ func (h *RoomspaceHandler) JoinRoomspace(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Successfully joined roomspace",
+	})
+}
+
+
+// RemoveMemberRequest represents the request to remove a member
+type RemoveMemberRequest struct {
+	MemberFirebaseUID string `json:"member_firebase_uid" binding:"required"`
+}
+
+// RemoveMember removes a member from a roomspace (only creator can do this)
+func (h *RoomspaceHandler) RemoveMember(c *gin.Context) {
+	// Get user ID from context (the requestor)
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authenticated",
+		})
+		return
+	}
+
+	// Get roomspace ID from URL
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid roomspace ID",
+		})
+		return
+	}
+
+	// Parse request body
+	var req RemoveMemberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+		})
+		return
+	}
+
+	// Get roomspace and removed user info before removing
+	roomspace, _ := h.dbService.GetRoomspaceByID(uint(id))
+	removedUser, _ := h.dbService.GetUserByFirebaseUID(req.MemberFirebaseUID)
+
+	// Remove member
+	if err := h.dbService.RemoveMemberFromRoomspace(uint(id), req.MemberFirebaseUID, userID.(string)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// Create notification for the removed user
+	roomspaceName := "the roomspace"
+	if roomspace != nil {
+		roomspaceName = roomspace.Name
+	}
+	removedUserName := "A member"
+	if removedUser != nil {
+		removedUserName = removedUser.Name
+	}
+
+	// Notify the removed user
+	notificationForRemoved := &models.Notification{
+		RecipientUID: req.MemberFirebaseUID,
+		Type:         models.NotificationTypeMemberRemoved,
+		Title:        "Removed from Roomspace",
+		Message:      "You have been removed from " + roomspaceName,
+	}
+	h.dbService.CreateNotification(notificationForRemoved)
+
+	// Notify the creator (who removed the user)
+	notificationForCreator := &models.Notification{
+		RecipientUID: userID.(string),
+		Type:         models.NotificationTypeYouRemovedUser,
+		Title:        "Member Removed",
+		Message:      "You removed " + removedUserName + " from " + roomspaceName,
+	}
+	h.dbService.CreateNotification(notificationForCreator)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Member removed successfully",
 	})
 }
