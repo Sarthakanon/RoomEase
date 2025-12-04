@@ -59,6 +59,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(sessionStore, dbService)
 	userHandler := handlers.NewUserHandler(dbService)
 	roomspaceHandler := handlers.NewRoomspaceHandler(dbService)
+	notificationHandler := handlers.NewNotificationHandler(dbService)
 	healthHandler := handlers.NewHealthHandler()
 
 	// Health check endpoint (public)
@@ -85,6 +86,16 @@ func main() {
 		protected.POST("/roomspaces", roomspaceHandler.CreateRoomspace)
 		protected.GET("/roomspaces/:id", roomspaceHandler.GetRoomspace)
 		protected.POST("/roomspaces/:id/join", roomspaceHandler.JoinRoomspace)
+		protected.GET("/roomspaces/code/:code", roomspaceHandler.SearchRoomspaceByCode)
+		protected.POST("/roomspaces/code/:code/join", roomspaceHandler.JoinRoomspaceByCode)
+		protected.DELETE("/roomspaces/:id/members", roomspaceHandler.RemoveMember)
+
+		// Notification routes
+		protected.GET("/notifications", notificationHandler.GetNotifications)
+		protected.PUT("/notifications/:id/read", notificationHandler.MarkAsRead)
+		protected.GET("/join-requests", notificationHandler.GetJoinRequests)
+		protected.GET("/join-requests/pending", notificationHandler.GetPendingJoinRequest)
+		protected.POST("/join-requests/:id/process", notificationHandler.ProcessJoinRequest)
 	}
 
 	// Start server
