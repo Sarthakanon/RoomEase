@@ -10,6 +10,7 @@ import (
 type FirebaseUser struct {
 	UID   string
 	Email string
+	Name  string
 }
 
 // VerifyToken verifies a Firebase ID token and returns user information
@@ -26,6 +27,13 @@ func VerifyToken(idToken string) (*FirebaseUser, error) {
 	user := &FirebaseUser{
 		UID:   token.UID,
 		Email: token.Claims["email"].(string),
+	}
+
+	// Try to get display name from claims
+	if name, ok := token.Claims["name"].(string); ok && name != "" {
+		user.Name = name
+	} else {
+		user.Name = user.Email // Fallback to email
 	}
 
 	return user, nil
