@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/widgets/mobile_scaffold.dart';
 import '../../services/api_service.dart';
+import 'widgets/add_expense_dialog.dart';
 
 class MobileDashboard extends StatefulWidget {
   const MobileDashboard({super.key});
@@ -14,11 +15,38 @@ class _MobileDashboardState extends State<MobileDashboard> {
   final ApiService _apiService = ApiService();
   bool _hasRoomspace = false;
   bool _isLoading = true;
+  List<RoommateItem> _roommates = [];
+  int _unreadNotificationCount = 0;
 
   @override
   void initState() {
     super.initState();
     _checkRoomspace();
+    _loadUnreadCount();
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final results = await Future.wait([
+        _apiService.getNotifications(),
+        _apiService.getJoinRequests(),
+      ]);
+
+      final notifications = results[0]['data'] as List<dynamic>? ?? [];
+      final joinRequests = results[1]['data'] as List<dynamic>? ?? [];
+
+      final unreadNotifications = notifications
+          .where((n) => n['is_read'] != true)
+          .length;
+
+      if (mounted) {
+        setState(() {
+          _unreadNotificationCount = unreadNotifications + joinRequests.length;
+        });
+      }
+    } catch (e) {
+      // Silently fail - notification count is not critical
+    }
   }
 
   Future<void> _checkRoomspace() async {
@@ -31,6 +59,19 @@ class _MobileDashboardState extends State<MobileDashboard> {
             _hasRoomspace = roomspaces.isNotEmpty;
             _isLoading = false;
           });
+
+          // Load roommates from first roomspace
+          if (roomspaces.isNotEmpty) {
+            final members = roomspaces[0]['members'] as List<dynamic>? ?? [];
+            _roommates = members.map((m) {
+              final user = m['user'];
+              return RoommateItem(
+                id: m['firebase_uid'] ?? '',
+                name: user?['name'] ?? user?['email'] ?? 'Unknown',
+                email: user?['email'],
+              );
+            }).toList();
+          }
         }
       }
     } catch (e) {
@@ -43,6 +84,34 @@ class _MobileDashboardState extends State<MobileDashboard> {
     }
   }
 
+  void _showAddExpenseDialog() {
+    if (_roommates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Join a roomspace first to add expenses'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    AddExpenseDialog.show(
+      context,
+      roommates: _roommates,
+      onSubmit: (expense) {
+        // TODO: Save expense to API and notify selected roommates
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Added: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 1. Get current user
@@ -51,22 +120,20 @@ class _MobileDashboardState extends State<MobileDashboard> {
     final Color primaryColor = Theme.of(context).colorScheme.primary;
 
     return MobileScaffold(
-      // Ensure this is 0 so the first tab is selected
       currentIndex: 0,
-      // We use a Column inside SingleChildScrollView for scrolling
       body: SingleChildScrollView(
         child: Column(
           children: [
             // ---------------------------------------------
-            // SECTION 1: CUSTOM HEADER (Replaces AppBar)
+            // HEADER SECTION
             // ---------------------------------------------
             Container(
               width: double.infinity,
               padding: const EdgeInsets.only(
                 left: 20,
                 right: 20,
-                top: 60, // Extra top padding to avoid status bar
-                bottom: 30,
+                top: 60,
+                bottom: 25,
               ),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -82,7 +149,6 @@ class _MobileDashboardState extends State<MobileDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Row with Name and Profile Icon
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -107,80 +173,65 @@ class _MobileDashboardState extends State<MobileDashboard> {
                           ),
                         ],
                       ),
-                      // Profile Icon with Popup Menu
-                      PopupMenuButton<String>(
-                        icon: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: user?.photoURL != null
-                              ? CircleAvatar(
-                                  radius: 14,
-                                  backgroundImage: NetworkImage(
-                                    user!.photoURL!,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.person,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                        ),
-                        offset: const Offset(0, 50),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'profile',
-                            child: Row(
-                              children: [
-                                const Icon(Icons.person_outline, size: 20),
-                                const SizedBox(width: 12),
-                                Text(user?.displayName ?? 'Profile'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'settings',
-                            child: Row(
-                              children: [
-                                Icon(Icons.settings_outlined, size: 20),
-                                SizedBox(width: 12),
-                                Text('Settings'),
-                              ],
-                            ),
-                          ),
-                        ],
-                        onSelected: (value) {
-                          switch (value) {
-                            case 'profile':
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Profile coming soon!'),
-                                ),
-                              );
-                              break;
-                            case 'settings':
-                              Navigator.pushNamed(context, '/settings');
-                              break;
-                          }
+                      GestureDetector(
+                        onTap: () async {
+                          await Navigator.pushNamed(context, '/notifications');
+                          _loadUnreadCount(); // Refresh count when returning
                         },
+                        child: Stack(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.notifications_outlined,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                            ),
+                            if (_unreadNotificationCount > 0)
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 18,
+                                    minHeight: 18,
+                                  ),
+                                  child: Text(
+                                    _unreadNotificationCount > 9
+                                        ? '9+'
+                                        : '$_unreadNotificationCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 25),
-
-                  // Balance Information
                   const Text(
                     'Your Total Balance',
                     style: TextStyle(color: Colors.white70, fontSize: 14),
                   ),
                   const SizedBox(height: 5),
                   const Text(
-                    '\$ 450.00',
+                    'Rs. 450.00',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 40,
@@ -190,8 +241,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
                   const Text(
                     'you are owed',
                     style: TextStyle(
-                      color: Colors
-                          .greenAccent, // Green because you are owed money
+                      color: Colors.greenAccent,
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
@@ -200,21 +250,16 @@ class _MobileDashboardState extends State<MobileDashboard> {
               ),
             ),
 
-            // ---------------------------------------------
-            // SECTION 2: MAIN ACTION BUTTONS
-            // ---------------------------------------------
+            // FIXED: Action Buttons
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  // Row for OCR and Add Expense
                   Row(
                     children: [
-                      // BUTTON A: SCAN RECEIPT
                       Expanded(
                         child: InkWell(
                           onTap: () {
-                            // Logic for OCR Scanning
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text('Opening Scanner...'),
@@ -253,15 +298,9 @@ class _MobileDashboardState extends State<MobileDashboard> {
                         ),
                       ),
                       const SizedBox(width: 15),
-                      // BUTTON B: ADD EXPENSE
                       Expanded(
                         child: InkWell(
-                          onTap: () {
-                            // Logic: Show snackbar "Coming Soon" as requested
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Coming soon!')),
-                            );
-                          },
+                          onTap: () => _showAddExpenseDialog(),
                           child: Container(
                             height: 100,
                             decoration: BoxDecoration(
@@ -294,10 +333,6 @@ class _MobileDashboardState extends State<MobileDashboard> {
                       ),
                     ],
                   ),
-
-                  // ---------------------------------------------
-                  // SECTION 3: ROOM MANAGEMENT (Only show if no roomspace)
-                  // ---------------------------------------------
                   if (!_hasRoomspace && !_isLoading) ...[
                     const SizedBox(height: 20),
                     Row(
@@ -354,9 +389,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
               ),
             ),
 
-            // ---------------------------------------------
-            // SECTION 4: RECENT ACTIVITY
-            // ---------------------------------------------
+            // Recent Activity Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Align(
@@ -371,38 +404,39 @@ class _MobileDashboardState extends State<MobileDashboard> {
                 ),
               ),
             ),
-
             const SizedBox(height: 10),
 
-            // List of Recent Expenses (Hardcoded Examples)
-            ListView(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
+            // ---------------------------------------------
+            // RECENT ACTIVITY LIST
+            // ---------------------------------------------
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: [
-                _expenseTile(
-                  "Grocery Run",
-                  "Yesterday",
-                  45.50,
-                  true,
-                  primaryColor,
-                ),
-                _expenseTile(
-                  "Internet Bill",
-                  "Oct 24",
-                  30.00,
-                  false,
-                  primaryColor,
-                ),
-                _expenseTile(
-                  "House Party",
-                  "Oct 22",
-                  120.00,
-                  true,
-                  primaryColor,
-                ),
-                const SizedBox(height: 30),
-              ],
+              child: Column(
+                children: [
+                  _expenseTile(
+                    "Grocery Run",
+                    "Yesterday",
+                    45.50,
+                    true,
+                    primaryColor,
+                  ),
+                  _expenseTile(
+                    "Internet Bill",
+                    "Oct 24",
+                    30.00,
+                    false,
+                    primaryColor,
+                  ),
+                  _expenseTile(
+                    "House Party",
+                    "Oct 22",
+                    120.00,
+                    true,
+                    primaryColor,
+                  ),
+                  const SizedBox(height: 100), // Extra space for bottom nav
+                ],
+              ),
             ),
           ],
         ),
@@ -465,7 +499,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                "\$${amount.toStringAsFixed(2)}",
+                "Rs. ${amount.toStringAsFixed(2)}",
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
