@@ -14,25 +14,21 @@ class ApiService {
   late final Dio _dio;
   late final CookieJar _cookieJar;
 
-  // Your computer's local network IP - update this when your IP changes
-  static const String _localNetworkIp = '192.168.1.89';
-
-  // Platform-specific base URL
+  // Using localhost with adb reverse works on any network
+  // Just run: adb reverse tcp:8080 tcp:8080
   static String get baseUrl {
     if (kIsWeb) {
       return 'http://localhost:8080';
     }
 
-    // For USB-connected device with adb reverse, use localhost
-    // For WiFi physical device, use local network IP
-    // For Android emulator, use 10.0.2.2
+    // adb reverse makes localhost work on physical Android devices via USB
+    // This is network-independent - works on any WiFi/hotspot
     if (Platform.isAndroid) {
-      return 'http://localhost:8080'; // USB with adb reverse
-      // return 'http://$_localNetworkIp:8080'; // WiFi physical device
-      // return 'http://10.0.2.2:8080'; // Android emulator
+      return 'http://localhost:8080';
     } else if (Platform.isIOS) {
-      // iOS simulator uses localhost, physical device needs IP
-      return 'http://$_localNetworkIp:8080';
+      // iOS requires the actual IP address for physical devices
+      // For simulator, localhost works
+      return 'http://localhost:8080';
     }
 
     return 'http://localhost:8080';
@@ -162,9 +158,12 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> delete(String path) async {
+  Future<Map<String, dynamic>> delete(
+    String path, {
+    Map<String, dynamic>? data,
+  }) async {
     try {
-      final response = await _dio.delete(path);
+      final response = await _dio.delete(path, data: data);
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
@@ -215,6 +214,51 @@ class ApiService {
 
   Future<Map<String, dynamic>> joinRoomspace(int id) async {
     return await post('/api/roomspaces/$id/join');
+  }
+
+  Future<Map<String, dynamic>> searchRoomspaceByCode(String code) async {
+    return await get('/api/roomspaces/code/$code');
+  }
+
+  Future<Map<String, dynamic>> joinRoomspaceByCode(String code) async {
+    return await post('/api/roomspaces/code/$code/join');
+  }
+
+  Future<Map<String, dynamic>> removeMemberFromRoomspace(
+    int roomspaceId,
+    String memberFirebaseUid,
+  ) async {
+    return await delete(
+      '/api/roomspaces/$roomspaceId/members',
+      data: {'member_firebase_uid': memberFirebaseUid},
+    );
+  }
+
+  // Notification APIs
+  Future<Map<String, dynamic>> getNotifications() async {
+    return await get('/api/notifications');
+  }
+
+  Future<Map<String, dynamic>> markNotificationAsRead(int id) async {
+    return await put('/api/notifications/$id/read');
+  }
+
+  Future<Map<String, dynamic>> getJoinRequests() async {
+    return await get('/api/join-requests');
+  }
+
+  Future<Map<String, dynamic>> getPendingJoinRequest() async {
+    return await get('/api/join-requests/pending');
+  }
+
+  Future<Map<String, dynamic>> processJoinRequest(
+    int requestId,
+    bool accept,
+  ) async {
+    return await post(
+      '/api/join-requests/$requestId/process',
+      data: {'accept': accept},
+    );
   }
 
   String _handleError(DioException error) {
