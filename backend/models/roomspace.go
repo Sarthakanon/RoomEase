@@ -11,6 +11,7 @@ type Roomspace struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
 	Name        string         `gorm:"not null" json:"name"`
 	Description string         `json:"description,omitempty"`
+	InviteCode  string         `gorm:"uniqueIndex;size:8" json:"invite_code"` // Unique 8-char code for joining
 	CreatedBy   string         `gorm:"not null" json:"created_by"` // Firebase UID
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
@@ -24,6 +25,7 @@ type RoomspaceMember struct {
 	RoomspaceID uint      `gorm:"not null" json:"roomspace_id"`
 	FirebaseUID string    `gorm:"not null" json:"firebase_uid"`
 	JoinedAt    time.Time `json:"joined_at"`
+	User        *User     `gorm:"foreignKey:FirebaseUID;references:FirebaseUID" json:"user,omitempty"`
 }
 
 // CreateRoomspaceRequest represents the request to create a roomspace
