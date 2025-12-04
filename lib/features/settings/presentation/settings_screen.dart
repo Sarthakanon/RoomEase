@@ -53,7 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() {
                 _hasRoomspace = true;
                 _roomspaceName = roomspace['name'] ?? 'Unknown';
-                _currentRoomId = 'ROOM-${roomspace['id']}';
+                _currentRoomId = roomspace['invite_code'] ?? 'N/A';
               });
             }
           }
@@ -79,7 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Clipboard.setData(ClipboardData(text: _currentRoomId));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Room ID copied to clipboard!'),
+        content: const Text('Invite code copied to clipboard!'),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -507,8 +507,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     Text(
-                      "ID: $_currentRoomId",
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      "Invite Code: $_currentRoomId",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                        fontFamily: 'monospace',
+                        letterSpacing: 1,
+                      ),
                     ),
                   ],
                 ),
