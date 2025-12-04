@@ -61,13 +61,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		dbUser = &models.User{
 			FirebaseUID: firebaseUser.UID,
 			Email:       firebaseUser.Email,
-			Name:        firebaseUser.Email, // Default name to email
+			Name:        firebaseUser.Name,
 		}
 		if err := h.dbService.CreateUser(dbUser); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to create user",
 			})
 			return
+		}
+	} else {
+		// User exists, update name if it changed (sync from Firebase)
+		if dbUser.Name != firebaseUser.Name && firebaseUser.Name != firebaseUser.Email {
+			h.dbService.UpdateUser(firebaseUser.UID, &models.UpdateUserRequest{Name: firebaseUser.Name})
+			dbUser.Name = firebaseUser.Name
 		}
 	}
 
