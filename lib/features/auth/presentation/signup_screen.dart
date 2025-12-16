@@ -172,14 +172,41 @@ class _SignupScreenState extends State<SignupScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. Logo Box
+                  // 1. Logo
                   Center(
                     child: Container(
-                      height: 70,
-                      width: 70,
+                      height: 80,
+                      width: 80,
                       decoration: BoxDecoration(
-                        color: primaryColor,
                         borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Image.asset(
+                          'png/main_logo.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Fallback to colored container if image fails to load
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: const Icon(
+                                Icons.home_rounded,
+                                color: Colors.white,
+                                size: 40,
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
