@@ -4,7 +4,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/payment_notification.dart';
 import 'notification_listener_service.dart';
-import 'sms_reader_service.dart';
+import 'sms_detection_service.dart';
+import 'transaction_validation_service.dart';
 
 class PaymentNotificationService {
   static PaymentNotificationService? _instance;
@@ -33,7 +34,7 @@ class PaymentNotificationService {
       
       // Initialize sub-services
       await NotificationListenerService.initialize(this);
-      await SmsReaderService.initialize(this);
+      await SmsDetectionService.initialize(this);
       
       // Start monitoring if enabled
       if (_settings.isEnabled) {
@@ -162,9 +163,9 @@ class PaymentNotificationService {
       }
       
       if (_settings.smsMonitoringEnabled) {
-        await SmsReaderService.startListening();
+        await SmsDetectionService.startListening();
         // Process recent SMS messages
-        await SmsReaderService.processRecentSms();
+        await SmsDetectionService.processRecentSms();
       }
       
       log('Payment monitoring started');
@@ -177,7 +178,7 @@ class PaymentNotificationService {
   Future<void> stopMonitoring() async {
     try {
       await NotificationListenerService.stopListening();
-      await SmsReaderService.stopListening();
+      await SmsDetectionService.stopListening();
       log('Payment monitoring stopped');
     } catch (e) {
       log('Error stopping payment monitoring: $e');
@@ -189,9 +190,16 @@ class PaymentNotificationService {
     try {
       log('Processing payment notification: ${notification.amount} from ${notification.appName}');
       
-      // Check if notification meets criteria
+      // Validate transaction (includes duplicate checking)
+      final isValid = await TransactionValidationService.validateTransaction(notification);
+      if (!isValid) {
+        log('Transaction validation failed, skipping');
+        return;
+      }
+      
+      // Check if notification meets user criteria
       if (!_shouldProcessNotification(notification)) {
-        log('Notification does not meet criteria, skipping');
+        log('Notification does not meet user criteria, skipping');
         return;
       }
       
@@ -400,6 +408,8 @@ class PaymentNotificationService {
       _settings = newSettings;
       await _saveSettings();
       
+      // Background service settings update skipped
+      
       // Restart monitoring with new settings
       if (_settings.isEnabled) {
         await startMonitoring();
@@ -443,7 +453,7 @@ class PaymentNotificationService {
   /// Check permissions status
   Future<Map<String, bool>> checkPermissions() async {
     final notificationPermission = await NotificationListenerService.isNotificationListenerEnabled();
-    final smsPermission = await SmsReaderService.hasSmsPermission();
+    final smsPermission = await SmsDetectionService.hasSmsPermission();
     
     return {
       'notification': notificationPermission,
@@ -454,11 +464,39 @@ class PaymentNotificationService {
   /// Request all necessary permissions
   Future<Map<String, bool>> requestPermissions() async {
     final notificationPermission = await NotificationListenerService.requestNotificationPermission();
-    final smsPermission = await SmsReaderService.requestSmsPermission();
+    final smsPermission = await SmsDetectionService.requestSmsPermission();
     
     return {
       'notification': notificationPermission,
       'sms': smsPermission,
     };
+  }
+
+  /// Get transaction statistics
+  Future<Map<String, dynamic>> getTransactionStats() async {
+    return await TransactionValidationService.getTransactionStats();
+  }
+
+  /// Clear transaction history (for testing)
+  Future<void> clearTransactionHistory() async {
+    await TransactionValidationService.clearStoredTransactions();
+  }
+
+  /// Initialize background service
+  Future<void> initializeBackgroundService() async {
+    // Background service temporarily disabled to avoid native code access issues
+    log('Background service initialization skipped');
+  }
+
+  /// Start background monitoring
+  Future<void> startBackgroundMonitoring() async {
+    // Background service temporarily disabled
+    log('Background monitoring skipped');
+  }
+
+  /// Stop background monitoring
+  Future<void> stopBackgroundMonitoring() async {
+    // Background service temporarily disabled
+    log('Background monitoring stop skipped');
   }
 }
