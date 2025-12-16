@@ -107,10 +107,14 @@ class PaymentParserService {
 
   /// Extracts amount from notification text
   static double? _extractAmount(String text) {
+    log('🔍 Extracting amount from: $text');
+    
     // Patterns for different amount formats
     final patterns = [
       // eSewa specific: "transfered Rs. 1.0 to" or "transferred Rs. 1.0 to"
       r'transfer(?:r)?ed\s+Rs\.?\s*([0-9,]+(?:\.[0-9]+)?)',
+      // eSewa: "successfully transferred Rs. 1.0"
+      r'successfully\s+transfer(?:r)?ed\s+Rs\.?\s*([0-9,]+(?:\.[0-9]+)?)',
       // Rs. 1,234.56 or NPR 1,234.56
       r'(?:Rs\.?|NPR)\s*([0-9,]+(?:\.[0-9]{1,2})?)',
       // 1,234.56 Rs or 1,234.56 NPR
@@ -119,16 +123,19 @@ class PaymentParserService {
       r'([0-9,]+\.[0-9]{1,2})',
       // Numbers with commas without decimals: 1,234
       r'([0-9,]+)(?!\.[0-9])',
+      // Simple numbers: 1, 10, 100 (but not part of larger numbers)
+      r'\b([0-9]{1,6})\b(?!\.[0-9])',
       // Nepali numerals (basic support)
       r'रु\.?\s*([०-९,]+(?:\.[०-९]{1,2})?)',
     ];
 
     for (final pattern in patterns) {
       final regex = RegExp(pattern, caseSensitive: false);
-      final match = regex.firstMatch(text);
+      final matches = regex.allMatches(text);
       
-      if (match != null) {
+      for (final match in matches) {
         String amountStr = match.group(1)!;
+        log('💰 Found potential amount: $amountStr');
         
         // Convert Nepali numerals to English if needed
         amountStr = _convertNepaliToEnglish(amountStr);
@@ -138,11 +145,13 @@ class PaymentParserService {
         
         final amount = double.tryParse(amountStr);
         if (amount != null && amount > 0) {
+          log('✅ Extracted amount: $amount');
           return amount;
         }
       }
     }
 
+    log('❌ No amount found');
     return null;
   }
 
