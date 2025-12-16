@@ -1,6 +1,6 @@
 class PaymentNotification {
   final String id;
-  final String source; // 'sms' or 'notification'
+  final String source; // 'sms', 'notification', or 'test'
   final String appName; // e.g., 'eSewa', 'NMB Bank'
   final String rawText;
   final double? amount;
