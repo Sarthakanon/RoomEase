@@ -64,3 +64,42 @@ backend/vendor/
 *.test
 *.log
 backend/serviceAccount.json
+
+# -------------------------
+# Documentation / Temporary Files
+# -------------------------
+# Kiro specs and requirements (temporary)
+.kiro/specs/
+
+# Documentation folder (diagrams, specs, etc.)
+docs/
+
+# HTML design mockups
+html_designs/
+
+# Wireframes (temporary HTML files)
+wireframes/
+
+# Temporary HTML design files
+login.html
+signup.html
+
+# Temporary task files
+task.md
+task-notifications.md
+onstart.txt
+tead of mock data
+ts from mobile apps without Origin header
+tgreSQL for roomspaces
+h origin develop
+etup for PostgreSQL and pgAdmin
+
+# Project documentation and requirement files (Kiro generated)
+PAYMENT_NOTIFICATION_IMPLEMENTATION.md
+NOTIFICATION_TECHNICAL_EXPLANATION.md
+ANDROID_BACKEND_SETUP.md
+FLUTTER_HTTP_VS_REACT_AXIOS.md
+JIRA_TICKETS.md
+ROOMSPACE_FIX_SUMMARY.md
+SMS_IMPLEMENTATION_ATTEMPTS.md
+UI_CHANGES_DOCUMENTATION.txt
