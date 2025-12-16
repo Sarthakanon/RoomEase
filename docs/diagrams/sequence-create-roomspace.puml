@@ -1,57 +1,57 @@
-@startuml Create Roomspace Sequence Diagram
+@startuml Sequence Diagram - Create Roomspace (ROOM-F-1.0)
+!theme plain
 
-skinparam linetype ortho
-skinparam sequenceMessageAlign center
-skinparam BoxPadding 10
+title Sequence Diagram: Create Roomspace (ROOM-F-1.0)
 
-actor User
-participant "Flutter App" as App
-participant "Go Backend" as Backend
-participant "PostgreSQL" as DB
+actor User as user
+participant "Flutter App" as app
+participant "Backend\n(Go/Gin)" as backend
+database "PostgreSQL" as db
 
-User -> App: Click "Create Roomspace"
-activate App
+user -> app : Enter roomspace name
+user -> app : Enter description (optional)
+user -> app : Tap "Create Roomspace"
 
-App --> User: Show create form
+app -> app : Validate name not empty
 
-User -> App: Enter name & description
-App -> App: Validate input
+app -> backend : POST /api/roomspaces\n{name, description}\nCookie: session_id
 
-alt Input Valid
-    App -> Backend: POST /api/roomspaces\n{name, description}
-    activate Backend
+backend -> backend : Verify session from cookie
+
+alt Session Invalid
+    backend --> app : 401 Unauthorized
+    app --> user : Redirect to Login
+else Session Valid
+    backend -> backend : Extract user_id from session
     
-    Backend -> Backend: Verify session
+    backend -> backend : generateInviteCode()\n// 8-char alphanumeric
     
-    alt Session Valid
-        Backend -> Backend: Generate unique room ID
-        
-        Backend -> DB: INSERT INTO roomspaces
-        activate DB
-        DB --> Backend: Roomspace created
-        deactivate DB
-        
-        Backend -> DB: INSERT INTO roomspace_members\n(user as admin)
-        activate DB
-        DB --> Backend: Member added
-        deactivate DB
-        
-        Backend --> App: 201 Created\n{roomspace_id, room_id}
-        deactivate Backend
-        
-        App -> App: Update local state
-        App --> User: Navigate to Dashboard\nShow success message
-        
-    else Session Invalid
-        Backend --> App: 401 Unauthorized
-        deactivate Backend
-        App --> User: Redirect to Login
+    loop Until unique code
+        backend -> db : SELECT * FROM roomspaces\nWHERE invite_code = ?
+        alt Code Exists
+            backend -> backend : Generate new code
+        else Code Unique
+            backend -> backend : Use this code
+        end
     end
     
-else Input Invalid
-    App --> User: Show validation errors
+    backend -> db : INSERT INTO roomspaces\n(name, description, invite_code, created_by)
+    db --> backend : roomspace_id
+    
+    backend -> db : INSERT INTO roomspace_members\n(roomspace_id, firebase_uid, joined_at)
+    db --> backend : Member added
+    
+    backend --> app : 201 Created\n{id, name, invite_code, members: [...]}
+    
+    app -> app : Show success dialog
+    app --> user : Display invite code\n"ABC12345"
+    
+    user -> app : Tap "Copy Code"
+    app -> app : Copy to clipboard
+    app --> user : Show "Copied!" toast
+    
+    user -> app : Tap "Continue to Home"
+    app --> user : Navigate to Home Dashboard
 end
-
-deactivate App
 
 @enduml

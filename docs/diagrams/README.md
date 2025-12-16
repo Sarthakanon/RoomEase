@@ -1,73 +1,113 @@
 # RoomEase UML Diagrams
 
-This directory contains PlantUML diagrams for the RoomEase application.
+This folder contains PlantUML diagrams for the RoomEase application SRS documentation.
 
-## Diagrams
+## Diagram Order (as per SRS Sample)
+1. Activity Diagrams
+2. Use Case Diagrams
+3. Wireframes (external)
+4. ERD
+5. Data Dictionary (in SRS document)
+6. Class Diagram
+7. Sequence Diagrams
 
-### Use Case Diagram
-- **File**: `use-case-diagram.puml`
-- **Description**: Shows all use cases and actors in the RoomEase system
-- **Actors**: User, Roommate, Admin
+---
 
-### Activity Diagrams
+## 1. Use Case Diagrams (7 - one per subsystem)
 
-#### 1. User Authentication
-- **File**: `activity-user-authentication.puml`
-- **Description**: Flow of user registration and login process
-- **Key Flows**: Sign up, Login, Email verification
+| File | Subsystem | Description |
+|------|-----------|-------------|
+| `1-use-case-auth.puml` | AUTH | Authentication use cases |
+| `2-use-case-roomspace.puml` | ROOM | Roomspace management use cases |
+| `3-use-case-expense.puml` | EXP | Expense management use cases |
+| `4-use-case-ocr.puml` | OCR | OCR bill scanner use cases |
+| `5-use-case-analytics.puml` | ANL | Analytics use cases |
+| `6-use-case-notification.puml` | NOTIF | Notification use cases |
+| `7-use-case-profile.puml` | PROF | User profile use cases |
 
-#### 2. Roomspace Management
-- **File**: `activity-roomspace-management.puml`
-- **Description**: Managing roomspaces (create, join, leave)
-- **Key Flows**: Create roomspace, Join roomspace, Manage expenses
+---
 
-### Sequence Diagrams
+## 2. Activity Diagrams (one per functional requirement)
 
-#### 1. Login Flow
-- **File**: `sequence-login.puml`
-- **Description**: Detailed interaction between components during login
-- **Components**: Flutter App, Firebase Auth, Go Backend, PostgreSQL
+| File | Requirement | Description |
+|------|-------------|-------------|
+| `activity-signup.puml` | AUTH-F-1.0 | User signup flow |
+| `activity-login.puml` | AUTH-F-1.1 | User login flow |
+| `activity-create-roomspace.puml` | ROOM-F-1.0 | Create roomspace flow |
+| `activity-join-roomspace.puml` | ROOM-F-2.0 | Join roomspace flow |
+| `activity-add-expense.puml` | EXP-F-1.0 | Add expense flow |
+| `activity-ocr-scan.puml` | OCR-F-2.0 | OCR bill scanning flow |
+| `activity-view-analytics.puml` | ANL-F-1.0 | View analytics flow |
 
-#### 2. Create Roomspace
-- **File**: `sequence-create-roomspace.puml`
-- **Description**: Process of creating a new roomspace
-- **Components**: Flutter App, Go Backend, PostgreSQL
+---
 
-#### 3. Join Roomspace
-- **File**: `sequence-join-roomspace.puml`
-- **Description**: Process of joining an existing roomspace using Room ID
-- **Components**: Flutter App, Go Backend, PostgreSQL
+## 3. Sequence Diagrams
 
-#### 4. Change Password
-- **File**: `sequence-change-password.puml`
-- **Description**: Password change flow using Firebase Authentication
-- **Components**: Flutter App, Firebase Auth
+| File | Feature | Description |
+|------|---------|-------------|
+| `sequence-login.puml` | Login | User login sequence |
+| `sequence-create-roomspace.puml` | Create Room | Create roomspace sequence |
+| `sequence-join-roomspace.puml` | Join Room | Join with approval sequence |
+| `sequence-add-expense.puml` | Add Expense | Add expense with notification |
+| `sequence-ocr-scan.puml` | OCR Scan | OCR processing sequence |
+| `sequence-analytics.puml` | Analytics | View analytics sequence |
 
-## How to View
+---
 
-### Online
-1. Copy the content of any `.puml` file
-2. Go to [PlantUML Online Editor](http://www.plantuml.com/plantuml/uml/)
-3. Paste the content and view the diagram
+## 4. Structural Diagrams
 
-### VS Code
-1. Install the "PlantUML" extension
+| File | Type | Description |
+|------|------|-------------|
+| `fdd-system.puml` | FDD | Functional Decomposition Diagram |
+| `erd-database.puml` | ERD | Entity Relationship Diagram |
+| `class-diagram.puml` | Class | Application class diagram |
+
+---
+
+## How to Generate Images
+
+### Option 1: VS Code Extension (Recommended)
+1. Install "PlantUML" extension
 2. Open any `.puml` file
 3. Press `Alt+D` to preview
+4. Right-click → "Export Current Diagram"
 
-### Command Line
+### Option 2: Online Generator
+1. Go to [PlantUML Web Server](http://www.plantuml.com/plantuml/uml/)
+2. Paste the diagram code
+3. Download PNG/SVG
+
+### Option 3: Command Line
 ```bash
 # Install PlantUML
-brew install plantuml  # macOS
-# or
-sudo apt-get install plantuml  # Linux
+# Windows: choco install plantuml
+# Mac: brew install plantuml
 
-# Generate PNG
-plantuml use-case-diagram.puml
+# Generate all diagrams
+plantuml *.puml
 
-# Generate SVG
-plantuml -tsvg use-case-diagram.puml
+# Generate specific diagram as PNG
+plantuml -tpng sequence-login.puml
+
+# Generate as SVG
+plantuml -tsvg erd-database.puml
 ```
+
+---
+
+## Subsystem Summary
+
+| Code | Subsystem | Status |
+|------|-----------|--------|
+| AUTH | Authentication | ✅ Built |
+| ROOM | Roomspace Management | ✅ Built |
+| NOTIF | Notifications | ✅ Built |
+| PROF | User Profile | ✅ Built |
+| EXP | Expense Management | 🔄 Partial |
+| OCR | OCR Bill Scanner | ❌ Pending |
+| ANL | Expense Analytics | ❌ Pending |
+
+---
 
 ## Architecture Overview
 
@@ -86,20 +126,15 @@ plantuml -tsvg use-case-diagram.puml
                       │
                ┌──────▼──────┐
                │ PostgreSQL  │
-               │  (Supabase) │
+               │  Database   │
                └─────────────┘
 ```
 
-## Key Features Documented
-
-1. **Authentication**: Firebase Auth + Backend session management
-2. **Roomspace Management**: Create, join, and manage shared spaces
-3. **User Management**: Profile, settings, password change
-4. **Expense Tracking**: Add and split expenses (coming soon)
-5. **Real-time Updates**: Notifications and member management (coming soon)
+---
 
 ## Notes
 
 - All diagrams follow PlantUML syntax
 - Diagrams are version-controlled and should be updated with code changes
 - Use these diagrams for documentation, presentations, and onboarding
+- SRS document location: `.kiro/specs/SRS_RoomEase.md`

@@ -1,80 +1,95 @@
-@startuml Join Roomspace Sequence Diagram
+@startuml Sequence Diagram - Join Roomspace (ROOM-F-2.0, ROOM-F-2.1)
+!theme plain
 
-skinparam linetype ortho
-skinparam sequenceMessageAlign center
-skinparam BoxPadding 10
+title Sequence Diagram: Join Roomspace with Approval
 
-actor User
-participant "Flutter App" as App
-participant "Go Backend" as Backend
-participant "PostgreSQL" as DB
+actor Requester as requester
+participant "Requester App" as reqApp
+participant "Backend\n(Go/Gin)" as backend
+database "PostgreSQL" as db
+participant "Creator App" as creatorApp
+actor Creator as creator
 
-User -> App: Click "Join Roomspace"
-activate App
+== Search Roomspace ==
 
-App --> User: Show join form
+requester -> reqApp : Enter invite code
+requester -> reqApp : Tap "Search"
 
-User -> App: Enter Room ID
-App -> App: Validate Room ID format
+reqApp -> backend : GET /api/roomspaces/code/{code}
 
-alt Room ID Valid Format
-    App -> Backend: POST /api/roomspaces/{id}/join
-    activate Backend
+backend -> db : SELECT * FROM roomspaces\nWHERE invite_code = ?
+
+alt Not Found
+    db --> backend : Empty result
+    backend --> reqApp : 404 Not Found
+    reqApp --> requester : Show "Room not found"
+else Found
+    db --> backend : Roomspace data
     
-    Backend -> Backend: Verify session
+    backend -> db : SELECT members WITH users\nWHERE roomspace_id = ?
+    db --> backend : Members list
     
-    alt Session Valid
-        Backend -> DB: SELECT roomspace WHERE room_id = ?
-        activate DB
-        
-        alt Roomspace Exists
-            DB --> Backend: Roomspace data
-            deactivate DB
-            
-            Backend -> DB: Check if user already member
-            activate DB
-            
-            alt Not Already Member
-                DB --> Backend: User not found
-                deactivate DB
-                
-                Backend -> DB: INSERT INTO roomspace_members
-                activate DB
-                DB --> Backend: Member added
-                deactivate DB
-                
-                Backend --> App: 200 OK\n{roomspace_data}
-                deactivate Backend
-                
-                App -> App: Update local state
-                App --> User: Navigate to Dashboard\nShow "Joined successfully"
-                
-            else Already Member
-                DB --> Backend: User exists
-                deactivate DB
-                Backend --> App: 400 Bad Request\n"Already a member"
-                deactivate Backend
-                App --> User: Show error message
-            end
-            
-        else Roomspace Not Found
-            DB --> Backend: No roomspace found
-            deactivate DB
-            Backend --> App: 404 Not Found\n"Invalid Room ID"
-            deactivate Backend
-            App --> User: Show "Room not found"
-        end
-        
-    else Session Invalid
-        Backend --> App: 401 Unauthorized
-        deactivate Backend
-        App --> User: Redirect to Login
-    end
-    
-else Invalid Format
-    App --> User: Show "Invalid Room ID format"
+    backend --> reqApp : 200 OK\n{name, members, invite_code}
+    reqApp --> requester : Display roomspace details
 end
 
-deactivate App
+== Request to Join ==
+
+requester -> reqApp : Tap "Join Roomspace"
+
+reqApp -> backend : POST /api/roomspaces/code/{code}/join
+
+backend -> db : Check if already member
+alt Already Member
+    backend --> reqApp : 400 "Already a member"
+else Not Member
+    backend -> db : Check pending request
+    alt Has Pending Request
+        backend --> reqApp : 400 "Request already pending"
+    else No Pending Request
+        backend -> db : INSERT INTO join_requests\n(roomspace_id, requester_uid, status='PENDING')
+        db --> backend : request_id
+        
+        backend -> db : SELECT members FROM roomspace
+        db --> backend : Member UIDs
+        
+        loop For each member
+            backend -> db : INSERT INTO notifications\n(recipient_uid, type='JOIN_REQUEST',\ntitle, message)
+        end
+        
+        backend --> reqApp : 200 OK\n{message: "Request sent"}
+        reqApp --> requester : Show "Request Sent"\nNavigate to Pending screen
+    end
+end
+
+== Process Join Request ==
+
+creator -> creatorApp : Open Notifications
+creatorApp -> backend : GET /api/join-requests
+backend -> db : SELECT join_requests\nWHERE roomspace creator = user
+db --> backend : Pending requests
+backend --> creatorApp : {requests: [...]}
+creatorApp --> creator : Display join requests
+
+creator -> creatorApp : Tap "Accept" or "Reject"
+creatorApp -> backend : POST /api/join-requests/{id}/process\n{accept: true/false}
+
+alt Accept
+    backend -> db : UPDATE join_requests\nSET status = 'ACCEPTED'
+    backend -> db : INSERT INTO roomspace_members
+    backend -> db : INSERT notification for requester\n(type='JOIN_ACCEPTED')
+    backend --> creatorApp : 200 OK
+    
+    reqApp <-- backend : Push notification
+    reqApp --> requester : "You've been accepted!"
+    reqApp --> requester : Navigate to Home
+else Reject
+    backend -> db : UPDATE join_requests\nSET status = 'REJECTED'
+    backend -> db : INSERT notification for requester\n(type='JOIN_REJECTED')
+    backend --> creatorApp : 200 OK
+    
+    reqApp <-- backend : Push notification
+    reqApp --> requester : "Request declined"
+end
 
 @enduml

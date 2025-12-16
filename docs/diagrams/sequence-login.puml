@@ -1,52 +1,71 @@
-@startuml Login Sequence Diagram
+@startuml Sequence Diagram - User Login (AUTH-F-1.1)
+!theme plain
 
-skinparam linetype ortho
-skinparam sequenceMessageAlign center
-skinparam BoxPadding 10
+title Sequence Diagram: User Login (AUTH-F-1.1)
 
-actor User
-participant "Flutter App" as App
-participant "Firebase Auth" as Firebase
-participant "Go Backend" as Backend
-participant "PostgreSQL" as DB
+actor User as user
+participant "Flutter App" as app
+participant "Firebase Auth" as firebase
+participant "Backend\n(Go/Gin)" as backend
+database "PostgreSQL" as db
 
-User -> App: Enter credentials
-activate App
+user -> app : Enter email & password
+user -> app : Tap "Sign In"
 
-App -> Firebase: signInWithEmailAndPassword()
-activate Firebase
+app -> app : Validate input fields
+note right
+    - Email format validation
+    - Password not empty
+end note
 
-alt Credentials Valid
-    Firebase -> Firebase: Verify credentials
-    Firebase --> App: Return UserCredential + Token
-    deactivate Firebase
+alt Validation Failed
+    app --> user : Show validation error
+else Validation Passed
+    app -> firebase : signInWithEmailAndPassword\n(email, password)
     
-    App -> Backend: POST /api/auth/login\n{firebase_token}
-    activate Backend
-    
-    Backend -> Firebase: Verify token
-    activate Firebase
-    Firebase --> Backend: Token valid + User info
-    deactivate Firebase
-    
-    Backend -> DB: Check/Create user
-    activate DB
-    DB --> Backend: User data
-    deactivate DB
-    
-    Backend -> Backend: Create session
-    Backend --> App: 200 OK + Session cookie
-    deactivate Backend
-    
-    App -> App: Store session
-    App --> User: Navigate to Dashboard
-    
-else Invalid Credentials
-    Firebase --> App: AuthException
-    deactivate Firebase
-    App --> User: Show error message
+    alt Invalid Credentials
+        firebase --> app : Error: invalid-credential
+        app --> user : Show "Invalid email or password"
+    else User Not Verified
+        firebase --> app : Error: user-not-verified
+        app --> user : Show "Please verify your email"
+    else Success
+        firebase --> app : UserCredential {uid, email}
+        
+        app -> firebase : getIdToken()
+        firebase --> app : Firebase ID Token
+        
+        app -> backend : POST /api/auth/login\n{firebase_token}
+        
+        backend -> firebase : verifyIdToken(token)
+        
+        alt Invalid Token
+            firebase --> backend : Error: Invalid token
+            backend --> app : 401 Unauthorized
+            app --> user : Show "Authentication failed"
+        else Valid Token
+            firebase --> backend : {uid, email, name}
+            
+            backend -> db : SELECT * FROM users\nWHERE firebase_uid = ?
+            
+            alt User Not Found
+                backend -> db : INSERT INTO users\n(firebase_uid, email, name)
+                db --> backend : User created
+            else User Exists
+                db --> backend : User data
+                backend -> db : UPDATE users SET\nlast_login = NOW()
+            end
+            
+            backend -> backend : generateSessionID()
+            
+            backend -> db : INSERT INTO sessions\n(id, user_id, expires_at)
+            db --> backend : Session created
+            
+            backend --> app : 200 OK\nSet-Cookie: session_id\n{user_id, email, session_id}
+            
+            app --> user : Login successful
+        end
+    end
 end
-
-deactivate App
 
 @enduml
