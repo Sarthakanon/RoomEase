@@ -29,10 +29,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.windows:
         return windows;
       case TargetPlatform.linux:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for linux - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return android; // Use Android config for Linux development
       default:
         throw UnsupportedError(
           'DefaultFirebaseOptions are not supported for this platform.',
@@ -59,20 +56,22 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDVd5PXLYdCAoHR0H18PT8lj6yCx3WsnV0',
-    appId: '1:949338416443:ios:30f02e5fee7468fd90431e',
+    appId: '1:949338416443:ios:630ac68c75f3611990431e',
     messagingSenderId: '949338416443',
     projectId: 'roomease-2025',
     storageBucket: 'roomease-2025.firebasestorage.app',
+    androidClientId: '949338416443-bljrf0undk633j4j53nlvj824qh3gjmv.apps.googleusercontent.com',
     iosClientId: '949338416443-lv86qbku6obcvud51qnqprpct8hjsvm0.apps.googleusercontent.com',
     iosBundleId: 'com.example.roomEase',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDVd5PXLYdCAoHR0H18PT8lj6yCx3WsnV0',
-    appId: '1:949338416443:ios:30f02e5fee7468fd90431e',
+    appId: '1:949338416443:ios:630ac68c75f3611990431e',
     messagingSenderId: '949338416443',
     projectId: 'roomease-2025',
     storageBucket: 'roomease-2025.firebasestorage.app',
+    androidClientId: '949338416443-bljrf0undk633j4j53nlvj824qh3gjmv.apps.googleusercontent.com',
     iosClientId: '949338416443-lv86qbku6obcvud51qnqprpct8hjsvm0.apps.googleusercontent.com',
     iosBundleId: 'com.example.roomEase',
   );
@@ -85,4 +84,5 @@ class DefaultFirebaseOptions {
     authDomain: 'roomease-2025.firebaseapp.com',
     storageBucket: 'roomease-2025.firebasestorage.app',
   );
+
 }
