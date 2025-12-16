@@ -188,23 +188,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. Logo and Header
+                  // 1. Logo Box
                   Center(
                     child: Container(
                       height: 70,
                       width: 70,
                       decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      // Using the logo asset you provided
-                      child: Image.asset(
-                        'png/logo.png',
-                        fit: BoxFit.contain,
-                        // If logo is black/white, this tints it to brand color.
-                        // Remove color parameter if your logo has its own colors.
                         color: primaryColor,
+                        borderRadius: BorderRadius.circular(18),
                       ),
                     ),
                   ),

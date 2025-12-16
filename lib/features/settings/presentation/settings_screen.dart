@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../services/firebase_auth_service.dart';
 import '../../../services/api_service.dart';
+import 'payment_notification_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -656,6 +657,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(Icons.lock_outline, color: Colors.black87, size: 20),
+            ),
+            trailing: Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: Colors.grey[400],
+            ),
+          ),
+          Divider(height: 1, indent: 60, color: Colors.grey[100]),
+
+          // Payment Notifications
+          ListTile(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PaymentNotificationSettingsScreen(),
+                ),
+              );
+            },
+            title: const Text(
+              "Payment Detection",
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: const Text(
+              "Auto-detect payments for expenses",
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.payment, color: Colors.black87, size: 20),
             ),
             trailing: Icon(
               Icons.arrow_forward_ios_rounded,

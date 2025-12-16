@@ -1,27 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../models/payment_notification.dart';
+import '../../../services/payment_parser_service.dart';
 
 class AddExpenseDialog extends StatefulWidget {
   final List<RoommateItem> roommates;
   final Function(ExpenseData) onSubmit;
+  final PaymentNotification? paymentNotification;
 
   const AddExpenseDialog({
     super.key,
     required this.roommates,
     required this.onSubmit,
+    this.paymentNotification,
   });
 
   static Future<void> show(
     BuildContext context, {
     required List<RoommateItem> roommates,
     required Function(ExpenseData) onSubmit,
+    PaymentNotification? paymentNotification,
   }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) =>
-          AddExpenseDialog(roommates: roommates, onSubmit: onSubmit),
+      builder: (context) => AddExpenseDialog(
+        roommates: roommates, 
+        onSubmit: onSubmit,
+        paymentNotification: paymentNotification,
+      ),
     );
   }
 
@@ -53,11 +61,54 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _autoFillFromPaymentNotification();
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _amountController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  /// Auto-fill form fields from payment notification
+  void _autoFillFromPaymentNotification() {
+    if (widget.paymentNotification == null) return;
+
+    final notification = widget.paymentNotification!;
+    
+    // Set amount
+    if (notification.amount != null) {
+      _amountController.text = notification.amount!.toStringAsFixed(2);
+    }
+    
+    // Set title based on merchant or app name
+    String title = '';
+    if (notification.merchant != null && notification.merchant!.isNotEmpty) {
+      title = 'Payment to ${notification.merchant}';
+    } else {
+      title = 'Payment via ${notification.appName}';
+    }
+    _titleController.text = title;
+    
+    // Set suggested category
+    final suggestedCategory = PaymentParserService.suggestExpenseCategory(
+      notification.merchant,
+      notification.rawText,
+    );
+    
+    // Find matching category
+    final categoryMatch = _categories.firstWhere(
+      (cat) => cat.name == suggestedCategory,
+      orElse: () => _categories.first,
+    );
+    _selectedCategory = categoryMatch.name;
+    
+    // Set description with payment details
+    _descriptionController.text = 'Auto-detected from ${notification.appName} notification';
   }
 
   void _submit() {

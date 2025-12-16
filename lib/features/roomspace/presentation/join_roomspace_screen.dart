@@ -1,7 +1,58 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../services/api_service.dart';
 
+// ==========================================
+// 1. LOGIC SECTION (The "Controller")
+// ==========================================
+// This class handles all the "thinking" (API calls, validation logic).
+// The UI doesn't need to know how API works, it just calls this.
+class JoinRoomController {
+  final ApiService _apiService = ApiService();
+
+  // Returns a Map with { success: boolean, message: String, data: Map? }
+  Future<Map<String, dynamic>> attemptJoin(String roomCode) async {
+    try {
+      // Step 1: Clean the input (make it uppercase, remove spaces)
+      String cleanCode = roomCode.toUpperCase().trim();
+
+      // Step 2: Check if room exists
+      final searchResponse = await _apiService.searchRoomspaceByCode(cleanCode);
+      
+      // If room is NOT found or search failed
+      if (searchResponse['success'] != true || searchResponse['data'] == null) {
+        return {
+          'success': false,
+          'message': 'Room not found. Please check the code and try again.'
+        };
+      }
+
+      // Step 3: If room exists, try to join it
+      final joinResponse = await _apiService.joinRoomspaceByCode(cleanCode);
+
+      if (joinResponse['success'] == true) {
+        return {
+          'success': true,
+          'message': 'Joined successfully!',
+          'data': searchResponse['data'] // Return room details for the popup
+        };
+      } else {
+        return {
+          'success': false,
+          'message': joinResponse['error'] ?? 'Failed to join the room.'
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}'
+      };
+    }
+  }
+}
+
+// ==========================================
+// 2. UI SECTION (The "View")
+// ==========================================
 class JoinRoomspaceScreen extends StatefulWidget {
   const JoinRoomspaceScreen({super.key});
 
@@ -10,212 +61,109 @@ class JoinRoomspaceScreen extends StatefulWidget {
 }
 
 class _JoinRoomspaceScreenState extends State<JoinRoomspaceScreen> {
+  // Controllers and Keys
   final _formKey = GlobalKey<FormState>();
   final _roomIdController = TextEditingController();
-  final _apiService = ApiService();
-
+  
+  // Instance of our Logic Class
+  final _controller = JoinRoomController();
+  
+  // State Variable
   bool _isLoading = false;
-  bool _roomFound = false;
-  bool _searchAttempted = false;
-  Map<String, dynamic>? _roomDetails;
-  String? _errorMessage;
 
-  Future<void> _searchRoom() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-        _roomFound = false;
-        _roomDetails = null;
-        _errorMessage = null;
-        _searchAttempted = true;
-      });
+  // --- BUTTON ACTION ---
+  Future<void> _handleJoinButton() async {
+    // 1. Validate the form (check if text field is empty)
+    if (!_formKey.currentState!.validate()) return;
 
-      try {
-        final code = _roomIdController.text.toUpperCase().trim();
-        final response = await _apiService.searchRoomspaceByCode(code);
-
-        if (mounted) {
-          if (response['success'] == true && response['data'] != null) {
-            setState(() {
-              _isLoading = false;
-              _roomFound = true;
-              _roomDetails = response['data'];
-            });
-          } else {
-            setState(() {
-              _isLoading = false;
-              _roomFound = false;
-              _errorMessage = 'Room not found';
-            });
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _roomFound = false;
-            _errorMessage = e.toString().replaceFirst('Exception: ', '');
-          });
-        }
-      }
-    }
-  }
-
-  Future<void> _joinRoom() async {
+    // 2. Start Loading
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
     });
 
-    try {
-      final code = _roomIdController.text.toUpperCase().trim();
-      final response = await _apiService.joinRoomspaceByCode(code);
+    // 3. Call our Logic Class
+    final result = await _controller.attemptJoin(_roomIdController.text);
 
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+    // 4. Check if widget is still on screen (Safety check)
+    if (!mounted) return;
 
-        if (response['success'] == true) {
-          _showSuccessDialog();
-        } else {
-          setState(() {
-            _errorMessage = response['error'] ?? 'Failed to join room';
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
-        });
+    // 5. Stop Loading
+    setState(() {
+      _isLoading = false;
+    });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_errorMessage ?? 'Failed to join room'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    // 6. Handle Result
+    if (result['success'] == true) {
+      _showSuccessDialog(result['data']);
+    } else {
+      _showErrorSnackBar(result['message']);
     }
   }
 
-  void _showSuccessDialog() {
-    final screenSize = MediaQuery.of(context).size;
+  // --- HELPER: Show Error Message ---
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
 
+  // --- HELPER: Show Success Popup ---
+  void _showSuccessDialog(Map<String, dynamic> roomDetails) {
+    final primaryColor = Theme.of(context).primaryColor;
+    
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: false, // User must click button to close
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: screenSize.width * 0.9,
-            maxHeight: screenSize.height * 0.8,
-          ),
-          padding: EdgeInsets.all(24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min, // Wrap content height
             children: [
-              // Title section
-              SizedBox(
-                width: double.infinity,
-                child: Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 24,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Welcome!',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
+              // Icon Circle
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1), // Simpler opacity
+                  shape: BoxShape.circle,
                 ),
+                child: const Icon(Icons.check_rounded, color: Colors.green, size: 32),
               ),
-
-              SizedBox(height: 20),
-
-              // Content section
-              SizedBox(
-                width: double.infinity,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Successfully Joined!',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.green.shade700,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'You have successfully joined "${_roomDetails!['name']}". Your roommates will be notified.',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.green.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 16),
+              
+              // Title
+              const Text(
+                'Joined Successfully!',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-
-              SizedBox(height: 24),
-
-              // Action button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    Navigator.pushReplacementNamed(context, '/home');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: Size(double.infinity, 50),
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'Continue to Home',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              const SizedBox(height: 8),
+              
+              // Subtitle
+              Text(
+                'You are now a member of "${roomDetails['name']}"',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 24),
+              
+              // Button
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close dialog
+                  Navigator.pushReplacementNamed(context, '/home'); // Go home
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  minimumSize: const Size(double.infinity, 45),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
+                child: const Text('Go to Dashboard', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -224,407 +172,116 @@ class _JoinRoomspaceScreenState extends State<JoinRoomspaceScreen> {
     );
   }
 
+  // ==========================================
+  // 3. WIDGET BUILDING (The Layout)
+  // ==========================================
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.grey[50],
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.grey[50],
-        appBar: AppBar(
-          title: Text('Join Roomspace'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          foregroundColor: Theme.of(context).colorScheme.primary,
-          systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: Brightness.dark,
-            statusBarBrightness: Brightness.light,
-          ),
+    return Scaffold(
+      backgroundColor: Colors.white, // Standard background
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
+          onPressed: () => Navigator.of(context).pop(),
         ),
-        body: SizedBox(
-          width: double.infinity,
-          height: double.infinity,
-          child: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: screenSize.width * 0.05,
-                ),
-                child: Card(
-                  elevation: 8,
-                  shadowColor: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Container(
-                    constraints: BoxConstraints(
-                      maxWidth: screenSize.width > 600
-                          ? 400
-                          : screenSize.width * 0.9,
-                    ),
-                    padding: EdgeInsets.all(screenSize.width > 600 ? 32 : 24),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Header
-                          Container(
-                            padding: EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Icon(
-                              Icons.group_add_rounded,
-                              size: 40,
-                              color: Colors.white,
-                            ),
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'Join Roomspace',
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Enter the Room ID shared by your roommate',
-                            style: Theme.of(context).textTheme.bodyLarge
-                                ?.copyWith(
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                            textAlign: TextAlign.center,
-                          ),
-                          SizedBox(height: 24),
-
-                          // Room ID field
-                          SizedBox(
-                            width: double.infinity,
-                            child: TextFormField(
-                              controller: _roomIdController,
-                              textCapitalization: TextCapitalization.characters,
-                              decoration: InputDecoration(
-                                labelText: 'Room ID',
-                                hintText: 'e.g., ABC12345',
-                                prefixIcon: Icon(
-                                  Icons.key_outlined,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey[50],
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 16,
-                                  horizontal: 12,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter a Room ID';
-                                }
-                                if (value.length < 6) {
-                                  return 'Room ID must be at least 6 characters';
-                                }
-                                return null;
-                              },
-                              onChanged: (value) {
-                                if (_roomFound || _searchAttempted) {
-                                  setState(() {
-                                    _roomFound = false;
-                                    _roomDetails = null;
-                                    _searchAttempted = false;
-                                    _errorMessage = null;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          SizedBox(height: 16),
-
-                          // Search button
-                          if (!_roomFound)
-                            SizedBox(
-                              width: double.infinity,
-                              child: _isLoading
-                                  ? SizedBox(
-                                      height: 50,
-                                      child: Center(
-                                        child: CircularProgressIndicator(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                        ),
-                                      ),
-                                    )
-                                  : ElevatedButton(
-                                      onPressed: _searchRoom,
-                                      style: ElevatedButton.styleFrom(
-                                        minimumSize: Size(double.infinity, 50),
-                                        backgroundColor: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                        foregroundColor: Colors.white,
-                                        elevation: 2,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        'Search Room',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                            ),
-
-                          // Room details card
-                          if (_roomFound && _roomDetails != null) ...[
-                            SizedBox(height: 16),
-                            Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                border: Border.all(
-                                  color: Colors.green.shade200,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.check_circle,
-                                        color: Colors.green,
-                                        size: 20,
-                                      ),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'Room Found!',
-                                        style: TextStyle(
-                                          color: Colors.green.shade700,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  SizedBox(height: 12),
-                                  Text(
-                                    _roomDetails!['name'] ?? 'Unnamed Room',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.people_outline,
-                                        size: 16,
-                                        color: Colors.grey[600],
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        '${(_roomDetails!['members'] as List?)?.length ?? 0} member(s)',
-                                        style: TextStyle(
-                                          color: Colors.grey[600],
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (_roomDetails!['description'] != null &&
-                                      _roomDetails!['description']
-                                          .toString()
-                                          .isNotEmpty) ...[
-                                    SizedBox(height: 8),
-                                    Text(
-                                      _roomDetails!['description'],
-                                      style: TextStyle(
-                                        color: Colors.grey[700],
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                  SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.vpn_key_outlined,
-                                        size: 16,
-                                        color: Colors.grey[600],
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Code: ${_roomDetails!['invite_code'] ?? 'N/A'}',
-                                        style: TextStyle(
-                                          color: Colors.grey[600],
-                                          fontSize: 14,
-                                          fontFamily: 'monospace',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(height: 16),
-
-                            // Join button
-                            SizedBox(
-                              width: double.infinity,
-                              child: _isLoading
-                                  ? SizedBox(
-                                      height: 50,
-                                      child: Center(
-                                        child: CircularProgressIndicator(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                        ),
-                                      ),
-                                    )
-                                  : ElevatedButton(
-                                      onPressed: _joinRoom,
-                                      style: ElevatedButton.styleFrom(
-                                        minimumSize: Size(double.infinity, 50),
-                                        backgroundColor: Colors.green,
-                                        foregroundColor: Colors.white,
-                                        elevation: 2,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        'Join Roomspace',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                            ),
-                          ],
-
-                          // Error message for room not found
-                          if (!_isLoading &&
-                              _searchAttempted &&
-                              !_roomFound &&
-                              _errorMessage != null) ...[
-                            SizedBox(height: 16),
-                            Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade50,
-                                border: Border.all(color: Colors.red.shade200),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.error_outline,
-                                    color: Colors.red,
-                                    size: 20,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _errorMessage!,
-                                      style: TextStyle(
-                                        color: Colors.red.shade700,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-
-                          SizedBox(height: 16),
-
-                          // Help text
-                          Container(
-                            padding: EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline,
-                                  color: Colors.blue,
-                                  size: 20,
-                                ),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Ask your roommate for the 8-character invite code from their room settings.',
-                                    style: TextStyle(
-                                      color: Colors.blue.shade700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),       // Extracted for readability
+                const SizedBox(height: 40),
+                _buildInputField(),   // Extracted for readability
+                const SizedBox(height: 40),
+                _buildSubmitButton(), // Extracted for readability
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // --- SMALLER WIDGET PIECES ---
+
+  Widget _buildHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        const Text(
+          'Join Room',
+          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Enter the unique 8-character code shared by your roommate.',
+          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInputField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Room ID',
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey[800]),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _roomIdController,
+          textCapitalization: TextCapitalization.characters,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+          decoration: InputDecoration(
+            hintText: 'ABC12345',
+            filled: true,
+            fillColor: Colors.grey[100],
+            prefixIcon: const Icon(Icons.tag, color: Colors.grey),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+          ),
+          // Simple Validator
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter a Room ID';
+            }
+            if (value.length < 6) {
+              return 'ID is too short';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _handleJoinButton,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Theme.of(context).primaryColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        child: _isLoading
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Text(
+                'Join Room',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
       ),
     );
   }

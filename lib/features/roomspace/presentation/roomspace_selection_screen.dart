@@ -1,124 +1,86 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+// ==========================================
+// 1. LOGIC SECTION (The "Controller")
+// ==========================================
+class RoomSelectionController {
+  
+  // Navigate to Create Room Screen
+  void goToCreateRoom(BuildContext context) {
+    Navigator.pushNamed(context, '/create-roomspace');
+  }
+
+  // Navigate to Join Room Screen
+  void goToJoinRoom(BuildContext context) {
+    Navigator.pushNamed(context, '/join-roomspace');
+  }
+
+  // Skip and go to Dashboard
+  void skipToHome(BuildContext context) {
+    Navigator.pushReplacementNamed(context, '/home');
+  }
+}
+
+// ==========================================
+// 2. UI SECTION (The "View")
+// ==========================================
 class RoomspaceSelectionScreen extends StatelessWidget {
   const RoomspaceSelectionScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
+    // We create an instance of our controller
+    final controller = RoomSelectionController();
+    final theme = Theme.of(context);
+    final primaryColor = theme.primaryColor;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.grey[50],
-        systemNavigationBarIconBrightness: Brightness.dark,
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      // Transparent AppBar just to control Status Bar color
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        toolbarHeight: 0, // Hides the AppBar space
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
-      child: Scaffold(
-        backgroundColor: Colors.grey[50],
-        body: SizedBox(
-          width: double.infinity,
-          height: double.infinity,
-          child: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: screenSize.width * 0.05,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildHeader(), // Extracted Header
+                const SizedBox(height: 40),
+                
+                // Option 1: Create
+                _buildOptionCard(
+                  context,
+                  title: 'Create New Room',
+                  subtitle: 'Start fresh and invite your roommates',
+                  icon: Icons.add_home_rounded,
+                  iconColor: primaryColor,
+                  onTap: () => controller.goToCreateRoom(context),
                 ),
-                child: Card(
-                  elevation: 8,
-                  shadowColor: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Container(
-                    constraints: BoxConstraints(
-                      maxWidth: screenSize.width > 600
-                          ? 400
-                          : screenSize.width * 0.9,
-                    ),
-                    padding: EdgeInsets.all(screenSize.width > 600 ? 32 : 24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // App logo
-                        SizedBox(
-                          width: 100,
-                          height: 100,
-                          child: Image.asset(
-                            'png/logo.png',
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          'Welcome to RoomEase!',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Choose how you want to get started',
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(
-                                color: Colors.grey[600],
-                                fontWeight: FontWeight.w500,
-                              ),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: 32),
 
-                        // Create new roomspace option
-                        _buildOptionCard(
-                          context: context,
-                          icon: Icons.add_home_rounded,
-                          title: 'Create New Roomspace',
-                          subtitle: 'Start fresh and invite roommates to join',
-                          onTap: () {
-                            Navigator.pushNamed(context, '/create-roomspace');
-                          },
-                        ),
+                const SizedBox(height: 16),
 
-                        SizedBox(height: 16),
-
-                        // Join existing roomspace option
-                        _buildOptionCard(
-                          context: context,
-                          icon: Icons.group_add_rounded,
-                          title: 'Join Existing Roomspace',
-                          subtitle: 'Enter a room ID to join your roommates',
-                          onTap: () {
-                            Navigator.pushNamed(context, '/join-roomspace');
-                          },
-                        ),
-
-                        SizedBox(height: 24),
-
-                        // Skip for now option
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pushReplacementNamed(context, '/home');
-                          },
-                          child: Text(
-                            'Skip for now',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                // Option 2: Join
+                _buildOptionCard(
+                  context,
+                  title: 'Join Existing Room',
+                  subtitle: 'Enter a Room ID to join your friends',
+                  icon: Icons.login_rounded,
+                  iconColor: Colors.orangeAccent, // Hardcoded for variety, or use theme
+                  onTap: () => controller.goToJoinRoom(context),
                 ),
-              ),
+
+                const SizedBox(height: 40),
+                
+                // Skip Button
+                _buildSkipButton(context, controller),
+              ],
             ),
           ),
         ),
@@ -126,62 +88,113 @@ class RoomspaceSelectionScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildOptionCard({
-    required BuildContext context,
-    required IconData icon,
+  // --- SMALLER WIDGET PIECES ---
+
+  // 1. Header Text Widget
+  Widget _buildHeader() {
+    return Column(
+      children: [
+        const Text(
+          'Choose an Option',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Select how you want to proceed',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+        ),
+      ],
+    );
+  }
+
+  // 2. Skip Button Widget
+  Widget _buildSkipButton(BuildContext context, RoomSelectionController controller) {
+    return TextButton(
+      onPressed: () => controller.skipToHome(context),
+      child: Text(
+        'Skip for now',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey[500],
+        ),
+      ),
+    );
+  }
+
+  // 3. Reusable Card Widget
+  Widget _buildOptionCard(
+    BuildContext context, {
     required String title,
     required String subtitle,
+    required IconData icon,
+    required Color iconColor,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
           color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05), // Beginner friendly opacity
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
         child: Row(
           children: [
+            // Icon Box
             Container(
-              padding: EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
+                color: iconColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(15),
               ),
-              child: Icon(
-                icon,
-                color: Theme.of(context).colorScheme.primary,
-                size: 24,
-              ),
+              child: Icon(icon, color: iconColor, size: 28),
             ),
-            SizedBox(width: 16),
+            const SizedBox(width: 16),
+
+            // Text Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                   ),
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios, color: Colors.grey[400], size: 16),
+
+            // Arrow Icon
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: Colors.grey[400],
+            ),
           ],
         ),
       ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/widgets/mobile_scaffold.dart';
 import '../../services/api_service.dart';
+import '../../services/payment_notification_service.dart';
+import '../../models/payment_notification.dart';
 import 'widgets/add_expense_dialog.dart';
 
 class MobileDashboard extends StatefulWidget {
@@ -23,6 +25,19 @@ class _MobileDashboardState extends State<MobileDashboard> {
     super.initState();
     _checkRoomspace();
     _loadUnreadCount();
+    _initializePaymentNotifications();
+  }
+
+  Future<void> _initializePaymentNotifications() async {
+    try {
+      final paymentService = PaymentNotificationService.instance;
+      await paymentService.initialize();
+      
+      // Set callback for when user wants to add expense from payment notification
+      paymentService.onExpenseRequested = _showExpenseDialogFromPayment;
+    } catch (e) {
+      debugPrint('Error initializing payment notifications: $e');
+    }
   }
 
   Future<void> _loadUnreadCount() async {
@@ -112,6 +127,35 @@ class _MobileDashboardState extends State<MobileDashboard> {
     );
   }
 
+  void _showExpenseDialogFromPayment(PaymentNotification notification) {
+    if (_roommates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Join a roomspace first to add expenses'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    AddExpenseDialog.show(
+      context,
+      roommates: _roommates,
+      paymentNotification: notification,
+      onSubmit: (expense) {
+        // TODO: Save expense to API and notify selected roommates
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Added payment expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 1. Get current user
@@ -152,23 +196,21 @@ class _MobileDashboardState extends State<MobileDashboard> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
                         children: [
                           Text(
-                            'Welcome back,',
+                            'Hi, ',
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 16,
+                              fontSize: 14,
                             ),
                           ),
-                          const SizedBox(height: 5),
                           Text(
                             user?.displayName ?? 'User',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -176,12 +218,12 @@ class _MobileDashboardState extends State<MobileDashboard> {
                       GestureDetector(
                         onTap: () async {
                           await Navigator.pushNamed(context, '/notifications');
-                          _loadUnreadCount(); // Refresh count when returning
+                          _loadUnreadCount();
                         },
                         child: Stack(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.2),
                                 shape: BoxShape.circle,
@@ -189,7 +231,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
                               child: const Icon(
                                 Icons.notifications_outlined,
                                 color: Colors.white,
-                                size: 28,
+                                size: 22,
                               ),
                             ),
                             if (_unreadNotificationCount > 0)
@@ -203,8 +245,8 @@ class _MobileDashboardState extends State<MobileDashboard> {
                                     shape: BoxShape.circle,
                                   ),
                                   constraints: const BoxConstraints(
-                                    minWidth: 18,
-                                    minHeight: 18,
+                                    minWidth: 16,
+                                    minHeight: 16,
                                   ),
                                   child: Text(
                                     _unreadNotificationCount > 9
@@ -212,7 +254,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
                                         : '$_unreadNotificationCount',
                                     style: const TextStyle(
                                       color: Colors.white,
-                                      fontSize: 10,
+                                      fontSize: 9,
                                       fontWeight: FontWeight.bold,
                                     ),
                                     textAlign: TextAlign.center,
@@ -224,27 +266,61 @@ class _MobileDashboardState extends State<MobileDashboard> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 25),
-                  const Text(
-                    'Your Total Balance',
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                  const SizedBox(height: 5),
-                  const Text(
-                    'Rs. 450.00',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 40,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const Text(
-                    'you are owed',
-                    style: TextStyle(
-                      color: Colors.greenAccent,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'You are owed',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Rs. 450.00',
+                              style: TextStyle(
+                                color: Colors.greenAccent,
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 60,
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'You owe',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Rs. 120.00',
+                              style: TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

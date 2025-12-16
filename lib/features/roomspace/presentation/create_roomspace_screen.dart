@@ -1,7 +1,54 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../services/roomspace_service.dart';
 
+// ==========================================
+// 1. LOGIC SECTION (The "Controller")
+// ==========================================
+class CreateRoomController {
+  final _roomspaceService = RoomspaceService();
+
+  // Returns { success: bool, message: String, inviteCode: String? }
+  Future<Map<String, dynamic>> createRoom({
+    required String name,
+    required String address,
+    required String description,
+  }) async {
+    try {
+      // Step 1: Prepare the data
+      // We trim spaces to ensure clean data
+      final cleanName = name.trim();
+      final cleanDesc = description.trim();
+      
+      // Note: Address isn't used in the API call yet based on your previous code,
+      // but we collect it here for future use.
+
+      // Step 2: Call the Service
+      final response = await _roomspaceService.createRoomspace(
+        name: cleanName,
+        description: cleanDesc.isEmpty ? null : cleanDesc,
+      );
+
+      // Step 3: Extract the Invite Code safely
+      final inviteCode = response['data']?['invite_code']?.toString() ?? 'N/A';
+
+      return {
+        'success': true,
+        'message': 'Room created successfully!',
+        'inviteCode': inviteCode,
+      };
+
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
+      };
+    }
+  }
+}
+
+// ==========================================
+// 2. UI SECTION (The "View")
+// ==========================================
 class CreateRoomspaceScreen extends StatefulWidget {
   const CreateRoomspaceScreen({super.key});
 
@@ -10,217 +57,139 @@ class CreateRoomspaceScreen extends StatefulWidget {
 }
 
 class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
+  // --- STATE VARIABLES ---
   final _formKey = GlobalKey<FormState>();
   final _roomNameController = TextEditingController();
   final _addressController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _roomspaceService = RoomspaceService();
-
+  
+  // Instance of our Logic Class
+  final _controller = CreateRoomController();
+  
   bool _isLoading = false;
-  String? _generatedRoomId;
 
-  Future<void> _createRoomspace() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+  // --- BUTTON ACTION ---
+  Future<void> _handleCreateButton() async {
+    // 1. Check if form is valid (no empty fields)
+    if (!_formKey.currentState!.validate()) return;
 
-      try {
-        // Call backend API to create roomspace
-        final response = await _roomspaceService.createRoomspace(
-          name: _roomNameController.text.trim(),
-          description: _descriptionController.text.trim().isEmpty
-              ? null
-              : _descriptionController.text.trim(),
-        );
+    // 2. Start Loading
+    setState(() => _isLoading = true);
 
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            // Get the invite_code from response
-            _generatedRoomId =
-                response['data']?['invite_code']?.toString() ?? 'N/A';
-          });
+    // 3. Call the Controller
+    final result = await _controller.createRoom(
+      name: _roomNameController.text,
+      address: _addressController.text,
+      description: _descriptionController.text,
+    );
 
-          // Show success dialog with invite code
-          _showSuccessDialog();
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
+    // 4. Safety Check (Is screen still visible?)
+    if (!mounted) return;
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to create roomspace: ${e.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
+    // 5. Stop Loading
+    setState(() => _isLoading = false);
+
+    // 6. Handle Success or Failure
+    if (result['success'] == true) {
+      _showSuccessDialog(result['inviteCode']);
+    } else {
+      _showErrorSnackBar(result['message']);
     }
   }
 
-  void _showSuccessDialog() {
-    final screenSize = MediaQuery.of(context).size;
+  // --- HELPER: Error Message ---
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  // --- HELPER: Success Dialog ---
+  void _showSuccessDialog(String inviteCode) {
+    final primaryColor = Theme.of(context).primaryColor;
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: screenSize.width * 0.9,
-            maxHeight: screenSize.height * 0.8,
-          ),
-          padding: EdgeInsets.all(24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Title section
-              SizedBox(
-                width: double.infinity,
-                child: Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 24,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Roomspace Created!',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
+              // Success Icon
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
                 ),
+                child: Icon(Icons.home_rounded, color: primaryColor, size: 32),
               ),
-
-              SizedBox(height: 20),
-
-              // Content section
-              SizedBox(
+              const SizedBox(height: 16),
+              
+              // Title
+              const Text(
+                'Room Created!',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              
+              // Instruction
+              Text(
+                'Share this code with your roommates to let them join.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 20),
+              
+              // Invite Code Box
+              Container(
                 width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Your roomspace has been created successfully.',
-                      style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-                    ),
-                    SizedBox(height: 20),
-
-                    // Invite Code container
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[300]!),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Invite Code:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey[600],
-                              fontSize: 14,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: SelectableText(
-                              _generatedRoomId!,
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.primary,
-                                letterSpacing: 2,
-                                fontFamily: 'monospace',
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ],
+                      'INVITE CODE',
+                      style: TextStyle(
+                        fontSize: 12, 
+                        fontWeight: FontWeight.bold, 
+                        color: Colors.grey[500]
                       ),
                     ),
-
-                    SizedBox(height: 16),
-
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: Colors.blue,
-                            size: 20,
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Share this invite code with your roommates so they can join!',
-                              style: TextStyle(
-                                color: Colors.blue.shade700,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      inviteCode,
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: primaryColor,
+                        letterSpacing: 2,
                       ),
                     ),
                   ],
                 ),
               ),
-
-              SizedBox(height: 24),
-
-              // Action button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    Navigator.pushReplacementNamed(context, '/home');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: Size(double.infinity, 50),
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'Continue to Home',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
+              const SizedBox(height: 24),
+              
+              // Go to Dashboard Button
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close dialog
+                  Navigator.pushReplacementNamed(context, '/home'); // Go home
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  minimumSize: const Size(double.infinity, 45),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
+                child: const Text('Go to Dashboard', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -229,287 +198,133 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
     );
   }
 
+  // ==========================================
+  // 3. WIDGET BUILDING (The Layout)
+  // ==========================================
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.grey[50],
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.grey[50],
-        appBar: AppBar(
-          title: Text('Create Roomspace'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          foregroundColor: Theme.of(context).colorScheme.primary,
-          systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: Brightness.dark,
-            statusBarBrightness: Brightness.light,
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Create Room", style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new),
+          onPressed: () => Navigator.of(context).pop(),
         ),
-        body: SizedBox(
-          width: double.infinity,
-          height: double.infinity,
-          child: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: screenSize.width * 0.05,
-                ),
-                child: Card(
-                  elevation: 8,
-                  shadowColor: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Container(
-                    constraints: BoxConstraints(
-                      maxWidth: screenSize.width > 600
-                          ? 400
-                          : screenSize.width * 0.9,
-                    ),
-                    padding: EdgeInsets.all(screenSize.width > 600 ? 32 : 24),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Header
-                          Container(
-                            padding: EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Icon(
-                              Icons.add_home_rounded,
-                              size: 40,
-                              color: Colors.white,
-                            ),
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'Create Your Roomspace',
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Set up your shared living space',
-                            style: Theme.of(context).textTheme.bodyLarge
-                                ?.copyWith(
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
-                          SizedBox(height: 24),
-
-                          // Room name field
-                          SizedBox(
-                            width: double.infinity,
-                            child: TextFormField(
-                              controller: _roomNameController,
-                              decoration: InputDecoration(
-                                labelText: 'Roomspace Name',
-                                hintText:
-                                    'e.g., Downtown Apartment, College Dorm',
-                                prefixIcon: Icon(
-                                  Icons.home_outlined,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey[50],
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 16,
-                                  horizontal: 12,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter a roomspace name';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          SizedBox(height: 16),
-
-                          // Address field
-                          SizedBox(
-                            width: double.infinity,
-                            child: TextFormField(
-                              controller: _addressController,
-                              decoration: InputDecoration(
-                                labelText: 'Address',
-                                hintText: 'Enter your address',
-                                prefixIcon: Icon(
-                                  Icons.location_on_outlined,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey[50],
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 16,
-                                  horizontal: 12,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter an address';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          SizedBox(height: 16),
-
-                          // Description field
-                          SizedBox(
-                            width: double.infinity,
-                            child: TextFormField(
-                              controller: _descriptionController,
-                              maxLines: 3,
-                              decoration: InputDecoration(
-                                labelText: 'Description (Optional)',
-                                hintText: 'Tell us about your roomspace...',
-                                prefixIcon: Padding(
-                                  padding: EdgeInsets.only(bottom: 40),
-                                  child: Icon(
-                                    Icons.description_outlined,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  ),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey[50],
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 16,
-                                  horizontal: 12,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 24),
-
-                          // Create button
-                          _isLoading
-                              ? SizedBox(
-                                  height: 50,
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                    ),
-                                  ),
-                                )
-                              : ElevatedButton(
-                                  onPressed: _createRoomspace,
-                                  style: ElevatedButton.styleFrom(
-                                    minimumSize: Size(double.infinity, 50),
-                                    backgroundColor: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    foregroundColor: Colors.white,
-                                    elevation: 2,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    'Create Roomspace',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                _buildFormFields(),   // Extracted for cleanliness
+                const SizedBox(height: 40),
+                _buildSubmitButton(), // Extracted for cleanliness
+              ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  // --- SMALLER WIDGET PIECES ---
+
+  Widget _buildFormFields() {
+    return Column(
+      children: [
+        _buildTextField(
+          controller: _roomNameController,
+          label: "Room Name",
+          hint: "e.g. Downtown Apartment",
+          icon: Icons.home_outlined,
+          validator: (v) => v == null || v.isEmpty ? "Name is required" : null,
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _addressController,
+          label: "Address",
+          hint: "e.g. 123 Main St",
+          icon: Icons.location_on_outlined,
+          validator: (v) => v == null || v.isEmpty ? "Address is required" : null,
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          controller: _descriptionController,
+          label: "Description (Optional)",
+          hint: "Any rules or notes...",
+          icon: Icons.description_outlined,
+          maxLines: 3,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _handleCreateButton,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Theme.of(context).primaryColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        child: _isLoading
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Text(
+                'Create Room',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+      ),
+    );
+  }
+
+  // Reusable Input Widget
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
+    final primaryColor = Theme.of(context).primaryColor;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey[800]),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          maxLines: maxLines,
+          validator: validator,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.grey[400]),
+            filled: true,
+            fillColor: Colors.grey[100],
+            // Only show icon on first line if multiline
+            prefixIcon: maxLines > 1 
+                ? Padding(padding: const EdgeInsets.only(bottom: 40), child: Icon(icon, color: Colors.grey))
+                : Icon(icon, color: Colors.grey),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: primaryColor, width: 1.5),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

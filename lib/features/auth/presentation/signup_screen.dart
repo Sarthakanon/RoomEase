@@ -172,20 +172,14 @@ class _SignupScreenState extends State<SignupScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. Logo and Header
+                  // 1. Logo Box
                   Center(
                     child: Container(
                       height: 70,
                       width: 70,
                       decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      child: Image.asset(
-                        'png/logo.png',
-                        fit: BoxFit.contain,
                         color: primaryColor,
+                        borderRadius: BorderRadius.circular(18),
                       ),
                     ),
                   ),

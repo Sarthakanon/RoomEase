@@ -82,7 +82,7 @@ class _MobileScaffoldState extends State<MobileScaffold> {
                       onTap: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Expenses Coming soon!'),
+                            content: Text('Expenses Banauna bakixa!'),
                           ),
                         );
                       },
