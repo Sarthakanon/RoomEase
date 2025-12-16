@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "949338416443-1274rdn8qrkrl0c2usru1jamnf5h1vhl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.room_ease",
+            "certificate_hash": "f75ad054bda74bde1f2661bdded73238c8f41376"
+          }
+        },
+        {
+          "client_id": "949338416443-bljrf0undk633j4j53nlvj824qh3gjmv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.room_ease",
+            "certificate_hash": "b9a360b2a9a6034d00993e668ed5b6ff50de219c"
+          }
+        },
+        {
           "client_id": "949338416443-a3b28845n1tg86fpmehckv6o97d22o5q.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +45,13 @@
             {
               "client_id": "949338416443-a3b28845n1tg86fpmehckv6o97d22o5q.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "949338416443-lv86qbku6obcvud51qnqprpct8hjsvm0.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.roomEase"
+              }
             }
           ]
         }
