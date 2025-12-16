@@ -30,13 +30,28 @@ class _MobileDashboardState extends State<MobileDashboard> {
 
   Future<void> _initializePaymentNotifications() async {
     try {
+      debugPrint('🚀 Starting payment notification initialization...');
       final paymentService = PaymentNotificationService.instance;
+      debugPrint('📱 Got payment service instance');
+      
       await paymentService.initialize();
+      debugPrint('✅ Payment service initialized');
+      
+      // Initialize background service
+      await paymentService.initializeBackgroundService();
+      debugPrint('🔧 Background service initialized');
+      
+      // Start background monitoring if enabled
+      await paymentService.startBackgroundMonitoring();
+      debugPrint('👂 Background monitoring started');
       
       // Set callback for when user wants to add expense from payment notification
       paymentService.onExpenseRequested = _showExpenseDialogFromPayment;
+      debugPrint('🎯 Expense callback set');
+      
+      debugPrint('🎉 Payment notification initialization complete!');
     } catch (e) {
-      debugPrint('Error initializing payment notifications: $e');
+      debugPrint('💥 Error initializing payment notifications: $e');
     }
   }
 
