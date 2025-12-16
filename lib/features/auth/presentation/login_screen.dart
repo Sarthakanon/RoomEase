@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../controllers/auth_controller.dart';
+import '../../../services/auth_state_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,9 +19,32 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _authController = AuthController();
   bool _obscurePassword = true;
+  bool _rememberMe = false;
 
   // ---------------------------------------------------
-  // Logic Functions (Functionality unchanged)
+  // Initialization
+  // ---------------------------------------------------
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedPreferences();
+  }
+
+  Future<void> _loadSavedPreferences() async {
+    final rememberMe = await AuthStateService.getRememberMe();
+    final savedEmail = await AuthStateService.getSavedEmail();
+    
+    setState(() {
+      _rememberMe = rememberMe;
+      if (rememberMe && savedEmail != null) {
+        _emailController.text = savedEmail;
+      }
+    });
+  }
+
+  // ---------------------------------------------------
+  // Logic Functions
   // ---------------------------------------------------
 
   Future<void> _signInWithGoogle() async {
@@ -28,6 +52,14 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final userCredential = await _authController.loginWithGoogle();
       if (userCredential != null && mounted) {
+        // Save login state if remember me is checked
+        if (_rememberMe) {
+          await AuthStateService.saveLoginState(
+            userCredential.user?.email ?? '',
+            _rememberMe,
+          );
+        }
+
         final roomspaces = await _authController.getUserRoomspaces(
           userCredential.user!.uid,
         );
@@ -64,6 +96,14 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (userCredential != null && mounted) {
+        // Save login state if remember me is checked
+        if (_rememberMe) {
+          await AuthStateService.saveLoginState(
+            _emailController.text.trim(),
+            _rememberMe,
+          );
+        }
+
         final roomspaces = await _authController.getUserRoomspaces(
           userCredential.user!.uid,
         );
@@ -188,14 +228,41 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. Logo Box
+                  // 1. Logo
                   Center(
                     child: Container(
-                      height: 70,
-                      width: 70,
+                      height: 80,
+                      width: 80,
                       decoration: BoxDecoration(
-                        color: primaryColor,
                         borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Image.asset(
+                          'png/main_logo.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Fallback to colored container if image fails to load
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: const Icon(
+                                Icons.home_rounded,
+                                color: Colors.white,
+                                size: 40,
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -314,29 +381,55 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
 
-                  // Forgot Password Link
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/forgot-password');
-                      },
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 0,
-                          vertical: 8,
-                        ),
-                        visualDensity: VisualDensity.compact,
+                  // Remember Me & Forgot Password Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Remember Me Checkbox
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _rememberMe,
+                            onChanged: (value) {
+                              setState(() {
+                                _rememberMe = value ?? false;
+                              });
+                            },
+                            activeColor: primaryColor,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          Text(
+                            'Remember me',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Text(
-                        'Forgot Password?',
-                        style: TextStyle(
-                          color: primaryColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                      // Forgot Password Link
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pushNamed(context, '/forgot-password');
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 0,
+                            vertical: 8,
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: Text(
+                          'Forgot Password?',
+                          style: TextStyle(
+                            color: primaryColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                   const SizedBox(height: 20),
 
