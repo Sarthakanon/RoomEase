@@ -74,12 +74,26 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.payment_outlined,
-            size: 64,
-            color: Colors.grey[400],
+          // Logo
+          Container(
+            height: 80,
+            width: 80,
+            margin: const EdgeInsets.only(bottom: 16),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.asset(
+                'png/main_logo.png',
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Icon(
+                    Icons.payment_outlined,
+                    size: 64,
+                    color: Colors.grey[400],
+                  );
+                },
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
           Text(
             'No Payment Notifications',
             style: TextStyle(
