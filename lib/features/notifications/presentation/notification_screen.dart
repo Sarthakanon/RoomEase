@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../services/api_service.dart';
+import '../../../services/payment_notification_service.dart';
+import '../../../models/payment_notification.dart';
+import '../../home/widgets/add_expense_dialog.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -13,6 +16,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   bool _isLoading = true;
   List<dynamic> _notifications = [];
   List<dynamic> _joinRequests = [];
+  List<PaymentNotification> _paymentNotifications = [];
 
   @override
   void initState() {
@@ -26,11 +30,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
       final results = await Future.wait([
         _apiService.getNotifications(),
         _apiService.getJoinRequests(),
+        PaymentNotificationService.instance.getNotificationHistory(),
       ]);
 
+      final notificationsResult = results[0] as Map<String, dynamic>;
+      final joinRequestsResult = results[1] as Map<String, dynamic>;
+      final paymentNotificationsResult = results[2] as List<PaymentNotification>;
+
       setState(() {
-        _notifications = results[0]['data'] ?? [];
-        _joinRequests = results[1]['data'] ?? [];
+        _notifications = notificationsResult['data'] ?? [];
+        _joinRequests = joinRequestsResult['data'] ?? [];
+        _paymentNotifications = paymentNotificationsResult;
         _isLoading = false;
       });
     } catch (e) {
@@ -126,16 +136,36 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Widget _buildContent(Color primaryColor) {
-    if (_joinRequests.isEmpty && _notifications.isEmpty) {
+    if (_joinRequests.isEmpty && _notifications.isEmpty && _paymentNotifications.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.notifications_none, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
+            // Logo
+            Container(
+              height: 80,
+              width: 80,
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset(
+                  'png/main_logo.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Icon(Icons.notifications_none, size: 64, color: Colors.grey[400]);
+                  },
+                ),
+              ),
+            ),
             Text(
               'No notifications',
               style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You\'ll see notifications here when they arrive',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -157,6 +187,21 @@ class _NotificationScreenState extends State<NotificationScreen> {
           const SizedBox(height: 12),
           ..._joinRequests.map(
             (req) => _buildJoinRequestCard(req, primaryColor),
+          ),
+          const SizedBox(height: 24),
+        ],
+        if (_paymentNotifications.isNotEmpty) ...[
+          Text(
+            'Payment Notifications',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 12),
+          ..._paymentNotifications.where((p) => !p.isProcessed).map(
+            (payment) => _buildPaymentNotificationCard(payment, primaryColor),
           ),
           const SizedBox(height: 24),
         ],
@@ -359,5 +404,215 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildPaymentNotificationCard(PaymentNotification payment, Color primaryColor) {
+    final amount = payment.amount?.toStringAsFixed(2) ?? 'Unknown';
+    final merchant = payment.merchant ?? 'Unknown merchant';
+    final timeAgo = _getTimeAgo(payment.timestamp);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.payment,
+                  color: Colors.green,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Payment Detected - Rs. $amount',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'Payment to $merchant via ${payment.appName}',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                    Text(
+                      timeAgo,
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _dismissPaymentNotification(payment),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey[600],
+                    side: BorderSide(color: Colors.grey[400]!),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Dismiss'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _addPaymentAsExpense(payment),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Add as Expense'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getTimeAgo(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
+    }
+  }
+
+  void _dismissPaymentNotification(PaymentNotification payment) {
+    // Mark as processed to hide from the list
+    setState(() {
+      _paymentNotifications = _paymentNotifications.map((p) {
+        if (p.id == payment.id) {
+          return PaymentNotification(
+            id: p.id,
+            source: p.source,
+            appName: p.appName,
+            rawText: p.rawText,
+            amount: p.amount,
+            merchant: p.merchant,
+            timestamp: p.timestamp,
+            type: p.type,
+            isProcessed: true,
+          );
+        }
+        return p;
+      }).toList();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Payment notification dismissed'),
+        backgroundColor: Colors.grey,
+      ),
+    );
+  }
+
+  void _addPaymentAsExpense(PaymentNotification payment) async {
+    try {
+      // Get roommates for the expense dialog
+      final roomspacesResponse = await _apiService.getRoomspaces();
+      final roomspaces = roomspacesResponse['data'] as List<dynamic>? ?? [];
+      
+      if (roomspaces.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Join a roomspace first to add expenses'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final members = roomspaces[0]['members'] as List<dynamic>? ?? [];
+      final roommates = members.map((m) {
+        final user = m['user'];
+        return RoommateItem(
+          id: m['firebase_uid'] ?? '',
+          name: user?['name'] ?? user?['email'] ?? 'Unknown',
+          email: user?['email'],
+        );
+      }).toList();
+
+      if (roommates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No roommates found to share expense with'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Show the add expense dialog with pre-filled payment data
+      AddExpenseDialog.show(
+        context,
+        roommates: roommates,
+        paymentNotification: payment,
+        onSubmit: (expense) {
+          // Mark payment as processed
+          _dismissPaymentNotification(payment);
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Added payment expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading roommates: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
