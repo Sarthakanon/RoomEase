@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/firebase_auth_service.dart';
 import '../../../services/firestore_service.dart';
 import '../../../services/api_service.dart';
+import '../../../services/auth_state_service.dart';
 import '../../../models/user_model.dart';
 
 class AuthController extends ChangeNotifier {
@@ -122,9 +123,22 @@ class AuthController extends ChangeNotifier {
       // Then sign out from Firebase
       await _authService.signOut();
 
+      // Clear login state
+      await AuthStateService.clearLoginState();
+
       setLoading(false);
     } catch (e) {
       setLoading(false);
+      rethrow;
+    }
+  }
+
+  /// Authenticate with backend using Firebase token
+  Future<void> authenticateWithBackend(String firebaseToken) async {
+    try {
+      await _apiService.login(firebaseToken);
+    } catch (e) {
+      // Re-throw to let caller handle the error
       rethrow;
     }
   }
