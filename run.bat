@@ -1,0 +1,6 @@
+@echo off
+echo Setting up ADB reverse for localhost:8080...
+adb reverse tcp:8080 tcp:8080
+echo.
+echo Starting Flutter app...
+flutter run
