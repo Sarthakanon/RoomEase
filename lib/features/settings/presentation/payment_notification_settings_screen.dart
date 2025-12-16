@@ -16,6 +16,7 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
   late PaymentNotificationSettings _settings;
   bool _isLoading = true;
   Map<String, bool> _permissions = {};
+  Map<String, dynamic> _stats = {};
 
   @override
   void initState() {
@@ -27,6 +28,7 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
     try {
       _settings = _service.settings;
       _permissions = await _service.checkPermissions();
+      _stats = await _service.getTransactionStats();
       setState(() {
         _isLoading = false;
       });
@@ -122,6 +124,8 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
           _buildMerchantSettings(),
           const SizedBox(height: 24),
           _buildTestSection(),
+          const SizedBox(height: 24),
+          _buildStatsSection(),
         ],
       ),
     );
@@ -155,7 +159,7 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
               child: ElevatedButton.icon(
                 onPressed: _testPaymentDetection,
                 icon: const Icon(Icons.play_arrow),
-                label: const Text('Test Detection'),
+                label: const Text('Test Notification Detection'),
               ),
             ),
             const SizedBox(height: 12),
@@ -277,7 +281,7 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
             const SizedBox(height: 12),
             _buildPermissionItem(
               'SMS Access',
-              'Optional - to read bank transaction SMS messages',
+              'Required to read bank transaction SMS messages',
               _permissions['sms'] ?? false,
             ),
             const SizedBox(height: 16),
@@ -346,7 +350,7 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
             ),
             SwitchListTile(
               title: const Text('SMS Messages'),
-              subtitle: const Text('Monitor SMS messages from banks'),
+              subtitle: const Text('Monitor SMS messages from banks and payment services'),
               value: _settings.smsMonitoringEnabled,
               onChanged: _settings.isEnabled ? (value) {
                 setState(() {
@@ -525,13 +529,13 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Paste your eSewa/bank SMS message here:'),
+            const Text('Paste your bank/eSewa SMS message here:'),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
               maxLines: 3,
               decoration: const InputDecoration(
-                hintText: 'e.g., Payment of Rs. 500 to Merchant successful via eSewa',
+                hintText: 'e.g., Dear Customer, Rs. 500.00 has been debited from your account for payment to ABC Store via eSewa.',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -552,13 +556,14 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
 
     if (result != null && result.isNotEmpty) {
       try {
-        // Test the SMS parsing with actual eSewa format
+        // Test the SMS parsing
         final testNotification = PaymentNotification(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           source: 'sms_test',
-          appName: 'eSewa',
+          appName: 'Test Bank',
           rawText: result,
           amount: _extractAmountFromText(result),
+          merchant: _extractMerchantFromText(result),
           timestamp: DateTime.now(),
           type: PaymentType.debit,
         );
@@ -609,4 +614,137 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
     }
     return null;
   }
+
+  String? _extractMerchantFromText(String text) {
+    // Simple merchant extraction for testing
+    final patterns = [
+      r'payment to (.+?)(?:\s|$|\.)',
+      r'to (.+?) via',
+      r'at (.+?)(?:\s|$|\.)',
+    ];
+
+    for (final pattern in patterns) {
+      final regex = RegExp(pattern, caseSensitive: false);
+      final match = regex.firstMatch(text);
+      
+      if (match != null) {
+        final merchant = match.group(1)?.trim();
+        if (merchant != null && merchant.length > 2) {
+          return merchant;
+        }
+      }
+    }
+    return null;
+  }
+
+  Widget _buildStatsSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.analytics, color: Theme.of(context).primaryColor),
+                const SizedBox(width: 12),
+                const Text(
+                  'Detection Statistics',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatItem(
+                    'Total Detected',
+                    '${_stats['total'] ?? 0}',
+                    Icons.receipt_long,
+                  ),
+                ),
+                Expanded(
+                  child: _buildStatItem(
+                    'Last 24 Hours',
+                    '${_stats['last24Hours'] ?? 0}',
+                    Icons.today,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatItem(
+                    'Last Week',
+                    '${_stats['lastWeek'] ?? 0}',
+                    Icons.date_range,
+                  ),
+                ),
+                Expanded(
+                  child: _buildStatItem(
+                    'SMS Detected',
+                    '${(_stats['bySource'] as Map<String, dynamic>?)?['sms'] ?? 0}',
+                    Icons.sms,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  await _service.clearTransactionHistory();
+                  await _loadSettings();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Transaction history cleared'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.clear_all),
+                label: const Text('Clear History'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Theme.of(context).primaryColor, size: 20),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
 }
