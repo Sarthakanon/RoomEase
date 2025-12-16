@@ -16,7 +16,7 @@ type Roomspace struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
-	Members     []RoomspaceMember `gorm:"foreignKey:RoomspaceID" json:"members,omitempty"`
+	Members     []RoomspaceMember `gorm:"foreignKey:RoomspaceID;constraint:-" json:"members,omitempty"`
 }
 
 // RoomspaceMember represents the many-to-many relationship between users and roomspaces
@@ -25,7 +25,7 @@ type RoomspaceMember struct {
 	RoomspaceID uint      `gorm:"not null" json:"roomspace_id"`
 	FirebaseUID string    `gorm:"not null" json:"firebase_uid"`
 	JoinedAt    time.Time `json:"joined_at"`
-	User        *User     `gorm:"foreignKey:FirebaseUID;references:FirebaseUID" json:"user,omitempty"`
+	User        *User     `gorm:"foreignKey:FirebaseUID;references:FirebaseUID;constraint:-" json:"user,omitempty"`
 }
 
 // CreateRoomspaceRequest represents the request to create a roomspace

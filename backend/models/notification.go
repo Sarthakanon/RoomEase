@@ -45,9 +45,9 @@ const (
 type JoinRequest struct {
 	ID          uint              `gorm:"primaryKey" json:"id"`
 	RoomspaceID uint              `gorm:"not null;index" json:"roomspace_id"`
-	Roomspace   *Roomspace        `gorm:"foreignKey:RoomspaceID" json:"roomspace,omitempty"`
+	Roomspace   *Roomspace        `gorm:"foreignKey:RoomspaceID;constraint:-" json:"roomspace,omitempty"`
 	RequesterUID string           `gorm:"not null;index" json:"requester_uid"` // Firebase UID
-	Requester   *User             `gorm:"foreignKey:RequesterUID;references:FirebaseUID" json:"requester,omitempty"`
+	Requester   *User             `gorm:"foreignKey:RequesterUID;references:FirebaseUID;constraint:-" json:"requester,omitempty"`
 	Status      JoinRequestStatus `gorm:"not null;default:PENDING" json:"status"`
 	ProcessedBy string            `json:"processed_by,omitempty"` // Firebase UID of who accepted/rejected
 	CreatedAt   time.Time         `json:"created_at"`

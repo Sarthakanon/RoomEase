@@ -364,12 +364,18 @@ func (s *PostgresService) GetRoomspaceMembers(roomspaceID uint) ([]models.Roomsp
 
 // AutoMigrate runs database migrations
 func (s *PostgresService) AutoMigrate() error {
+	// Migrate in correct order: independent tables first, then dependent tables
+	// Users and Roomspaces have no dependencies
+	// RoomspaceMember depends on both User and Roomspace
+	// JoinRequest depends on User and Roomspace
+	// Notification depends on User
+	
 	err := config.DB.AutoMigrate(
-		&models.User{},
-		&models.Roomspace{},
-		&models.RoomspaceMember{},
-		&models.Notification{},
-		&models.JoinRequest{},
+		&models.User{},           // No dependencies
+		&models.Notification{},   // Depends on User (by UID string, no FK)
+		&models.Roomspace{},      // No dependencies (Members loaded via separate query)
+		&models.RoomspaceMember{}, // Depends on User and Roomspace
+		&models.JoinRequest{},    // Depends on User and Roomspace
 	)
 	if err != nil {
 		return err
