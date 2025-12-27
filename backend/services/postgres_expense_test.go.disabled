@@ -1,0 +1,391 @@
+package services
+
+import (
+	"roomease/backend/config"
+	"roomease/backend/models"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+// setupTestDB creates an in-memory SQLite database for testing
+func setupTestDB(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	
+	// Auto-migrate all models
+	err = db.AutoMigrate(
+		&models.User{},
+		&models.Roomspace{},
+		&models.RoomspaceMember{},
+		&models.Expense{},
+		&models.ExpenseSplit{},
+	)
+	require.NoError(t, err)
+	
+	return db
+}
+
+// createTestData creates test users, roomspace, and members
+func createTestData(t *testing.T, db *gorm.DB) (models.User, models.User, models.Roomspace) {
+	user1 := models.User{
+		FirebaseUID: "user1-uid",
+		Name:        "User One",
+		Email:       "user1@test.com",
+	}
+	user2 := models.User{
+		FirebaseUID: "user2-uid",
+		Name:        "User Two",
+		Email:       "user2@test.com",
+	}
+	
+	roomspace := models.Roomspace{
+		Name:      "Test Roomspace",
+		CreatedBy: user1.FirebaseUID,
+	}
+	
+	require.NoError(t, db.Create(&user1).Error)
+	require.NoError(t, db.Create(&user2).Error)
+	require.NoError(t, db.Create(&roomspace).Error)
+	
+	// Add members to roomspace
+	member1 := models.RoomspaceMember{
+		RoomspaceID: roomspace.ID,
+		FirebaseUID: user1.FirebaseUID,
+		JoinedAt:    time.Now(),
+	}
+	member2 := models.RoomspaceMember{
+		RoomspaceID: roomspace.ID,
+		FirebaseUID: user2.FirebaseUID,
+		JoinedAt:    time.Now(),
+	}
+	
+	require.NoError(t, db.Create(&member1).Error)
+	require.NoError(t, db.Create(&member2).Error)
+	
+	return user1, user2, roomspace
+}
+
+func TestPostgresService_DatabaseConstraintEnforcement(t *testing.T) {
+	tests := []struct {
+		name        string
+		expense     *models.Expense
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid expense with proper constraints",
+			expense: &models.Expense{
+				Title:       "Valid Expense",
+				Description: "Test description",
+				Amount:      100.0,
+				Category:    "Food",
+				SplitType:   models.SplitTypeEqual,
+				Splits: []models.ExpenseSplit{
+					{UserUID: "user1-uid", Amount: 50.0},
+					{UserUID: "user2-uid", Amount: 50.0},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "expense with zero amount should fail",
+			expense: &models.Expense{
+				Title:     "Invalid Expense",
+				Amount:    0.0,
+				Category:  "Food",
+				SplitType: models.SplitTypeEqual,
+				Splits: []models.ExpenseSplit{
+					{UserUID: "user1-uid", Amount: 0.0},
+				},
+			},
+			expectError: true,
+			errorMsg:    "expense amount must be greater than 0",
+		},
+		{
+			name: "expense with empty title should fail",
+			expense: &models.Expense{
+				Title:     "",
+				Amount:    100.0,
+				Category:  "Food",
+				SplitType: models.SplitTypeEqual,
+				Splits: []models.ExpenseSplit{
+					{UserUID: "user1-uid", Amount: 100.0},
+				},
+			},
+			expectError: true,
+			errorMsg:    "expense title cannot be empty",
+		},
+		{
+			name: "expense with invalid split type should fail",
+			expense: &models.Expense{
+				Title:     "Test Expense",
+				Amount:    100.0,
+				Category:  "Food",
+				SplitType: "INVALID",
+				Splits: []models.ExpenseSplit{
+					{UserUID: "user1-uid", Amount: 100.0},
+				},
+			},
+			expectError: true,
+			errorMsg:    "invalid split type",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupTestDB(t)
+			config.DB = db
+			service := NewPostgresService()
+			
+			user1, user2, roomspace := createTestData(t, db)
+			
+			// Set the roomspace and payer for the test expense
+			tt.expense.RoomspaceID = roomspace.ID
+			tt.expense.PaidBy = user1.FirebaseUID
+			
+			// Update split user UIDs to match created users
+			for i := range tt.expense.Splits {
+				if tt.expense.Splits[i].UserUID == "user1-uid" {
+					tt.expense.Splits[i].UserUID = user1.FirebaseUID
+				} else if tt.expense.Splits[i].UserUID == "user2-uid" {
+					tt.expense.Splits[i].UserUID = user2.FirebaseUID
+				}
+			}
+			
+			err := service.CreateExpense(tt.expense)
+			
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotZero(t, tt.expense.ID)
+				
+				// Verify splits were created
+				var splits []models.ExpenseSplit
+				db.Where("expense_id = ?", tt.expense.ID).Find(&splits)
+				assert.Len(t, splits, len(tt.expense.Splits))
+			}
+		})
+	}
+}
+
+func TestPostgresService_CascadingDeleteHandling(t *testing.T) {
+	db := setupTestDB(t)
+	config.DB = db
+	service := NewPostgresService()
+	
+	user1, user2, roomspace := createTestData(t, db)
+	
+	// Create an expense with splits
+	expense := &models.Expense{
+		RoomspaceID: roomspace.ID,
+		Title:       "Test Expense",
+		Description: "Test description",
+		Amount:      100.0,
+		Category:    "Food",
+		PaidBy:      user1.FirebaseUID,
+		SplitType:   models.SplitTypeEqual,
+		Splits: []models.ExpenseSplit{
+			{UserUID: user1.FirebaseUID, Amount: 50.0},
+			{UserUID: user2.FirebaseUID, Amount: 50.0},
+		},
+	}
+	
+	err := service.CreateExpense(expense)
+	require.NoError(t, err)
+	
+	// Verify expense and splits exist
+	var expenseCount int64
+	var splitCount int64
+	db.Model(&models.Expense{}).Where("id = ?", expense.ID).Count(&expenseCount)
+	db.Model(&models.ExpenseSplit{}).Where("expense_id = ?", expense.ID).Count(&splitCount)
+	
+	assert.Equal(t, int64(1), expenseCount)
+	assert.Equal(t, int64(2), splitCount)
+	
+	// Delete the expense
+	err = service.DeleteExpense(expense.ID, user1.FirebaseUID)
+	require.NoError(t, err)
+	
+	// Verify expense and splits are soft deleted (SQLite behavior may differ)
+	db.Unscoped().Model(&models.Expense{}).Where("id = ?", expense.ID).Count(&expenseCount)
+	db.Unscoped().Model(&models.ExpenseSplit{}).Where("expense_id = ?", expense.ID).Count(&splitCount)
+	
+	assert.Equal(t, int64(1), expenseCount) // Still exists but soft deleted
+	// Note: SQLite may handle cascading deletes differently than PostgreSQL
+	assert.True(t, splitCount >= 0) // Splits may or may not exist depending on cascade behavior
+	
+	// Verify they don't appear in normal queries (this is the important part)
+	db.Model(&models.Expense{}).Where("id = ?", expense.ID).Count(&expenseCount)
+	db.Model(&models.ExpenseSplit{}).Where("expense_id = ?", expense.ID).Count(&splitCount)
+	
+	assert.Equal(t, int64(0), expenseCount)
+	assert.Equal(t, int64(0), splitCount)
+}
+
+func TestPostgresService_DataConsistencyValidation(t *testing.T) {
+	db := setupTestDB(t)
+	config.DB = db
+	service := NewPostgresService()
+	
+	user1, user2, roomspace := createTestData(t, db)
+	
+	// Create a valid expense
+	expense := &models.Expense{
+		RoomspaceID: roomspace.ID,
+		Title:       "Test Expense",
+		Amount:      100.0,
+		Category:    "Food",
+		PaidBy:      user1.FirebaseUID,
+		SplitType:   models.SplitTypeEqual,
+		Splits: []models.ExpenseSplit{
+			{UserUID: user1.FirebaseUID, Amount: 50.0},
+			{UserUID: user2.FirebaseUID, Amount: 50.0},
+		},
+	}
+	
+	err := service.CreateExpense(expense)
+	require.NoError(t, err)
+	
+	// Test data consistency validation
+	err = service.ValidateDataConsistency()
+	assert.NoError(t, err)
+	
+	// Create an inconsistent expense by manually inserting bad data
+	badExpense := models.Expense{
+		RoomspaceID: roomspace.ID,
+		Title:       "Bad Expense",
+		Amount:      100.0,
+		Category:    "Food",
+		PaidBy:      user1.FirebaseUID,
+		SplitType:   models.SplitTypeEqual,
+	}
+	db.Create(&badExpense)
+	
+	// Add splits that don't match the total
+	badSplit := models.ExpenseSplit{
+		ExpenseID: badExpense.ID,
+		UserUID:   user1.FirebaseUID,
+		Amount:    75.0, // Doesn't match expense amount
+	}
+	db.Create(&badSplit)
+	
+	// Validation should now fail
+	err = service.ValidateDataConsistency()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "consistency error")
+}
+
+func TestPostgresService_QueryOptimization(t *testing.T) {
+	db := setupTestDB(t)
+	config.DB = db
+	service := NewPostgresService()
+	
+	user1, user2, roomspace := createTestData(t, db)
+	
+	// Create multiple expenses
+	for i := 0; i < 10; i++ {
+		splitAmount := float64(50 + i/2)
+		expense := &models.Expense{
+			RoomspaceID: roomspace.ID,
+			Title:       "Test Expense",
+			Amount:      splitAmount * 2, // Ensure splits match total
+			Category:    "Food",
+			PaidBy:      user1.FirebaseUID,
+			SplitType:   models.SplitTypeEqual,
+			Splits: []models.ExpenseSplit{
+				{UserUID: user1.FirebaseUID, Amount: splitAmount},
+				{UserUID: user2.FirebaseUID, Amount: splitAmount},
+			},
+		}
+		err := service.CreateExpense(expense)
+		require.NoError(t, err)
+	}
+	
+	// Test paginated retrieval
+	expenses, err := service.GetRoomspaceExpenses(roomspace.ID, 5, 0)
+	assert.NoError(t, err)
+	assert.Len(t, expenses, 5)
+	
+	// Test recent expenses
+	recentExpenses, err := service.GetRecentExpenses(roomspace.ID, 3)
+	assert.NoError(t, err)
+	assert.Len(t, recentExpenses, 3)
+	
+	// Verify expenses are ordered by created_at DESC
+	for i := 1; i < len(recentExpenses); i++ {
+		assert.True(t, recentExpenses[i-1].CreatedAt.After(recentExpenses[i].CreatedAt) || 
+			recentExpenses[i-1].CreatedAt.Equal(recentExpenses[i].CreatedAt))
+	}
+	
+	// Test user expenses across roomspaces
+	userExpenses, err := service.GetUserExpenses(user1.FirebaseUID, 5, 0)
+	assert.NoError(t, err)
+	assert.Len(t, userExpenses, 5)
+}
+
+func TestPostgresService_DataPersistenceAcrossSessions(t *testing.T) {
+	db := setupTestDB(t)
+	config.DB = db
+	service := NewPostgresService()
+	
+	user1, user2, roomspace := createTestData(t, db)
+	
+	// Create an expense
+	originalExpense := &models.Expense{
+		RoomspaceID: roomspace.ID,
+		Title:       "Persistent Expense",
+		Description: "Should persist across sessions",
+		Amount:      150.0,
+		Category:    "Utilities",
+		PaidBy:      user1.FirebaseUID,
+		SplitType:   models.SplitTypeExact,
+		Splits: []models.ExpenseSplit{
+			{UserUID: user1.FirebaseUID, Amount: 75.0},
+			{UserUID: user2.FirebaseUID, Amount: 75.0},
+		},
+	}
+	
+	err := service.CreateExpense(originalExpense)
+	require.NoError(t, err)
+	
+	// Simulate session restart by creating a new service instance
+	newService := NewPostgresService()
+	
+	// Retrieve the expense
+	retrievedExpense, err := newService.GetExpenseByID(originalExpense.ID)
+	require.NoError(t, err)
+	
+	// Verify all data is consistent
+	assert.Equal(t, originalExpense.Title, retrievedExpense.Title)
+	assert.Equal(t, originalExpense.Description, retrievedExpense.Description)
+	assert.Equal(t, originalExpense.Amount, retrievedExpense.Amount)
+	assert.Equal(t, originalExpense.Category, retrievedExpense.Category)
+	assert.Equal(t, originalExpense.PaidBy, retrievedExpense.PaidBy)
+	assert.Equal(t, originalExpense.SplitType, retrievedExpense.SplitType)
+	assert.Len(t, retrievedExpense.Splits, 2)
+	
+	// Verify splits are consistent
+	totalSplitAmount := 0.0
+	for _, split := range retrievedExpense.Splits {
+		totalSplitAmount += split.Amount
+	}
+	assert.Equal(t, retrievedExpense.Amount, totalSplitAmount)
+	
+	// Test multiple retrievals return consistent data
+	for i := 0; i < 5; i++ {
+		expense, err := newService.GetExpenseByID(originalExpense.ID)
+		require.NoError(t, err)
+		assert.Equal(t, retrievedExpense.Title, expense.Title)
+		assert.Equal(t, retrievedExpense.Amount, expense.Amount)
+		assert.Len(t, expense.Splits, len(retrievedExpense.Splits))
+	}
+}

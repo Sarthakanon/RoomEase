@@ -1,0 +1,105 @@
+package services
+
+import (
+	"roomease/backend/config"
+	"roomease/backend/models"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+func TestPostgresService_AutoMigrate(t *testing.T) {
+	// Create a fresh database
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	
+	config.DB = db
+	service := NewPostgresService()
+	
+	// Test auto migration
+	err = service.AutoMigrate()
+	assert.NoError(t, err)
+	
+	// Verify tables were created
+	assert.True(t, db.Migrator().HasTable("users"))
+	assert.True(t, db.Migrator().HasTable("roomspaces"))
+	assert.True(t, db.Migrator().HasTable("roomspace_members"))
+	assert.True(t, db.Migrator().HasTable("expenses"))
+	assert.True(t, db.Migrator().HasTable("expense_splits"))
+	assert.True(t, db.Migrator().HasTable("notifications"))
+	assert.True(t, db.Migrator().HasTable("join_requests"))
+	
+	// Verify columns exist on expense table
+	assert.True(t, db.Migrator().HasColumn("expenses", "id"))
+	assert.True(t, db.Migrator().HasColumn("expenses", "roomspace_id"))
+	assert.True(t, db.Migrator().HasColumn("expenses", "title"))
+	assert.True(t, db.Migrator().HasColumn("expenses", "amount"))
+	assert.True(t, db.Migrator().HasColumn("expenses", "category"))
+	assert.True(t, db.Migrator().HasColumn("expenses", "paid_by"))
+	assert.True(t, db.Migrator().HasColumn("expenses", "split_type"))
+	assert.True(t, db.Migrator().HasColumn("expenses", "created_at"))
+	assert.True(t, db.Migrator().HasColumn("expenses", "updated_at"))
+	assert.True(t, db.Migrator().HasColumn("expenses", "deleted_at"))
+	
+	// Verify columns exist on expense_splits table
+	assert.True(t, db.Migrator().HasColumn("expense_splits", "id"))
+	assert.True(t, db.Migrator().HasColumn("expense_splits", "expense_id"))
+	assert.True(t, db.Migrator().HasColumn("expense_splits", "user_uid"))
+	assert.True(t, db.Migrator().HasColumn("expense_splits", "amount"))
+	assert.True(t, db.Migrator().HasColumn("expense_splits", "percentage"))
+	assert.True(t, db.Migrator().HasColumn("expense_splits", "created_at"))
+}
+
+func TestPostgresService_DataRepair(t *testing.T) {
+	db := setupTestDB(t)
+	config.DB = db
+	service := NewPostgresService()
+	
+	user1, user2, roomspace := createTestData(t, db)
+	
+	// Create a valid expense first
+	expense := &models.Expense{
+		RoomspaceID: roomspace.ID,
+		Title:       "Valid Expense",
+		Amount:      100.0,
+		Category:    "Food",
+		PaidBy:      user1.FirebaseUID,
+		SplitType:   models.SplitTypeEqual,
+		Splits: []models.ExpenseSplit{
+			{UserUID: user1.FirebaseUID, Amount: 50.0},
+			{UserUID: user2.FirebaseUID, Amount: 50.0},
+		},
+	}
+	
+	err := service.CreateExpense(expense)
+	require.NoError(t, err)
+	
+	// Manually create orphaned split (simulate data corruption)
+	orphanedSplit := models.ExpenseSplit{
+		ExpenseID: 999, // Non-existent expense ID
+		UserUID:   user1.FirebaseUID,
+		Amount:    25.0,
+	}
+	db.Create(&orphanedSplit)
+	
+	// Validation should fail due to orphaned split
+	err = service.ValidateDataConsistency()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "orphaned expense splits")
+	
+	// Repair the data
+	err = service.RepairDataInconsistencies()
+	assert.NoError(t, err)
+	
+	// Validation should now pass
+	err = service.ValidateDataConsistency()
+	assert.NoError(t, err)
+	
+	// Verify orphaned split was removed
+	var splitCount int64
+	db.Model(&models.ExpenseSplit{}).Where("expense_id = ?", 999).Count(&splitCount)
+	assert.Equal(t, int64(0), splitCount)
+}

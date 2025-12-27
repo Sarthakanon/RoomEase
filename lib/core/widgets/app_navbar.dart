@@ -26,7 +26,7 @@ class AppNavbar extends StatelessWidget implements PreferredSizeWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -117,21 +117,21 @@ class AppNavbar extends StatelessWidget implements PreferredSizeWidget {
           label: 'Dashboard',
           icon: Icons.dashboard_rounded,
           onTap: () {
-            // Navigate to dashboard
+            Navigator.pushNamed(context, '/home');
           },
         ),
         _NavItem(
           label: 'Roomspaces',
           icon: Icons.meeting_room_rounded,
           onTap: () {
-            // Navigate to roomspaces
+            Navigator.pushNamed(context, '/roomspace');
           },
         ),
         _NavItem(
           label: 'Expenses',
           icon: Icons.receipt_long_rounded,
           onTap: () {
-            // Navigate to expenses
+            Navigator.pushNamed(context, '/expenses');
           },
         ),
       ],
@@ -227,7 +227,7 @@ class AppNavbar extends StatelessWidget implements PreferredSizeWidget {
       onSelected: (value) {
         switch (value) {
           case 'profile':
-            // Navigate to profile
+            Navigator.pushNamed(context, '/profile');
             break;
           case 'settings':
             Navigator.pushNamed(context, '/settings');

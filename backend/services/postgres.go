@@ -3,6 +3,7 @@ package services
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"math/big"
 	"roomease/backend/config"
 	"roomease/backend/models"
@@ -82,9 +83,9 @@ func (s *PostgresService) UpdateUser(firebaseUID string, update *models.UpdateUs
 // Roomspace Operations
 
 // GetRoomspaceByID retrieves a roomspace by ID
-func (s *PostgresService) GetRoomspaceByID(id uint) (*models.Roomspace, error) {
+func (s *PostgresService) GetRoomspaceByID(id string) (*models.Roomspace, error) {
 	var roomspace models.Roomspace
-	result := config.DB.Preload("Members").Preload("Members.User").First(&roomspace, id)
+	result := config.DB.Preload("Members").Preload("Members.User").Where("id = ?", id).First(&roomspace)
 	
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
@@ -121,7 +122,8 @@ func (s *PostgresService) CreateRoomspace(roomspace *models.Roomspace) error {
 		// Add creator as a member
 		member := models.RoomspaceMember{
 			RoomspaceID: roomspace.ID,
-			FirebaseUID: roomspace.CreatedBy,
+			UserID:      *roomspace.CreatorID,
+			Role:        models.RoleCreator,
 			JoinedAt:    time.Now(),
 		}
 		
@@ -139,7 +141,7 @@ func (s *PostgresService) GetUserRoomspaces(firebaseUID string) ([]models.Roomsp
 	
 	result := config.DB.
 		Joins("JOIN roomspace_members ON roomspace_members.roomspace_id = roomspaces.id").
-		Where("roomspace_members.firebase_uid = ?", firebaseUID).
+		Where("roomspace_members.user_id = ?", firebaseUID).
 		Preload("Members", func(db *gorm.DB) *gorm.DB {
 			return db.Preload("User")
 		}).
@@ -168,10 +170,10 @@ func (s *PostgresService) GetRoomspaceByInviteCode(inviteCode string) (*models.R
 }
 
 // RemoveMemberFromRoomspace removes a user from a roomspace (only creator can do this)
-func (s *PostgresService) RemoveMemberFromRoomspace(roomspaceID uint, memberFirebaseUID string, requestorFirebaseUID string) error {
+func (s *PostgresService) RemoveMemberFromRoomspace(roomspaceID string, memberFirebaseUID string, requestorFirebaseUID string) error {
 	// Check if roomspace exists and get creator
 	var roomspace models.Roomspace
-	if err := config.DB.First(&roomspace, roomspaceID).Error; err != nil {
+	if err := config.DB.Where("id = ?", roomspaceID).First(&roomspace).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("roomspace not found")
 		}
@@ -179,17 +181,17 @@ func (s *PostgresService) RemoveMemberFromRoomspace(roomspaceID uint, memberFire
 	}
 
 	// Only creator can remove members
-	if roomspace.CreatedBy != requestorFirebaseUID {
+	if roomspace.CreatorID == nil || *roomspace.CreatorID != requestorFirebaseUID {
 		return errors.New("only the creator can remove members")
 	}
 
 	// Cannot remove the creator
-	if memberFirebaseUID == roomspace.CreatedBy {
+	if memberFirebaseUID == *roomspace.CreatorID {
 		return errors.New("creator cannot be removed from the roomspace")
 	}
 
 	// Remove the member
-	result := config.DB.Where("roomspace_id = ? AND firebase_uid = ?", roomspaceID, memberFirebaseUID).
+	result := config.DB.Where("roomspace_id = ? AND user_id = ?", roomspaceID, memberFirebaseUID).
 		Delete(&models.RoomspaceMember{})
 
 	if result.Error != nil {
@@ -204,10 +206,10 @@ func (s *PostgresService) RemoveMemberFromRoomspace(roomspaceID uint, memberFire
 }
 
 // AddMemberToRoomspace adds a user to a roomspace
-func (s *PostgresService) AddMemberToRoomspace(roomspaceID uint, firebaseUID string) error {
+func (s *PostgresService) AddMemberToRoomspace(roomspaceID string, firebaseUID string) error {
 	// Check if roomspace exists
 	var roomspace models.Roomspace
-	if err := config.DB.First(&roomspace, roomspaceID).Error; err != nil {
+	if err := config.DB.Where("id = ?", roomspaceID).First(&roomspace).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("roomspace not found")
 		}
@@ -216,7 +218,7 @@ func (s *PostgresService) AddMemberToRoomspace(roomspaceID uint, firebaseUID str
 	
 	// Check if user is already a member
 	var existingMember models.RoomspaceMember
-	result := config.DB.Where("roomspace_id = ? AND firebase_uid = ?", roomspaceID, firebaseUID).
+	result := config.DB.Where("roomspace_id = ? AND user_id = ?", roomspaceID, firebaseUID).
 		First(&existingMember)
 	
 	if result.Error == nil {
@@ -225,9 +227,11 @@ func (s *PostgresService) AddMemberToRoomspace(roomspaceID uint, firebaseUID str
 	
 	// Add new member
 	member := models.RoomspaceMember{
-		RoomspaceID: roomspaceID,
-		FirebaseUID: firebaseUID,
+		RoomspaceID: roomspace.ID,
+		UserID:      firebaseUID,
+		Role:        models.RoleMember,
 		JoinedAt:    time.Now(),
+		IsActive:    true,
 	}
 	
 	return config.DB.Create(&member).Error
@@ -236,98 +240,119 @@ func (s *PostgresService) AddMemberToRoomspace(roomspaceID uint, firebaseUID str
 // Join Request Operations
 
 // CreateJoinRequest creates a new join request
-func (s *PostgresService) CreateJoinRequest(roomspaceID uint, requesterUID string) (*models.JoinRequest, error) {
+func (s *PostgresService) CreateJoinRequest(roomspaceID string, requesterUID string, message string) (*models.JoinRequest, error) {
 	// Check if roomspace exists
 	var roomspace models.Roomspace
-	if err := config.DB.First(&roomspace, roomspaceID).Error; err != nil {
-		return nil, errors.New("roomspace not found")
-	}
-
-	// Check if user is already a member
-	var existingMember models.RoomspaceMember
-	if err := config.DB.Where("roomspace_id = ? AND firebase_uid = ?", roomspaceID, requesterUID).First(&existingMember).Error; err == nil {
-		return nil, errors.New("you are already a member of this roomspace")
-	}
-
-	// Check if there's already a pending request
-	var existingRequest models.JoinRequest
-	if err := config.DB.Where("roomspace_id = ? AND requester_uid = ? AND status = ?", roomspaceID, requesterUID, models.JoinRequestStatusPending).First(&existingRequest).Error; err == nil {
-		return nil, errors.New("you already have a pending join request")
-	}
-
-	request := &models.JoinRequest{
-		RoomspaceID:  roomspaceID,
-		RequesterUID: requesterUID,
-		Status:       models.JoinRequestStatusPending,
-	}
-
-	if err := config.DB.Create(request).Error; err != nil {
+	if err := config.DB.Where("id = ?", roomspaceID).First(&roomspace).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("roomspace not found")
+		}
 		return nil, err
 	}
-
-	return request, nil
+	
+	// Check if user is already a member
+	var existingMember models.RoomspaceMember
+	result := config.DB.Where("roomspace_id = ? AND user_id = ?", roomspaceID, requesterUID).
+		First(&existingMember)
+	
+	if result.Error == nil {
+		return nil, errors.New("user is already a member")
+	}
+	
+	// Check if there's already a pending request
+	var existingRequest models.JoinRequest
+	result = config.DB.Where("roomspace_id = ? AND requester_id = ? AND status = ?", 
+		roomspaceID, requesterUID, models.StatusPending).First(&existingRequest)
+	
+	if result.Error == nil {
+		return nil, errors.New("user already has a pending join request")
+	}
+	
+	// Create new join request
+	joinRequest := models.JoinRequest{
+		RoomspaceID: roomspace.ID,
+		RequesterID: requesterUID,
+		Status:      models.StatusPending,
+		RequestedAt: time.Now(),
+		ExpiresAt:   time.Now().Add(7 * 24 * time.Hour), // 7 days
+	}
+	
+	if message != "" {
+		joinRequest.Message = &message
+	}
+	
+	if err := config.DB.Create(&joinRequest).Error; err != nil {
+		return nil, err
+	}
+	
+	return &joinRequest, nil
 }
 
 // GetPendingJoinRequest gets a user's pending join request
 func (s *PostgresService) GetPendingJoinRequest(requesterUID string) (*models.JoinRequest, error) {
 	var request models.JoinRequest
-	err := config.DB.Preload("Roomspace").Where("requester_uid = ? AND status = ?", requesterUID, models.JoinRequestStatusPending).First(&request).Error
-	if err != nil {
-		return nil, err
+	result := config.DB.Preload("Roomspace").
+		Where("requester_id = ? AND status = ?", requesterUID, models.StatusPending).
+		First(&request)
+	
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, errors.New("no pending join request found")
+		}
+		return nil, result.Error
 	}
-	return &request, nil
-}
-
-// GetJoinRequestByID gets a join request by ID
-func (s *PostgresService) GetJoinRequestByID(id uint) (*models.JoinRequest, error) {
-	var request models.JoinRequest
-	err := config.DB.Preload("Roomspace").Preload("Requester").First(&request, id).Error
-	if err != nil {
-		return nil, err
-	}
+	
 	return &request, nil
 }
 
 // GetJoinRequestsForRoomspace gets all pending join requests for a roomspace
-func (s *PostgresService) GetJoinRequestsForRoomspace(roomspaceID uint) ([]models.JoinRequest, error) {
+func (s *PostgresService) GetJoinRequestsForRoomspace(roomspaceID string) ([]models.JoinRequest, error) {
 	var requests []models.JoinRequest
-	err := config.DB.Preload("Requester").Where("roomspace_id = ? AND status = ?", roomspaceID, models.JoinRequestStatusPending).Find(&requests).Error
+	err := config.DB.Preload("Requester").Where("roomspace_id = ? AND status = ?", roomspaceID, models.StatusPending).Find(&requests).Error
 	return requests, err
 }
 
 // ProcessJoinRequest accepts or rejects a join request
-func (s *PostgresService) ProcessJoinRequest(requestID uint, processedByUID string, accept bool) error {
+func (s *PostgresService) ProcessJoinRequest(requestID string, processedByUID string, accept bool, reason string) error {
 	var request models.JoinRequest
-	if err := config.DB.First(&request, requestID).Error; err != nil {
+	if err := config.DB.Where("id = ?", requestID).First(&request).Error; err != nil {
 		return errors.New("join request not found")
 	}
 
-	if request.Status != models.JoinRequestStatusPending {
+	if request.Status != models.StatusPending {
 		return errors.New("this request has already been processed")
 	}
 
 	// Verify processor is a member of the roomspace
 	var member models.RoomspaceMember
-	if err := config.DB.Where("roomspace_id = ? AND firebase_uid = ?", request.RoomspaceID, processedByUID).First(&member).Error; err != nil {
+	if err := config.DB.Where("roomspace_id = ? AND user_id = ?", request.RoomspaceID, processedByUID).First(&member).Error; err != nil {
 		return errors.New("you are not a member of this roomspace")
 	}
 
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		if accept {
-			request.Status = models.JoinRequestStatusAccepted
+			request.Status = models.StatusApproved
 			// Add user as member
 			newMember := models.RoomspaceMember{
 				RoomspaceID: request.RoomspaceID,
-				FirebaseUID: request.RequesterUID,
+				UserID:      request.RequesterID,
+				Role:        models.RoleMember,
 				JoinedAt:    time.Now(),
+				InvitedBy:   &processedByUID,
+				IsActive:    true,
 			}
 			if err := tx.Create(&newMember).Error; err != nil {
 				return err
 			}
 		} else {
-			request.Status = models.JoinRequestStatusRejected
+			request.Status = models.StatusRejected
+			if reason != "" {
+				request.RejectionReason = &reason
+			}
 		}
-		request.ProcessedBy = processedByUID
+		request.ProcessedBy = &processedByUID
+		now := time.Now()
+		request.ProcessedAt = &now
 		return tx.Save(&request).Error
 	})
 }
@@ -356,7 +381,7 @@ func (s *PostgresService) MarkNotificationAsRead(notificationID uint, userUID st
 }
 
 // GetRoomspaceMembers gets all members of a roomspace
-func (s *PostgresService) GetRoomspaceMembers(roomspaceID uint) ([]models.RoomspaceMember, error) {
+func (s *PostgresService) GetRoomspaceMembers(roomspaceID string) ([]models.RoomspaceMember, error) {
 	var members []models.RoomspaceMember
 	err := config.DB.Preload("User").Where("roomspace_id = ?", roomspaceID).Find(&members).Error
 	return members, err
@@ -376,6 +401,8 @@ func (s *PostgresService) AutoMigrate() error {
 		&models.Roomspace{},      // No dependencies (Members loaded via separate query)
 		&models.RoomspaceMember{}, // Depends on User and Roomspace
 		&models.JoinRequest{},    // Depends on User and Roomspace
+		&models.Expense{},        // Depends on Roomspace and User
+		&models.ExpenseSplit{},   // Depends on Expense and User
 	)
 	if err != nil {
 		return err
@@ -397,5 +424,212 @@ func (s *PostgresService) AutoMigrate() error {
 		}
 	}
 
+	return nil
+}
+// GetJoinRequestByID gets a join request by ID
+func (s *PostgresService) GetJoinRequestByID(id string) (*models.JoinRequest, error) {
+	var request models.JoinRequest
+	result := config.DB.Preload("Roomspace").Preload("Requester").
+		Where("id = ?", id).First(&request)
+	
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, errors.New("join request not found")
+		}
+		return nil, result.Error
+	}
+	
+	return &request, nil
+}
+
+// Expense Operations (placeholder implementations)
+
+// CreateExpense creates a new expense
+func (s *PostgresService) CreateExpense(expense *models.Expense) error {
+	tx := config.DB.Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("failed to begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Create the expense record
+	if err := tx.Create(expense).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to create expense: %v", err)
+	}
+
+	// Create the expense splits
+	for i := range expense.Splits {
+		expense.Splits[i].ID = 0  // Ensure ID is 0 for auto-increment
+		expense.Splits[i].ExpenseID = expense.ID
+		
+		if err := tx.Create(&expense.Splits[i]).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to create expense split: %v", err)
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	return nil
+}
+
+// GetUserExpenses gets expenses for a user
+func (s *PostgresService) GetUserExpenses(userID string, limit, offset int) ([]models.Expense, error) {
+	var expenses []models.Expense
+	
+	// Get expenses where the user is either the payer or has a split
+	query := config.DB.Where("paid_by = ?", userID).
+		Or("id IN (SELECT expense_id FROM expense_splits WHERE user_uid = ?)", userID).
+		Preload("Payer").
+		Preload("Splits").
+		Preload("Splits.User").
+		Order("created_at DESC")
+	
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+	
+	err := query.Find(&expenses).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user expenses: %v", err)
+	}
+	
+	return expenses, nil
+}
+
+// GetExpenseByID gets an expense by ID
+func (s *PostgresService) GetExpenseByID(id uint) (*models.Expense, error) {
+	var expense models.Expense
+	
+	err := config.DB.Where("id = ?", id).
+		Preload("Payer").
+		Preload("Splits").
+		Preload("Splits.User").
+		First(&expense).Error
+	
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("expense not found")
+		}
+		return nil, fmt.Errorf("failed to get expense: %v", err)
+	}
+	
+	return &expense, nil
+}
+
+// GetRoomspaceExpenses gets expenses for a roomspace
+func (s *PostgresService) GetRoomspaceExpenses(roomspaceID string, limit, offset int) ([]models.Expense, error) {
+	var expenses []models.Expense
+	
+	query := config.DB.Where("roomspace_id = ?", roomspaceID).
+		Preload("Payer").
+		Preload("Splits").
+		Preload("Splits.User").
+		Order("created_at DESC")
+	
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+	
+	err := query.Find(&expenses).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get roomspace expenses: %v", err)
+	}
+	
+	return expenses, nil
+}
+
+// GetRecentExpenses gets recent expenses for a roomspace
+func (s *PostgresService) GetRecentExpenses(roomspaceID string, limit int) ([]models.Expense, error) {
+	var expenses []models.Expense
+	
+	err := config.DB.Where("roomspace_id = ?", roomspaceID).
+		Preload("Payer").
+		Preload("Splits").
+		Preload("Splits.User").
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&expenses).Error
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent expenses: %v", err)
+	}
+	
+	return expenses, nil
+}
+// ManualSchemaFix fixes schema inconsistencies between database and models
+func (s *PostgresService) ManualSchemaFix() error {
+	fmt.Println("Running manual schema fixes...")
+	
+	// Check if created_by column exists and creator_id doesn't
+	var createdByExists, creatorIdExists bool
+	
+	config.DB.Raw(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'roomspaces' 
+			AND column_name = 'created_by'
+		)
+	`).Row().Scan(&createdByExists)
+	
+	config.DB.Raw(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'roomspaces' 
+			AND column_name = 'creator_id'
+		)
+	`).Row().Scan(&creatorIdExists)
+	
+	if createdByExists && !creatorIdExists {
+		fmt.Println("Renaming created_by to creator_id in roomspaces table...")
+		if err := config.DB.Exec("ALTER TABLE roomspaces RENAME COLUMN created_by TO creator_id").Error; err != nil {
+			return fmt.Errorf("failed to rename created_by to creator_id: %v", err)
+		}
+		fmt.Println("Successfully renamed created_by to creator_id")
+	}
+	
+	// Check if roomspace_members table has firebase_uid instead of user_id
+	var firebaseUidExists, userIdExists bool
+	
+	config.DB.Raw(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'roomspace_members' 
+			AND column_name = 'firebase_uid'
+		)
+	`).Row().Scan(&firebaseUidExists)
+	
+	config.DB.Raw(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'roomspace_members' 
+			AND column_name = 'user_id'
+		)
+	`).Row().Scan(&userIdExists)
+	
+	if firebaseUidExists && !userIdExists {
+		fmt.Println("Renaming firebase_uid to user_id in roomspace_members table...")
+		if err := config.DB.Exec("ALTER TABLE roomspace_members RENAME COLUMN firebase_uid TO user_id").Error; err != nil {
+			return fmt.Errorf("failed to rename firebase_uid to user_id: %v", err)
+		}
+		fmt.Println("Successfully renamed firebase_uid to user_id")
+	}
+	
+	fmt.Println("Manual schema fixes completed")
 	return nil
 }

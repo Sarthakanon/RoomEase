@@ -261,6 +261,73 @@ class ApiService {
     );
   }
 
+  // Expense APIs
+  Future<Map<String, dynamic>> createExpense(
+    Map<String, dynamic> expenseData,
+  ) async {
+    try {
+      // Debug: Print the expense data being sent
+      print('Creating expense with data: $expenseData');
+      final response = await post('/api/expenses', data: expenseData);
+      return response;
+    } catch (e) {
+      print('Error creating expense: $e');
+      throw Exception('Failed to create expense: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getExpenses({
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (limit != null) queryParams['limit'] = limit.toString();
+      if (offset != null) queryParams['offset'] = offset.toString();
+      
+      final path = '/api/expenses${queryParams.isNotEmpty ? '?${Uri(queryParameters: queryParams).query}' : ''}';
+      return await get(path);
+    } catch (e) {
+      throw Exception('Failed to retrieve expenses: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getExpenseById(int expenseId) async {
+    try {
+      return await get('/api/expenses/$expenseId');
+    } catch (e) {
+      throw Exception('Failed to retrieve expense details: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getRoomspaceExpenses(
+    String roomspaceId, {
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (limit != null) queryParams['limit'] = limit.toString();
+      if (offset != null) queryParams['offset'] = offset.toString();
+      
+      final path = '/api/roomspaces/$roomspaceId/expenses${queryParams.isNotEmpty ? '?${Uri(queryParameters: queryParams).query}' : ''}';
+      return await get(path);
+    } catch (e) {
+      throw Exception('Failed to retrieve roomspace expenses: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getRecentExpenses(
+    String roomspaceId, {
+    int limit = 3,
+  }) async {
+    try {
+      return await get('/api/roomspaces/$roomspaceId/expenses/recent?limit=$limit');
+    } catch (e) {
+      throw Exception('Failed to retrieve recent expenses: ${e.toString()}');
+    }
+  }
+
   String _handleError(DioException error) {
     if (error.response != null) {
       final data = error.response!.data;

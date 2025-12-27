@@ -16,6 +16,7 @@ import 'features/settings/presentation/settings_screen.dart';
 import 'features/profile/presentation/profile_screen.dart';
 import 'features/notifications/presentation/notification_screen.dart';
 import 'features/home/mobile_dashboard.dart';
+import 'features/expenses/presentation/expense_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -112,6 +113,7 @@ class RoomEaseApp extends StatelessWidget {
         '/profile': (context) => const ProfileScreen(),
         '/notifications': (context) => const NotificationScreen(),
         '/home': (context) => const MobileDashboard(),
+        '/expenses': (context) => const ExpenseScreen(),
       },
     );
   }

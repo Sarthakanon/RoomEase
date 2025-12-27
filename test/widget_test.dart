@@ -7,23 +7,20 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:room_ease/utils/expense_calculation_utils.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    // await tester.pumpWidget(const MyApp());
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('ExpenseCalculationUtils integration test', (WidgetTester tester) async {
+    // Test that the calculation utilities work correctly
+    final result = ExpenseCalculationUtils.calculateEqualSplits(
+      100.0,
+      ['user1', 'user2', 'user3', 'user4'],
+    );
+    
+    expect(result.length, equals(4));
+    expect(result['user1'], equals(25.0));
+    expect(result['user2'], equals(25.0));
+    expect(result['user3'], equals(25.0));
+    expect(result['user4'], equals(25.0));
   });
 }

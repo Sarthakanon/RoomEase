@@ -4,6 +4,7 @@ import '../../core/widgets/mobile_scaffold.dart';
 import '../../services/api_service.dart';
 import '../../services/payment_notification_service.dart';
 import '../../models/payment_notification.dart';
+import '../../models/expense_models.dart';
 import 'widgets/add_expense_dialog.dart';
 
 class MobileDashboard extends StatefulWidget {
@@ -19,6 +20,12 @@ class _MobileDashboardState extends State<MobileDashboard> {
   bool _isLoading = true;
   List<RoommateItem> _roommates = [];
   int _unreadNotificationCount = 0;
+  String? _currentRoomspaceId;
+  
+  // Recent expenses state
+  List<ExpenseData> _recentExpenses = [];
+  bool _isLoadingExpenses = true;
+  String? _expensesError;
 
   @override
   void initState() {
@@ -55,6 +62,53 @@ class _MobileDashboardState extends State<MobileDashboard> {
     }
   }
 
+  Future<void> _loadRecentExpenses() async {
+    if (_currentRoomspaceId == null) return;
+    
+    try {
+      setState(() {
+        _isLoadingExpenses = true;
+        _expensesError = null;
+      });
+      
+      final response = await _apiService.getRecentExpenses(_currentRoomspaceId!, limit: 3);
+      
+      if (response.containsKey('data')) {
+        // Handle null data gracefully
+        final data = response['data'];
+        final List<ExpenseData> expenses;
+        
+        if (data == null) {
+          expenses = [];
+        } else if (data is List) {
+          expenses = data
+              .map((expense) => ExpenseData.fromJson(expense))
+              .toList();
+        } else {
+          expenses = [];
+        }
+        
+        if (mounted) {
+          setState(() {
+            _recentExpenses = expenses;
+            _isLoadingExpenses = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _expensesError = 'Failed to load recent expenses';
+          _isLoadingExpenses = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshRecentExpenses() async {
+    await _loadRecentExpenses();
+  }
+
   Future<void> _loadUnreadCount() async {
     try {
       final results = await Future.wait([
@@ -83,7 +137,12 @@ class _MobileDashboardState extends State<MobileDashboard> {
     try {
       final response = await _apiService.getRoomspaces();
       if (response.containsKey('data')) {
+        // Debug: Print full response
+        print('DEBUG: Roomspaces API response: $response');
+        
         final roomspaces = response['data'] as List<dynamic>;
+        print('DEBUG: Found ${roomspaces.length} roomspaces');
+        
         if (mounted) {
           setState(() {
             _hasRoomspace = roomspaces.isNotEmpty;
@@ -92,15 +151,29 @@ class _MobileDashboardState extends State<MobileDashboard> {
 
           // Load roommates from first roomspace
           if (roomspaces.isNotEmpty) {
+            _currentRoomspaceId = roomspaces[0]['id']?.toString();
             final members = roomspaces[0]['members'] as List<dynamic>? ?? [];
+            
+            // Debug: Print member data
+            print('DEBUG: Loading ${members.length} members');
+            for (var i = 0; i < members.length; i++) {
+              print('DEBUG: Member $i: ${members[i]}');
+            }
+            
             _roommates = members.map((m) {
               final user = m['user'];
+              final firebaseUid = m['user_id'] ?? '';  // Changed from 'firebase_uid' to 'user_id'
+              print('DEBUG: Creating roommate - user_id: "$firebaseUid", user: $user');
+              
               return RoommateItem(
-                id: m['firebase_uid'] ?? '',
+                id: firebaseUid,
                 name: user?['name'] ?? user?['email'] ?? 'Unknown',
                 email: user?['email'],
               );
             }).toList();
+            
+            // Load recent expenses after roomspace is loaded
+            _loadRecentExpenses();
           }
         }
       }
@@ -115,7 +188,32 @@ class _MobileDashboardState extends State<MobileDashboard> {
   }
 
   void _showAddExpenseDialog() {
-    if (_roommates.isEmpty) {
+    if (_roommates.isEmpty || _currentRoomspaceId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Join a roomspace first to add expenses'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Debug: Print roommates info
+    print('DEBUG: Showing expense dialog with ${_roommates.length} roommates');
+    for (var roommate in _roommates) {
+      print('DEBUG: Roommate - ID: ${roommate.id}, Name: ${roommate.name}');
+    }
+
+    AddExpenseDialog.show(
+      context,
+      roommates: _roommates,
+      roomspaceId: _currentRoomspaceId!,
+      onSubmit: _handleExpenseSubmission,
+    );
+  }
+
+  void _showExpenseDialogFromPayment(PaymentNotification notification) {
+    if (_roommates.isEmpty || _currentRoomspaceId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Join a roomspace first to add expenses'),
@@ -128,8 +226,27 @@ class _MobileDashboardState extends State<MobileDashboard> {
     AddExpenseDialog.show(
       context,
       roommates: _roommates,
-      onSubmit: (expense) {
-        // TODO: Save expense to API and notify selected roommates
+      roomspaceId: _currentRoomspaceId!,
+      paymentNotification: notification,
+      onSubmit: _handleExpenseSubmission,
+    );
+  }
+
+  Future<void> _handleExpenseSubmission(ExpenseData expense) async {
+    try {
+      // Create expense request
+      final request = ExpenseCreateRequest.fromExpenseData(
+        expense,
+        _currentRoomspaceId!,
+      );
+
+      // Submit to API
+      await _apiService.createExpense(request.toJson());
+
+      // Refresh recent expenses to show the new expense
+      await _refreshRecentExpenses();
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -138,37 +255,17 @@ class _MobileDashboardState extends State<MobileDashboard> {
             backgroundColor: Colors.green,
           ),
         );
-      },
-    );
-  }
-
-  void _showExpenseDialogFromPayment(PaymentNotification notification) {
-    if (_roommates.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Join a roomspace first to add expenses'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    AddExpenseDialog.show(
-      context,
-      roommates: _roommates,
-      paymentNotification: notification,
-      onSubmit: (expense) {
-        // TODO: Save expense to API and notify selected roommates
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Added payment expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
-            ),
-            backgroundColor: Colors.green,
+            content: Text('Failed to add expense: ${e.toString()}'),
+            backgroundColor: Colors.red,
           ),
         );
-      },
-    );
+      }
+    }
   }
 
   @override
@@ -483,16 +580,30 @@ class _MobileDashboardState extends State<MobileDashboard> {
             // Recent Activity Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "Recent Activity",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Recent Activity",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
                   ),
-                ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/expenses');
+                    },
+                    child: Text(
+                      'View All',
+                      style: TextStyle(
+                        color: primaryColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 10),
@@ -502,32 +613,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
             // ---------------------------------------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  _expenseTile(
-                    "Grocery Run",
-                    "Yesterday",
-                    45.50,
-                    true,
-                    primaryColor,
-                  ),
-                  _expenseTile(
-                    "Internet Bill",
-                    "Oct 24",
-                    30.00,
-                    false,
-                    primaryColor,
-                  ),
-                  _expenseTile(
-                    "House Party",
-                    "Oct 22",
-                    120.00,
-                    true,
-                    primaryColor,
-                  ),
-                  const SizedBox(height: 100), // Extra space for bottom nav
-                ],
-              ),
+              child: _buildRecentActivityList(primaryColor),
             ),
           ],
         ),
@@ -535,14 +621,125 @@ class _MobileDashboardState extends State<MobileDashboard> {
     );
   }
 
-  // Helper widget to build a single expense row
-  Widget _expenseTile(
-    String title,
-    String date,
-    double amount,
-    bool youPaid,
-    Color primaryColor,
-  ) {
+  Widget _buildRecentActivityList(Color primaryColor) {
+    if (_isLoadingExpenses) {
+      return Column(
+        children: [
+          const SizedBox(height: 20),
+          const CircularProgressIndicator(),
+          const SizedBox(height: 10),
+          Text(
+            'Loading recent expenses...',
+            style: TextStyle(color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 100),
+        ],
+      );
+    }
+
+    if (_expensesError != null) {
+      return Column(
+        children: [
+          const SizedBox(height: 20),
+          Icon(
+            Icons.error_outline,
+            color: Colors.red[300],
+            size: 48,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _expensesError!,
+            style: TextStyle(color: Colors.red[600]),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: _refreshRecentExpenses,
+            child: Text(
+              'Retry',
+              style: TextStyle(color: primaryColor),
+            ),
+          ),
+          const SizedBox(height: 100),
+        ],
+      );
+    }
+
+    if (_recentExpenses.isEmpty) {
+      return Column(
+        children: [
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.receipt_long_outlined,
+                  color: Colors.grey[400],
+                  size: 48,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'No expenses yet',
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Add your first expense to start tracking shared costs',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _showAddExpenseDialog,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Expense'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 100), // Extra space for bottom nav
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        ..._recentExpenses.map((expense) => _buildExpenseTile(expense, primaryColor)),
+        const SizedBox(height: 100), // Extra space for bottom nav
+      ],
+    );
+  }
+
+  Widget _buildExpenseTile(ExpenseData expense, Color primaryColor) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final isPaidByCurrentUser = expense.paidBy == currentUser?.uid;
+    final formattedDate = _formatExpenseDate(expense.createdAt);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -573,14 +770,16 @@ class _MobileDashboardState extends State<MobileDashboard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  expense.title,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
                 ),
                 Text(
-                  youPaid ? "You paid" : "Someone else paid",
+                  isPaidByCurrentUser 
+                      ? "You paid" 
+                      : "${expense.payerName ?? 'Someone'} paid",
                   style: TextStyle(color: Colors.grey[500], fontSize: 12),
                 ),
               ],
@@ -590,15 +789,17 @@ class _MobileDashboardState extends State<MobileDashboard> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                "Rs. ${amount.toStringAsFixed(2)}",
+                "Rs. ${expense.amount.toStringAsFixed(2)}",
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  color: youPaid ? const Color(0xFF10B981) : Colors.redAccent,
+                  color: isPaidByCurrentUser 
+                      ? const Color(0xFF10B981) 
+                      : Colors.redAccent,
                 ),
               ),
               Text(
-                date,
+                formattedDate,
                 style: TextStyle(color: Colors.grey[400], fontSize: 12),
               ),
             ],
@@ -607,4 +808,27 @@ class _MobileDashboardState extends State<MobileDashboard> {
       ),
     );
   }
+
+  String _formatExpenseDate(DateTime? date) {
+    if (date == null) return 'Unknown';
+    
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays == 0) {
+      return 'Today';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else {
+      // Format as "Oct 24"
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${months[date.month - 1]} ${date.day}';
+    }
+  }
+
 }

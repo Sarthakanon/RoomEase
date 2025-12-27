@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../services/api_service.dart';
 import '../../../services/payment_notification_service.dart';
 import '../../../models/payment_notification.dart';
+import '../../../models/expense_models.dart';
 import '../../home/widgets/add_expense_dialog.dart';
 
 class NotificationScreen extends StatefulWidget {
@@ -567,6 +568,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return;
       }
 
+      final roomspaceId = roomspaces[0]['id']?.toString();
+      
+      if (roomspaceId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid roomspace ID'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
       final members = roomspaces[0]['members'] as List<dynamic>? ?? [];
       final roommates = members.map((m) {
         final user = m['user'];
@@ -591,19 +604,42 @@ class _NotificationScreenState extends State<NotificationScreen> {
       AddExpenseDialog.show(
         context,
         roommates: roommates,
+        roomspaceId: roomspaceId,
         paymentNotification: payment,
-        onSubmit: (expense) {
-          // Mark payment as processed
-          _dismissPaymentNotification(payment);
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Added payment expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
+        onSubmit: (expense) async {
+          try {
+            // Create expense request
+            final request = ExpenseCreateRequest.fromExpenseData(
+              expense,
+              roomspaceId,
+            );
+
+            // Submit to API
+            await _apiService.createExpense(request.toJson());
+
+            // Mark payment as processed
+            _dismissPaymentNotification(payment);
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Added payment expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
+                  ),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to add expense: ${e.toString()}'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
         },
       );
     } catch (e) {

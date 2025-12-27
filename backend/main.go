@@ -60,6 +60,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(dbService)
 	roomspaceHandler := handlers.NewRoomspaceHandler(dbService)
 	notificationHandler := handlers.NewNotificationHandler(dbService)
+	expenseHandler := handlers.NewExpenseHandler(dbService)
 	healthHandler := handlers.NewHealthHandler()
 
 	// Health check endpoint (public)
@@ -96,6 +97,13 @@ func main() {
 		protected.GET("/join-requests", notificationHandler.GetJoinRequests)
 		protected.GET("/join-requests/pending", notificationHandler.GetPendingJoinRequest)
 		protected.POST("/join-requests/:id/process", notificationHandler.ProcessJoinRequest)
+
+		// Expense routes
+		protected.POST("/expenses", expenseHandler.CreateExpense)
+		protected.GET("/expenses", expenseHandler.GetExpenses)
+		protected.GET("/expenses/:id", expenseHandler.GetExpenseByID)
+		protected.GET("/roomspaces/:id/expenses", expenseHandler.GetRoomspaceExpenses)
+		protected.GET("/roomspaces/:id/expenses/recent", expenseHandler.GetRecentExpenses)
 	}
 
 	// Start server

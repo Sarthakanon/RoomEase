@@ -32,25 +32,4 @@ type Notification struct {
 	DeletedAt    gorm.DeletedAt   `gorm:"index" json:"-"`
 }
 
-// JoinRequestStatus represents the status of a join request
-type JoinRequestStatus string
 
-const (
-	JoinRequestStatusPending  JoinRequestStatus = "PENDING"
-	JoinRequestStatusAccepted JoinRequestStatus = "ACCEPTED"
-	JoinRequestStatusRejected JoinRequestStatus = "REJECTED"
-)
-
-// JoinRequest represents a request to join a roomspace
-type JoinRequest struct {
-	ID          uint              `gorm:"primaryKey" json:"id"`
-	RoomspaceID uint              `gorm:"not null;index" json:"roomspace_id"`
-	Roomspace   *Roomspace        `gorm:"foreignKey:RoomspaceID;constraint:-" json:"roomspace,omitempty"`
-	RequesterUID string           `gorm:"not null;index" json:"requester_uid"` // Firebase UID
-	Requester   *User             `gorm:"foreignKey:RequesterUID;references:FirebaseUID;constraint:-" json:"requester,omitempty"`
-	Status      JoinRequestStatus `gorm:"not null;default:PENDING" json:"status"`
-	ProcessedBy string            `json:"processed_by,omitempty"` // Firebase UID of who accepted/rejected
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt    `gorm:"index" json:"-"`
-}

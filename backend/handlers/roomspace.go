@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"roomease/backend/models"
 	"roomease/backend/services"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -68,10 +67,16 @@ func (h *RoomspaceHandler) CreateRoomspace(c *gin.Context) {
 	}
 
 	// Create roomspace
+	var description *string
+	if req.Description != "" {
+		description = &req.Description
+	}
+	
+	creatorID := userID.(string)
 	roomspace := &models.Roomspace{
 		Name:        req.Name,
-		Description: req.Description,
-		CreatedBy:   userID.(string),
+		Description: description,
+		CreatorID:   &creatorID,
 	}
 
 	if err := h.dbService.CreateRoomspace(roomspace); err != nil {
@@ -92,16 +97,9 @@ func (h *RoomspaceHandler) CreateRoomspace(c *gin.Context) {
 func (h *RoomspaceHandler) GetRoomspace(c *gin.Context) {
 	// Get roomspace ID from URL
 	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid roomspace ID",
-		})
-		return
-	}
 
 	// Get roomspace
-	roomspace, err := h.dbService.GetRoomspaceByID(uint(id))
+	roomspace, err := h.dbService.GetRoomspaceByID(idStr)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Roomspace not found",
@@ -162,7 +160,7 @@ func (h *RoomspaceHandler) JoinRoomspaceByCode(c *gin.Context) {
 	}
 
 	// Create join request instead of direct join
-	request, err := h.dbService.CreateJoinRequest(roomspace.ID, userID.(string))
+	request, err := h.dbService.CreateJoinRequest(roomspace.ID.String(), userID.(string), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -175,14 +173,14 @@ func (h *RoomspaceHandler) JoinRoomspaceByCode(c *gin.Context) {
 		userName = user.Name
 	}
 
-	members, _ := h.dbService.GetRoomspaceMembers(roomspace.ID)
+	members, _ := h.dbService.GetRoomspaceMembers(roomspace.ID.String())
 	for _, member := range members {
 		notification := &models.Notification{
-			RecipientUID: member.FirebaseUID,
+			RecipientUID: member.UserID,
 			Type:         models.NotificationTypeJoinRequest,
 			Title:        "New Join Request",
 			Message:      userName + " wants to join " + roomspace.Name,
-			Data:         `{"request_id":` + strconv.Itoa(int(request.ID)) + `,"roomspace_id":` + strconv.Itoa(int(roomspace.ID)) + `}`,
+			Data:         `{"request_id":"` + request.ID.String() + `","roomspace_id":"` + roomspace.ID.String() + `"}`,
 		}
 		h.dbService.CreateNotification(notification)
 	}
@@ -207,16 +205,9 @@ func (h *RoomspaceHandler) JoinRoomspace(c *gin.Context) {
 
 	// Get roomspace ID from URL
 	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid roomspace ID",
-		})
-		return
-	}
 
 	// Add user to roomspace
-	if err := h.dbService.AddMemberToRoomspace(uint(id), userID.(string)); err != nil {
+	if err := h.dbService.AddMemberToRoomspace(idStr, userID.(string)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
@@ -248,13 +239,6 @@ func (h *RoomspaceHandler) RemoveMember(c *gin.Context) {
 
 	// Get roomspace ID from URL
 	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid roomspace ID",
-		})
-		return
-	}
 
 	// Parse request body
 	var req RemoveMemberRequest
@@ -266,11 +250,11 @@ func (h *RoomspaceHandler) RemoveMember(c *gin.Context) {
 	}
 
 	// Get roomspace and removed user info before removing
-	roomspace, _ := h.dbService.GetRoomspaceByID(uint(id))
+	roomspace, _ := h.dbService.GetRoomspaceByID(idStr)
 	removedUser, _ := h.dbService.GetUserByFirebaseUID(req.MemberFirebaseUID)
 
 	// Remove member
-	if err := h.dbService.RemoveMemberFromRoomspace(uint(id), req.MemberFirebaseUID, userID.(string)); err != nil {
+	if err := h.dbService.RemoveMemberFromRoomspace(idStr, req.MemberFirebaseUID, userID.(string)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})

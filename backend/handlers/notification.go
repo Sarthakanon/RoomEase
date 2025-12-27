@@ -74,7 +74,7 @@ func (h *NotificationHandler) GetJoinRequests(c *gin.Context) {
 	}
 
 	// Get join requests for first roomspace (user can only be in one for now)
-	requests, err := h.dbService.GetJoinRequestsForRoomspace(roomspaces[0].ID)
+	requests, err := h.dbService.GetJoinRequestsForRoomspace(roomspaces[0].ID.String())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get join requests"})
 		return
@@ -104,15 +104,15 @@ func (h *NotificationHandler) ProcessJoinRequest(c *gin.Context) {
 	}
 
 	// Get request details before processing
-	request, _ := h.dbService.GetJoinRequestByID(uint(id))
+	request, _ := h.dbService.GetJoinRequestByID(strconv.Itoa(int(id)))
 	if request == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Join request not found"})
 		return
 	}
 
 	// Get requester and roomspace info
-	requester, _ := h.dbService.GetUserByFirebaseUID(request.RequesterUID)
-	roomspace, _ := h.dbService.GetRoomspaceByID(request.RoomspaceID)
+	requester, _ := h.dbService.GetUserByFirebaseUID(request.RequesterID)
+	roomspace, _ := h.dbService.GetRoomspaceByID(request.RoomspaceID.String())
 	processor, _ := h.dbService.GetUserByFirebaseUID(userID.(string))
 
 	requesterName := "Someone"
@@ -128,7 +128,7 @@ func (h *NotificationHandler) ProcessJoinRequest(c *gin.Context) {
 		processorName = processor.Name
 	}
 
-	if err := h.dbService.ProcessJoinRequest(uint(id), userID.(string), body.Accept); err != nil {
+	if err := h.dbService.ProcessJoinRequest(strconv.Itoa(int(id)), userID.(string), body.Accept, ""); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -136,7 +136,7 @@ func (h *NotificationHandler) ProcessJoinRequest(c *gin.Context) {
 	if body.Accept {
 		// Notify the requester that they've been accepted
 		h.dbService.CreateNotification(&models.Notification{
-			RecipientUID: request.RequesterUID,
+			RecipientUID: request.RequesterID,
 			Type:         models.NotificationTypeJoinAccepted,
 			Title:        "Welcome to " + roomspaceName + "!",
 			Message:      "Your request to join has been accepted by " + processorName,
@@ -151,14 +151,14 @@ func (h *NotificationHandler) ProcessJoinRequest(c *gin.Context) {
 		})
 
 		// Notify all other members that a new member joined
-		members, _ := h.dbService.GetRoomspaceMembers(request.RoomspaceID)
+		members, _ := h.dbService.GetRoomspaceMembers(request.RoomspaceID.String())
 		for _, member := range members {
 			// Skip the requester and the processor
-			if member.FirebaseUID == request.RequesterUID || member.FirebaseUID == userID.(string) {
+			if member.UserID == request.RequesterID || member.UserID == userID.(string) {
 				continue
 			}
 			h.dbService.CreateNotification(&models.Notification{
-				RecipientUID: member.FirebaseUID,
+				RecipientUID: member.UserID,
 				Type:         models.NotificationTypeJoinAccepted,
 				Title:        "New Member Joined",
 				Message:      processorName + " accepted " + requesterName + "'s request to join " + roomspaceName,
@@ -167,7 +167,7 @@ func (h *NotificationHandler) ProcessJoinRequest(c *gin.Context) {
 	} else {
 		// Notify the requester that they've been rejected
 		h.dbService.CreateNotification(&models.Notification{
-			RecipientUID: request.RequesterUID,
+			RecipientUID: request.RequesterID,
 			Type:         models.NotificationTypeJoinRejected,
 			Title:        "Request Declined",
 			Message:      "Your request to join " + roomspaceName + " was declined",
@@ -184,7 +184,7 @@ func (h *NotificationHandler) ProcessJoinRequest(c *gin.Context) {
 
 // Helper to create notification for all roomspace members
 func (h *NotificationHandler) notifyRoomspaceMembers(roomspaceID uint, excludeUID string, notifType models.NotificationType, title, message string, data map[string]interface{}) {
-	members, err := h.dbService.GetRoomspaceMembers(roomspaceID)
+	members, err := h.dbService.GetRoomspaceMembers(strconv.Itoa(int(roomspaceID)))
 	if err != nil {
 		return
 	}
@@ -192,11 +192,11 @@ func (h *NotificationHandler) notifyRoomspaceMembers(roomspaceID uint, excludeUI
 	dataJSON, _ := json.Marshal(data)
 
 	for _, member := range members {
-		if member.FirebaseUID == excludeUID {
+		if member.UserID == excludeUID {
 			continue
 		}
 		notification := &models.Notification{
-			RecipientUID: member.FirebaseUID,
+			RecipientUID: member.UserID,
 			Type:         notifType,
 			Title:        title,
 			Message:      message,

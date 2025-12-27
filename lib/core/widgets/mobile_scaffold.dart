@@ -80,11 +80,9 @@ class _MobileScaffoldState extends State<MobileScaffold> {
                       label: 'Expenses',
                       isActive: widget.currentIndex == 2,
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Expenses Banauna bakixa!'),
-                          ),
-                        );
+                        if (widget.currentIndex != 2) {
+                          Navigator.pushNamed(context, '/expenses');
+                        }
                       },
                     ),
                     _NavBarItem(

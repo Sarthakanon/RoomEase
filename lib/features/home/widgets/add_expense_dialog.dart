@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../models/payment_notification.dart';
+import '../../../models/expense_models.dart';
 import '../../../services/payment_parser_service.dart';
+import '../../../utils/expense_calculation_utils.dart';
 
 class AddExpenseDialog extends StatefulWidget {
   final List<RoommateItem> roommates;
+  final String roomspaceId;
   final Function(ExpenseData) onSubmit;
   final PaymentNotification? paymentNotification;
 
   const AddExpenseDialog({
     super.key,
     required this.roommates,
+    required this.roomspaceId,
     required this.onSubmit,
     this.paymentNotification,
   });
@@ -18,6 +22,7 @@ class AddExpenseDialog extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required List<RoommateItem> roommates,
+    required String roomspaceId,
     required Function(ExpenseData) onSubmit,
     PaymentNotification? paymentNotification,
   }) {
@@ -26,7 +31,8 @@ class AddExpenseDialog extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => AddExpenseDialog(
-        roommates: roommates, 
+        roommates: roommates,
+        roomspaceId: roomspaceId,
         onSubmit: onSubmit,
         paymentNotification: paymentNotification,
       ),
@@ -48,6 +54,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   SplitType _splitType = SplitType.equal;
   final Map<String, double> _customSplits =
       {}; // For percentage or exact amounts
+
+  bool _isSubmitting = false;
+  String? _errorMessage;
 
   final List<ExpenseCategory> _categories = [
     ExpenseCategory('General', Icons.receipt_long),
@@ -111,65 +120,65 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     _descriptionController.text = 'Auto-detected from ${notification.appName} notification';
   }
 
-  void _submit() {
+  void _submit() async {
     if (_formKey.currentState!.validate()) {
       if (_selectedRoommates.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select at least one roommate'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        setState(() {
+          _errorMessage = 'Please select at least one roommate';
+        });
         return;
       }
 
-      // Validate custom splits if not equal
-      if (_splitType != SplitType.equal && _selectedRoommates.isNotEmpty) {
-        final totalAmount = double.parse(_amountController.text);
-        if (_splitType == SplitType.percentage) {
-          final totalPercentage = _customSplits.values.fold(
-            0.0,
-            (a, b) => a + b,
-          );
-          if ((totalPercentage - 100).abs() > 0.01) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Percentages must add up to 100% (currently ${totalPercentage.toStringAsFixed(1)}%)',
-                ),
-                backgroundColor: Colors.redAccent,
-              ),
-            );
-            return;
-          }
-        } else if (_splitType == SplitType.exact) {
-          final totalSplit = _customSplits.values.fold(0.0, (a, b) => a + b);
-          if ((totalSplit - totalAmount).abs() > 0.01) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Amounts must add up to Rs. ${totalAmount.toStringAsFixed(2)} (currently Rs. ${totalSplit.toStringAsFixed(2)})',
-                ),
-                backgroundColor: Colors.redAccent,
-              ),
-            );
-            return;
-          }
-        }
-      }
-
-      final expense = ExpenseData(
-        title: _titleController.text.trim(),
-        amount: double.parse(_amountController.text),
-        description: _descriptionController.text.trim(),
-        category: _selectedCategory,
-        selectedRoommateIds: _selectedRoommates.toList(),
-        splitType: _splitType,
-        customSplits: Map.from(_customSplits),
+      // Validate splits using the calculation utilities
+      final totalAmount = double.parse(_amountController.text);
+      final validationResult = ExpenseCalculationUtils.validateSplitData(
+        _splitType,
+        totalAmount,
+        _selectedRoommates.toList(),
+        _customSplits,
       );
 
-      widget.onSubmit(expense);
-      Navigator.pop(context);
+      if (!validationResult.isValid) {
+        setState(() {
+          _errorMessage = validationResult.errorMessage;
+        });
+        return;
+      }
+
+      setState(() {
+        _isSubmitting = true;
+        _errorMessage = null;
+      });
+
+      try {
+        final expense = ExpenseData(
+          title: _titleController.text.trim(),
+          amount: totalAmount,
+          description: _descriptionController.text.trim(),
+          category: _selectedCategory,
+          selectedRoommateIds: _selectedRoommates.toList(),
+          splitType: _splitType,
+          customSplits: Map.from(_customSplits),
+        );
+
+        await widget.onSubmit(expense);
+        
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Failed to add expense: ${e.toString()}';
+          });
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSubmitting = false;
+          });
+        }
+      }
     }
   }
 
@@ -319,12 +328,45 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
 
                       const SizedBox(height: 24),
 
+                      // Error message display
+                      if (_errorMessage != null) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                color: Colors.red,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _errorMessage!,
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
                       // Submit button
                       SizedBox(
                         width: double.infinity,
                         height: 56,
                         child: ElevatedButton(
-                          onPressed: _submit,
+                          onPressed: _isSubmitting ? null : _submit,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primaryColor,
                             foregroundColor: Colors.white,
@@ -332,14 +374,39 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                               borderRadius: BorderRadius.circular(16),
                             ),
                             elevation: 0,
+                            disabledBackgroundColor: Colors.grey[300],
                           ),
-                          child: const Text(
-                            'Add Expense',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: _isSubmitting
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Adding Expense...',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const Text(
+                                  'Add Expense',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                       ),
 
@@ -726,19 +793,17 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   void _initializeCustomSplits() {
     if (_selectedRoommates.isEmpty) return;
 
-    final count = _selectedRoommates.length;
-    if (_splitType == SplitType.percentage) {
-      final equalPercentage = 100.0 / count;
-      for (final id in _selectedRoommates) {
-        _customSplits[id] = equalPercentage;
-      }
-    } else if (_splitType == SplitType.exact) {
-      final amount = double.tryParse(_amountController.text) ?? 0;
-      final equalAmount = amount / count;
-      for (final id in _selectedRoommates) {
-        _customSplits[id] = equalAmount;
-      }
-    }
+    final totalAmount = double.tryParse(_amountController.text) ?? 0;
+    final customSplits = ExpenseCalculationUtils.initializeCustomSplits(
+      _splitType,
+      totalAmount,
+      _selectedRoommates.toList(),
+    );
+    
+    setState(() {
+      _customSplits.clear();
+      _customSplits.addAll(customSplits);
+    });
   }
 
   Widget _buildCustomSplitInputs(Color primaryColor) {
@@ -897,7 +962,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          'Rs. ${total.toStringAsFixed(2)} / ${totalAmount.toStringAsFixed(2)}',
+          '${ExpenseCalculationUtils.formatCurrency(total)} / ${ExpenseCalculationUtils.formatCurrency(totalAmount)}',
           style: TextStyle(
             color: isValid ? Colors.green : Colors.red,
             fontWeight: FontWeight.w600,
@@ -922,42 +987,4 @@ class RoommateItem {
     this.email,
     this.photoUrl,
   });
-}
-
-class ExpenseData {
-  final String title;
-  final double amount;
-  final String description;
-  final String category;
-  final List<String> selectedRoommateIds;
-  final SplitType splitType;
-  final Map<String, double> customSplits;
-
-  ExpenseData({
-    required this.title,
-    required this.amount,
-    required this.description,
-    required this.category,
-    required this.selectedRoommateIds,
-    required this.splitType,
-    required this.customSplits,
-  });
-}
-
-class ExpenseCategory {
-  final String name;
-  final IconData icon;
-
-  ExpenseCategory(this.name, this.icon);
-}
-
-enum SplitType {
-  equal('Equal', Icons.drag_handle),
-  percentage('Percentage', Icons.percent),
-  exact('Exact', Icons.attach_money);
-
-  final String label;
-  final IconData icon;
-
-  const SplitType(this.label, this.icon);
 }
