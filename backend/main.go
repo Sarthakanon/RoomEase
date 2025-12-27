@@ -102,8 +102,15 @@ func main() {
 		protected.POST("/expenses", expenseHandler.CreateExpense)
 		protected.GET("/expenses", expenseHandler.GetExpenses)
 		protected.GET("/expenses/:id", expenseHandler.GetExpenseByID)
+		protected.PUT("/expenses/:id", expenseHandler.UpdateExpense)
+		protected.DELETE("/expenses/:id", expenseHandler.DeleteExpense)
 		protected.GET("/roomspaces/:id/expenses", expenseHandler.GetRoomspaceExpenses)
 		protected.GET("/roomspaces/:id/expenses/recent", expenseHandler.GetRecentExpenses)
+		
+		// Personal Expense routes
+		protected.POST("/personal-expenses", expenseHandler.CreatePersonalExpense)
+		protected.GET("/personal-expenses", expenseHandler.GetPersonalExpenses)
+		protected.DELETE("/personal-expenses/:id", expenseHandler.DeletePersonalExpense)
 	}
 
 	// Start server
