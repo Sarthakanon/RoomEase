@@ -74,6 +74,10 @@ backend/serviceAccount.json
 # Documentation folder (diagrams, specs, etc.)
 docs/
 
+# All markdown documentation files
+*.md
+!README.md
+
 # HTML design mockups
 html_designs/
 
