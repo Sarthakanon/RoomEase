@@ -36,7 +36,7 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
           setState(() {
             _roomspace = roomspaces[0];
             _members = _roomspace?['members'] ?? [];
-            _isCreator = _roomspace?['created_by'] == _currentUserUid;
+            _isCreator = _roomspace?['creator_id'] == _currentUserUid; // Use creator_id instead of created_by
             _isLoading = false;
           });
         } else {
@@ -480,8 +480,9 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
             Divider(height: 1, indent: 70, color: Colors.grey[100]),
         itemBuilder: (context, index) {
           final member = _members[index];
-          final memberUid = member['firebase_uid'];
-          final isCreator = memberUid == _roomspace?['created_by'];
+          final memberUid = member['user_id']; // Use user_id instead of firebase_uid
+          final memberRole = member['role']; // Get the role directly from member data
+          final isCreator = memberRole == 'creator'; // Use role instead of comparing IDs
           final isCurrentUser = memberUid == _currentUserUid;
           final user = member['user'];
           final memberName = user?['name'] ?? user?['email'] ?? 'Unknown';
@@ -550,7 +551,10 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
                   ? IconButton(
                       icon: const Icon(Icons.remove_circle_outline),
                       color: Colors.red[400],
-                      onPressed: () => _removeMember(memberUid, memberName),
+                      onPressed: () => _removeMember(
+                        user?['firebase_uid'] ?? memberUid, // Use firebase_uid from user object
+                        memberName,
+                      ),
                       tooltip: 'Remove member',
                     )
                   : null,
