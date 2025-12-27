@@ -200,3 +200,84 @@ class ExpenseCategory {
 
   ExpenseCategory(this.name, this.icon);
 }
+
+// Personal Expense Data model (simplified version without roommate splitting)
+class PersonalExpenseData {
+  final String title;
+  final double amount;
+  final String description;
+  final String category;
+  
+  // Fields for API integration
+  final int? id;
+  final DateTime? createdAt;
+
+  PersonalExpenseData({
+    required this.title,
+    required this.amount,
+    required this.description,
+    required this.category,
+    this.id,
+    this.createdAt,
+  });
+
+  // Factory constructor from API response
+  factory PersonalExpenseData.fromJson(Map<String, dynamic> json) {
+    return PersonalExpenseData(
+      title: json['title'] ?? '',
+      amount: (json['amount'] ?? 0.0).toDouble(),
+      description: json['description'] ?? '',
+      category: json['category'] ?? '',
+      id: ExpenseData._parseIntSafely(json['id']),
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at']) 
+          : null,
+    );
+  }
+
+  // Convert to JSON for API requests
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'amount': amount,
+      'description': description,
+      'category': category,
+    };
+  }
+}
+
+// Personal Expense Create Request model for API requests
+class PersonalExpenseCreateRequest {
+  final String title;
+  final String description;
+  final double amount;
+  final String category;
+
+  PersonalExpenseCreateRequest({
+    required this.title,
+    required this.description,
+    required this.amount,
+    required this.category,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'description': description,
+      'amount': amount,
+      'category': category,
+    };
+  }
+
+  // Factory constructor from PersonalExpenseData
+  factory PersonalExpenseCreateRequest.fromExpenseData(
+    PersonalExpenseData expenseData,
+  ) {
+    return PersonalExpenseCreateRequest(
+      title: expenseData.title,
+      description: expenseData.description,
+      amount: expenseData.amount,
+      category: expenseData.category,
+    );
+  }
+}

@@ -82,3 +82,37 @@ type ExpenseSplitResponse struct {
 	Amount     float64 `json:"amount"`
 	Percentage float64 `json:"percentage,omitempty"`
 }
+
+// PersonalExpense represents a personal expense record (no roomspace or splits)
+type PersonalExpense struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	UserUID     string         `gorm:"not null;size:128;check:length(user_uid) > 0;index" json:"user_uid"` // Firebase UID
+	Title       string         `gorm:"not null;size:255;check:length(title) > 0" json:"title"`
+	Description string         `gorm:"size:1000" json:"description"`
+	Amount      float64        `gorm:"not null;check:amount > 0" json:"amount"`
+	Category    string         `gorm:"not null;size:100;check:length(category) > 0" json:"category"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relationships
+	User *User `gorm:"foreignKey:UserUID;references:FirebaseUID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user,omitempty"`
+}
+
+// CreatePersonalExpenseRequest represents the request to create a personal expense
+type CreatePersonalExpenseRequest struct {
+	Title       string  `json:"title" binding:"required"`
+	Description string  `json:"description"`
+	Amount      float64 `json:"amount" binding:"required,gt=0"`
+	Category    string  `json:"category" binding:"required"`
+}
+
+// PersonalExpenseResponse represents the response for personal expense data
+type PersonalExpenseResponse struct {
+	ID          uint      `json:"id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Amount      float64   `json:"amount"`
+	Category    string    `json:"category"`
+	CreatedAt   time.Time `json:"created_at"`
+}
