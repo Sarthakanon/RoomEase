@@ -222,7 +222,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
     _showExpenseOptions(context, primaryColor);
   }
 
-  void _showExpenseOptions(BuildContext context, Color primaryColor) {
+  void _showExpenseOptions(BuildContext context, Color primaryColor, {PaymentNotification? paymentNotification}) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -248,13 +248,45 @@ class _MobileDashboardState extends State<MobileDashboard> {
             // Header
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(
-                'Add Expense',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
+              child: Column(
+                children: [
+                  Text(
+                    'Add Expense',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  // Show payment notification info if available
+                  if (paymentNotification != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.payment, color: Colors.blue, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Payment: Rs. ${paymentNotification.amount?.toStringAsFixed(2) ?? 'Unknown'} to ${paymentNotification.merchant ?? 'Unknown'}',
+                              style: TextStyle(
+                                color: Colors.blue[800],
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             
@@ -265,7 +297,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
               subtitle: const Text('Split with roommates'),
               onTap: () {
                 Navigator.pop(context);
-                _showSharedExpenseDialog();
+                _showSharedExpenseDialog(paymentNotification: paymentNotification);
               },
             ),
             ListTile(
@@ -274,7 +306,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
               subtitle: const Text('Track personal spending'),
               onTap: () {
                 Navigator.pop(context);
-                _showPersonalExpenseDialog();
+                _showPersonalExpenseDialog(paymentNotification: paymentNotification);
               },
             ),
             const SizedBox(height: 16),
@@ -284,7 +316,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
     );
   }
 
-  void _showSharedExpenseDialog() {
+  void _showSharedExpenseDialog({PaymentNotification? paymentNotification}) {
     if (_roommates.isEmpty || _currentRoomspaceId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -305,13 +337,15 @@ class _MobileDashboardState extends State<MobileDashboard> {
       context,
       roommates: _roommates,
       roomspaceId: _currentRoomspaceId!,
+      paymentNotification: paymentNotification,
       onSubmit: _handleExpenseSubmission,
     );
   }
 
-  void _showPersonalExpenseDialog() {
+  void _showPersonalExpenseDialog({PaymentNotification? paymentNotification}) {
     PersonalExpenseDialog.show(
       context,
+      paymentNotification: paymentNotification,
       onSubmit: (expense) async {
         try {
           // Create personal expense request
@@ -348,23 +382,8 @@ class _MobileDashboardState extends State<MobileDashboard> {
   }
 
   void _showExpenseDialogFromPayment(PaymentNotification notification) {
-    if (_roommates.isEmpty || _currentRoomspaceId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Join a roomspace first to add expenses'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    AddExpenseDialog.show(
-      context,
-      roommates: _roommates,
-      roomspaceId: _currentRoomspaceId!,
-      paymentNotification: notification,
-      onSubmit: _handleExpenseSubmission,
-    );
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    _showExpenseOptions(context, primaryColor, paymentNotification: notification);
   }
 
   Future<void> _handleExpenseSubmission(ExpenseData expense) async {
