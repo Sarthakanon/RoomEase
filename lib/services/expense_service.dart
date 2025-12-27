@@ -186,6 +186,68 @@ class ExpenseService {
     }
   }
 
+  /// Retrieves expenses for the current user across all roomspaces
+  /// 
+  /// [limit] - Maximum number of expenses to retrieve (default: 20)
+  /// [offset] - Number of expenses to skip for pagination (default: 0)
+  /// 
+  /// Returns a list of [ExpenseData]
+  Future<List<ExpenseData>> getUserExpenses({
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final response = await getExpenses(limit: limit, offset: offset);
+      return response.expenses;
+    } catch (e) {
+      if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Failed to retrieve user expenses: ${e.toString()}');
+    }
+  }
+
+  /// Updates an existing expense
+  /// 
+  /// Throws [Exception] if the update fails
+  Future<ExpenseData> updateExpense(
+    int expenseId,
+    ExpenseCreateRequest request,
+  ) async {
+    try {
+      final response = await _apiService.updateExpense(expenseId, request.toJson());
+      
+      if (response['success'] == true && response['data'] != null) {
+        return ExpenseData.fromJson(response['data']);
+      } else {
+        throw Exception(response['error'] ?? 'Failed to update expense');
+      }
+    } catch (e) {
+      if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Failed to update expense: ${e.toString()}');
+    }
+  }
+
+  /// Deletes an expense
+  /// 
+  /// Throws [Exception] if the deletion fails
+  Future<void> deleteExpense(int expenseId) async {
+    try {
+      final response = await _apiService.deleteExpense(expenseId);
+      
+      if (response['success'] != true) {
+        throw Exception(response['error'] ?? 'Failed to delete expense');
+      }
+    } catch (e) {
+      if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Failed to delete expense: ${e.toString()}');
+    }
+  }
+
   /// Creates an expense from ExpenseData and roomspace ID
   /// 
   /// This is a convenience method that converts ExpenseData to the proper request format
