@@ -333,6 +333,159 @@ func (h *ExpenseHandler) GetRecentExpenses(c *gin.Context) {
 	})
 }
 
+// UpdateExpense updates an existing expense
+func (h *ExpenseHandler) UpdateExpense(c *gin.Context) {
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authenticated",
+		})
+		return
+	}
+
+	// Get expense ID from URL
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid expense ID",
+		})
+		return
+	}
+
+	// Get existing expense
+	existingExpense, err := h.dbService.GetExpenseByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Expense not found",
+		})
+		return
+	}
+
+	// Verify user is the one who paid for this expense (only they can edit)
+	if existingExpense.PaidBy != userID.(string) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Only the person who paid can edit this expense",
+		})
+		return
+	}
+
+	// Parse request body
+	var req models.CreateExpenseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Validate the request
+	if err := h.validateExpenseRequest(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// Verify user is still a member of the roomspace
+	if err := h.verifyRoomspaceMembership(req.RoomspaceID, userID.(string)); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// Calculate new splits
+	splits, err := h.calculateSplits(&req, userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// Update expense
+	existingExpense.Title = req.Title
+	existingExpense.Description = req.Description
+	existingExpense.Amount = req.Amount
+	existingExpense.Category = req.Category
+	existingExpense.SplitType = req.SplitType
+	existingExpense.Splits = splits
+
+	// Save updated expense
+	if err := h.dbService.UpdateExpense(existingExpense); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to update expense",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to response format
+	response := h.convertToExpenseResponse(existingExpense)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Expense updated successfully",
+		"data":    response,
+	})
+}
+
+// DeleteExpense deletes an expense
+func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authenticated",
+		})
+		return
+	}
+
+	// Get expense ID from URL
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid expense ID",
+		})
+		return
+	}
+
+	// Get existing expense
+	existingExpense, err := h.dbService.GetExpenseByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Expense not found",
+		})
+		return
+	}
+
+	// Verify user is the one who paid for this expense (only they can delete)
+	if existingExpense.PaidBy != userID.(string) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Only the person who paid can delete this expense",
+		})
+		return
+	}
+
+	// Delete expense (soft delete)
+	if err := h.dbService.DeleteExpense(uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to delete expense",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Expense deleted successfully",
+	})
+}
+
 // sendExpenseNotifications sends notifications to selected roommates about the new expense
 func (h *ExpenseHandler) sendExpenseNotifications(expense *models.Expense, creatorUID string) error {
 	// Get the creator's information
@@ -532,4 +685,167 @@ func (h *ExpenseHandler) convertToExpenseResponse(expense *models.Expense) model
 	}
 
 	return response
+}
+
+// CreatePersonalExpense creates a new personal expense (no roomspace or splits)
+func (h *ExpenseHandler) CreatePersonalExpense(c *gin.Context) {
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authenticated",
+		})
+		return
+	}
+
+	// Parse request body
+	var req models.CreatePersonalExpenseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Create personal expense model
+	expense := &models.PersonalExpense{
+		UserUID:     userID.(string),
+		Title:       req.Title,
+		Description: req.Description,
+		Amount:      req.Amount,
+		Category:    req.Category,
+	}
+
+	// Save personal expense to database
+	if err := h.dbService.CreatePersonalExpense(expense); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to create personal expense",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to response format
+	response := models.PersonalExpenseResponse{
+		ID:          expense.ID,
+		Title:       expense.Title,
+		Description: expense.Description,
+		Amount:      expense.Amount,
+		Category:    expense.Category,
+		CreatedAt:   expense.CreatedAt,
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"data":    response,
+		"message": "Personal expense created successfully",
+	})
+}
+
+// GetPersonalExpenses retrieves personal expenses for the authenticated user
+func (h *ExpenseHandler) GetPersonalExpenses(c *gin.Context) {
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authenticated",
+		})
+		return
+	}
+
+	// Parse query parameters for pagination
+	limitStr := c.DefaultQuery("limit", "20")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 20
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	// Get personal expenses from database
+	expenses, err := h.dbService.GetPersonalExpenses(userID.(string), limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve personal expenses",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to response format
+	var responses []models.PersonalExpenseResponse
+	for _, expense := range expenses {
+		responses = append(responses, models.PersonalExpenseResponse{
+			ID:          expense.ID,
+			Title:       expense.Title,
+			Description: expense.Description,
+			Amount:      expense.Amount,
+			Category:    expense.Category,
+			CreatedAt:   expense.CreatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    responses,
+	})
+}
+
+// DeletePersonalExpense deletes a personal expense
+func (h *ExpenseHandler) DeletePersonalExpense(c *gin.Context) {
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authenticated",
+		})
+		return
+	}
+
+	// Get expense ID from URL
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid expense ID",
+		})
+		return
+	}
+
+	// Get existing personal expense
+	existingExpense, err := h.dbService.GetPersonalExpenseByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Personal expense not found",
+		})
+		return
+	}
+
+	// Verify user owns this personal expense
+	if existingExpense.UserUID != userID.(string) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "You can only delete your own personal expenses",
+		})
+		return
+	}
+
+	// Delete personal expense (soft delete)
+	if err := h.dbService.DeletePersonalExpense(uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to delete personal expense",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Personal expense deleted successfully",
+	})
 }
