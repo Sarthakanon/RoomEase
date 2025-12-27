@@ -78,6 +78,9 @@ docs/
 *.md
 !README.md
 
+# PNG assets should stay at root for Flutter
+# png/
+
 # HTML design mockups
 html_designs/
 
