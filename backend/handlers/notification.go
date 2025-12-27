@@ -90,12 +90,7 @@ type ProcessJoinRequestBody struct {
 // ProcessJoinRequest accepts or rejects a join request
 func (h *NotificationHandler) ProcessJoinRequest(c *gin.Context) {
 	userID, _ := c.Get("user_id")
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request ID"})
-		return
-	}
+	requestID := c.Param("id") // Keep as string since it's a UUID
 
 	var body ProcessJoinRequestBody
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -104,7 +99,7 @@ func (h *NotificationHandler) ProcessJoinRequest(c *gin.Context) {
 	}
 
 	// Get request details before processing
-	request, _ := h.dbService.GetJoinRequestByID(strconv.Itoa(int(id)))
+	request, _ := h.dbService.GetJoinRequestByID(requestID)
 	if request == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Join request not found"})
 		return
@@ -128,7 +123,7 @@ func (h *NotificationHandler) ProcessJoinRequest(c *gin.Context) {
 		processorName = processor.Name
 	}
 
-	if err := h.dbService.ProcessJoinRequest(strconv.Itoa(int(id)), userID.(string), body.Accept, ""); err != nil {
+	if err := h.dbService.ProcessJoinRequest(requestID, userID.(string), body.Accept, ""); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

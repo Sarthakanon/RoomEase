@@ -50,7 +50,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _processJoinRequest(
-    int requestId,
+    String requestId,
     bool accept,
     String name,
   ) async {
@@ -94,7 +94,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
         .where((n) => n['is_read'] != true)
         .toList();
     for (final notification in unreadNotifications) {
-      await _apiService.markNotificationAsRead(notification['id']);
+      final notificationId = notification['id'];
+      if (notificationId is int) {
+        await _apiService.markNotificationAsRead(notificationId);
+      } else if (notificationId is String) {
+        final parsedId = int.tryParse(notificationId);
+        if (parsedId != null) {
+          await _apiService.markNotificationAsRead(parsedId);
+        }
+      }
     }
     _loadData();
   }
@@ -286,7 +294,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () =>
-                      _processJoinRequest(request['id'], false, name),
+                      _processJoinRequest(request['id'].toString(), false, name),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.red,
                     side: const BorderSide(color: Colors.red),
@@ -301,7 +309,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () =>
-                      _processJoinRequest(request['id'], true, name),
+                      _processJoinRequest(request['id'].toString(), true, name),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
@@ -351,7 +359,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
 
     return GestureDetector(
-      onTap: isRead ? null : () => _markAsRead(notification['id']),
+      onTap: isRead ? null : () {
+        final notificationId = notification['id'];
+        if (notificationId is int) {
+          _markAsRead(notificationId);
+        } else if (notificationId is String) {
+          final parsedId = int.tryParse(notificationId);
+          if (parsedId != null) {
+            _markAsRead(parsedId);
+          }
+        }
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(14),

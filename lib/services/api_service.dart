@@ -252,7 +252,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> processJoinRequest(
-    int requestId,
+    String requestId,
     bool accept,
   ) async {
     return await post(
@@ -273,6 +273,47 @@ class ApiService {
     } catch (e) {
       print('Error creating expense: $e');
       throw Exception('Failed to create expense: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> createPersonalExpense(
+    Map<String, dynamic> expenseData,
+  ) async {
+    try {
+      // Debug: Print the personal expense data being sent
+      print('Creating personal expense with data: $expenseData');
+      final response = await post('/api/personal-expenses', data: expenseData);
+      return response;
+    } catch (e) {
+      print('Error creating personal expense: $e');
+      throw Exception('Failed to create personal expense: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getPersonalExpenses({
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (limit != null) queryParams['limit'] = limit.toString();
+      if (offset != null) queryParams['offset'] = offset.toString();
+      
+      final path = '/api/personal-expenses${queryParams.isNotEmpty ? '?${Uri(queryParameters: queryParams).query}' : ''}';
+      return await get(path);
+    } catch (e) {
+      print('Error getting personal expenses: $e');
+      throw Exception('Failed to get personal expenses: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> deletePersonalExpense(int expenseId) async {
+    try {
+      final response = await delete('/api/personal-expenses/$expenseId');
+      return response;
+    } catch (e) {
+      print('Error deleting personal expense: $e');
+      throw Exception('Failed to delete personal expense: ${e.toString()}');
     }
   }
 
@@ -325,6 +366,36 @@ class ApiService {
       return await get('/api/roomspaces/$roomspaceId/expenses/recent?limit=$limit');
     } catch (e) {
       throw Exception('Failed to retrieve recent expenses: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> updateExpense(
+    int expenseId,
+    Map<String, dynamic> expenseData,
+  ) async {
+    try {
+      final response = await put('/api/expenses/$expenseId', data: expenseData);
+      return response;
+    } catch (e) {
+      throw Exception('Failed to update expense: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteExpense(int expenseId) async {
+    try {
+      final response = await delete('/api/expenses/$expenseId');
+      return response;
+    } catch (e) {
+      throw Exception('Failed to delete expense: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getRoomspaceMembers(String roomspaceId) async {
+    try {
+      final response = await get('/api/roomspaces/$roomspaceId/members');
+      return response;
+    } catch (e) {
+      throw Exception('Failed to get roomspace members: ${e.toString()}');
     }
   }
 
