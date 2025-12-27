@@ -436,7 +436,13 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   InputDecoration _inputDecoration(String hint, {String? prefixText}) {
     return InputDecoration(
       hintText: hint,
-      prefixText: prefixText,
+      prefix: prefixText != null ? Text(
+        prefixText,
+        style: TextStyle(
+          color: Colors.grey[600],
+          fontSize: 16,
+        ),
+      ) : null,
       filled: true,
       fillColor: Colors.grey[50],
       border: OutlineInputBorder(
