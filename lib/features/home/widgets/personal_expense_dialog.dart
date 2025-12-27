@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../models/expense_models.dart';
+import '../../../models/payment_notification.dart';
+import '../../../services/payment_parser_service.dart';
 
 class PersonalExpenseDialog extends StatefulWidget {
   final Function(PersonalExpenseData) onSubmit;
+  final PaymentNotification? paymentNotification;
 
   const PersonalExpenseDialog({
     super.key,
     required this.onSubmit,
+    this.paymentNotification,
   });
 
   static Future<void> show(
     BuildContext context, {
     required Function(PersonalExpenseData) onSubmit,
+    PaymentNotification? paymentNotification,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -20,6 +25,7 @@ class PersonalExpenseDialog extends StatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (context) => PersonalExpenseDialog(
         onSubmit: onSubmit,
+        paymentNotification: paymentNotification,
       ),
     );
   }
@@ -50,11 +56,54 @@ class _PersonalExpenseDialogState extends State<PersonalExpenseDialog> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _autoFillFromPaymentNotification();
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _amountController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  /// Auto-fill form fields from payment notification
+  void _autoFillFromPaymentNotification() {
+    if (widget.paymentNotification == null) return;
+
+    final notification = widget.paymentNotification!;
+    
+    // Set amount
+    if (notification.amount != null) {
+      _amountController.text = notification.amount!.toStringAsFixed(2);
+    }
+    
+    // Set title based on merchant or app name
+    String title = '';
+    if (notification.merchant != null && notification.merchant!.isNotEmpty) {
+      title = 'Payment to ${notification.merchant}';
+    } else {
+      title = 'Payment via ${notification.appName}';
+    }
+    _titleController.text = title;
+    
+    // Set suggested category
+    final suggestedCategory = PaymentParserService.suggestExpenseCategory(
+      notification.merchant,
+      notification.rawText,
+    );
+    
+    // Find matching category
+    final categoryMatch = _categories.firstWhere(
+      (cat) => cat.name == suggestedCategory,
+      orElse: () => _categories.first,
+    );
+    _selectedCategory = categoryMatch.name;
+    
+    // Set description with payment details
+    _descriptionController.text = 'Auto-detected from ${notification.appName} notification';
   }
 
   void _submit() async {
@@ -326,13 +375,11 @@ class _PersonalExpenseDialogState extends State<PersonalExpenseDialog> {
   InputDecoration _inputDecoration(String hint, {String? prefixText}) {
     return InputDecoration(
       hintText: hint,
-      prefix: prefixText != null ? Text(
-        prefixText,
-        style: TextStyle(
-          color: Colors.grey[600],
-          fontSize: 16,
-        ),
-      ) : null,
+      prefixText: prefixText,
+      prefixStyle: TextStyle(
+        color: Colors.grey[600],
+        fontSize: 16,
+      ),
       filled: true,
       fillColor: Colors.grey[50],
       border: OutlineInputBorder(
