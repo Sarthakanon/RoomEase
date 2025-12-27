@@ -403,6 +403,7 @@ func (s *PostgresService) AutoMigrate() error {
 		&models.JoinRequest{},    // Depends on User and Roomspace
 		&models.Expense{},        // Depends on Roomspace and User
 		&models.ExpenseSplit{},   // Depends on Expense and User
+		&models.PersonalExpense{}, // Depends on User only
 	)
 	if err != nil {
 		return err
@@ -572,6 +573,131 @@ func (s *PostgresService) GetRecentExpenses(roomspaceID string, limit int) ([]mo
 	
 	return expenses, nil
 }
+
+// UpdateExpense updates an existing expense
+func (s *PostgresService) UpdateExpense(expense *models.Expense) error {
+	tx := config.DB.Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("failed to begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Update the expense record
+	if err := tx.Save(expense).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to update expense: %v", err)
+	}
+
+	// Delete existing splits
+	if err := tx.Where("expense_id = ?", expense.ID).Delete(&models.ExpenseSplit{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete existing splits: %v", err)
+	}
+
+	// Create new splits
+	for i := range expense.Splits {
+		expense.Splits[i].ID = 0  // Ensure ID is 0 for auto-increment
+		expense.Splits[i].ExpenseID = expense.ID
+		
+		if err := tx.Create(&expense.Splits[i]).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to create expense split: %v", err)
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	return nil
+}
+
+// DeleteExpense soft deletes an expense
+func (s *PostgresService) DeleteExpense(id uint) error {
+	tx := config.DB.Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("failed to begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Soft delete the expense (GORM will handle the deleted_at field)
+	if err := tx.Delete(&models.Expense{}, id).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete expense: %v", err)
+	}
+
+	// Note: We don't need to delete splits manually as they have CASCADE delete constraint
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	return nil
+}
+
+// Personal Expense Operations
+
+// CreatePersonalExpense creates a new personal expense
+func (s *PostgresService) CreatePersonalExpense(expense *models.PersonalExpense) error {
+	if err := config.DB.Create(expense).Error; err != nil {
+		return fmt.Errorf("failed to create personal expense: %v", err)
+	}
+	return nil
+}
+
+// GetPersonalExpenses gets personal expenses for a user
+func (s *PostgresService) GetPersonalExpenses(userUID string, limit, offset int) ([]models.PersonalExpense, error) {
+	var expenses []models.PersonalExpense
+	
+	query := config.DB.Where("user_uid = ?", userUID).
+		Order("created_at DESC")
+	
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+	
+	if err := query.Find(&expenses).Error; err != nil {
+		return nil, fmt.Errorf("failed to get personal expenses: %v", err)
+	}
+	
+	return expenses, nil
+}
+
+// GetPersonalExpenseByID gets a personal expense by ID
+func (s *PostgresService) GetPersonalExpenseByID(id uint) (*models.PersonalExpense, error) {
+	var expense models.PersonalExpense
+	
+	if err := config.DB.First(&expense, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("personal expense not found")
+		}
+		return nil, fmt.Errorf("failed to get personal expense: %v", err)
+	}
+	
+	return &expense, nil
+}
+
+// DeletePersonalExpense soft deletes a personal expense
+func (s *PostgresService) DeletePersonalExpense(id uint) error {
+	if err := config.DB.Delete(&models.PersonalExpense{}, id).Error; err != nil {
+		return fmt.Errorf("failed to delete personal expense: %v", err)
+	}
+	
+	return nil
+}
+
 // ManualSchemaFix fixes schema inconsistencies between database and models
 func (s *PostgresService) ManualSchemaFix() error {
 	fmt.Println("Running manual schema fixes...")
