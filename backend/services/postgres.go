@@ -404,6 +404,7 @@ func (s *PostgresService) AutoMigrate() error {
 		&models.Expense{},        // Depends on Roomspace and User
 		&models.ExpenseSplit{},   // Depends on Expense and User
 		&models.PersonalExpense{}, // Depends on User only
+		&models.PaymentNotification{}, // Depends on User only
 	)
 	if err != nil {
 		return err
@@ -758,4 +759,88 @@ func (s *PostgresService) ManualSchemaFix() error {
 	
 	fmt.Println("Manual schema fixes completed")
 	return nil
+}
+// Payment Notification Operations
+
+// CreatePaymentNotification creates a new payment notification
+func (s *PostgresService) CreatePaymentNotification(notification *models.PaymentNotification) error {
+	if err := config.DB.Create(notification).Error; err != nil {
+		return fmt.Errorf("failed to create payment notification: %v", err)
+	}
+	return nil
+}
+
+// GetPaymentNotifications gets payment notifications for a user
+func (s *PostgresService) GetPaymentNotifications(userUID string, limit, offset int) ([]models.PaymentNotification, error) {
+	var notifications []models.PaymentNotification
+	
+	query := config.DB.Where("user_uid = ?", userUID).
+		Order("timestamp DESC")
+	
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+	
+	if err := query.Find(&notifications).Error; err != nil {
+		return nil, fmt.Errorf("failed to get payment notifications: %v", err)
+	}
+	
+	return notifications, nil
+}
+
+// GetPaymentNotificationByID gets a payment notification by ID
+func (s *PostgresService) GetPaymentNotificationByID(id uint) (*models.PaymentNotification, error) {
+	var notification models.PaymentNotification
+	
+	if err := config.DB.First(&notification, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("payment notification not found")
+		}
+		return nil, fmt.Errorf("failed to get payment notification: %v", err)
+	}
+	
+	return &notification, nil
+}
+
+// UpdatePaymentNotification updates a payment notification
+func (s *PostgresService) UpdatePaymentNotification(id uint, updates map[string]interface{}) error {
+	result := config.DB.Model(&models.PaymentNotification{}).
+		Where("id = ?", id).
+		Updates(updates)
+	
+	if result.Error != nil {
+		return fmt.Errorf("failed to update payment notification: %v", result.Error)
+	}
+	
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("payment notification not found")
+	}
+	
+	return nil
+}
+
+// DeletePaymentNotification soft deletes a payment notification
+func (s *PostgresService) DeletePaymentNotification(id uint) error {
+	if err := config.DB.Delete(&models.PaymentNotification{}, id).Error; err != nil {
+		return fmt.Errorf("failed to delete payment notification: %v", err)
+	}
+	
+	return nil
+}
+
+// MarkPaymentNotificationAsProcessed marks a payment notification as processed
+func (s *PostgresService) MarkPaymentNotificationAsProcessed(id uint, expenseID *uint) error {
+	updates := map[string]interface{}{
+		"is_processed": true,
+	}
+	
+	if expenseID != nil {
+		updates["expense_id"] = *expenseID
+	}
+	
+	return s.UpdatePaymentNotification(id, updates)
 }
