@@ -6,6 +6,7 @@ import '../../services/payment_notification_service.dart';
 import '../../models/payment_notification.dart';
 import '../../models/expense_models.dart';
 import 'widgets/add_expense_dialog.dart';
+import 'widgets/personal_expense_dialog.dart';
 
 class MobileDashboard extends StatefulWidget {
   const MobileDashboard({super.key});
@@ -24,6 +25,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
   
   // Recent expenses state
   List<ExpenseData> _recentExpenses = [];
+  List<PersonalExpenseData> _recentPersonalExpenses = [];
   bool _isLoadingExpenses = true;
   String? _expensesError;
 
@@ -63,37 +65,60 @@ class _MobileDashboardState extends State<MobileDashboard> {
   }
 
   Future<void> _loadRecentExpenses() async {
-    if (_currentRoomspaceId == null) return;
-    
     try {
       setState(() {
         _isLoadingExpenses = true;
         _expensesError = null;
       });
       
-      final response = await _apiService.getRecentExpenses(_currentRoomspaceId!, limit: 3);
+      // Load both shared and personal expenses concurrently
+      final futures = <Future>[];
       
-      if (response.containsKey('data')) {
-        // Handle null data gracefully
-        final data = response['data'];
-        final List<ExpenseData> expenses;
-        
-        if (data == null) {
-          expenses = [];
-        } else if (data is List) {
-          expenses = data
-              .map((expense) => ExpenseData.fromJson(expense))
+      // Load shared expenses if user has a roomspace
+      if (_currentRoomspaceId != null) {
+        futures.add(_apiService.getRecentExpenses(_currentRoomspaceId!, limit: 3));
+      }
+      
+      // Always load personal expenses
+      futures.add(_apiService.getPersonalExpenses(limit: 3, offset: 0));
+      
+      final results = await Future.wait(futures);
+      
+      List<ExpenseData> sharedExpenses = [];
+      List<PersonalExpenseData> personalExpenses = [];
+      
+      int resultIndex = 0;
+      
+      // Process shared expenses if we loaded them
+      if (_currentRoomspaceId != null) {
+        final sharedResponse = results[resultIndex++];
+        if (sharedResponse.containsKey('data')) {
+          final data = sharedResponse['data'];
+          if (data != null && data is List) {
+            sharedExpenses = data
+                .map((expense) => ExpenseData.fromJson(expense))
+                .toList();
+          }
+        }
+      }
+      
+      // Process personal expenses
+      final personalResponse = results[resultIndex];
+      if (personalResponse.containsKey('data')) {
+        final data = personalResponse['data'];
+        if (data != null && data is List) {
+          personalExpenses = data
+              .map((expense) => PersonalExpenseData.fromJson(expense))
               .toList();
-        } else {
-          expenses = [];
         }
-        
-        if (mounted) {
-          setState(() {
-            _recentExpenses = expenses;
-            _isLoadingExpenses = false;
-          });
-        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _recentExpenses = sharedExpenses;
+          _recentPersonalExpenses = personalExpenses;
+          _isLoadingExpenses = false;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -174,6 +199,9 @@ class _MobileDashboardState extends State<MobileDashboard> {
             
             // Load recent expenses after roomspace is loaded
             _loadRecentExpenses();
+          } else {
+            // Even without a roomspace, load personal expenses
+            _loadRecentExpenses();
           }
         }
       }
@@ -183,15 +211,84 @@ class _MobileDashboardState extends State<MobileDashboard> {
           _hasRoomspace = false;
           _isLoading = false;
         });
+        // Even if roomspace loading fails, try to load personal expenses
+        _loadRecentExpenses();
       }
     }
   }
 
   void _showAddExpenseDialog() {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    _showExpenseOptions(context, primaryColor);
+  }
+
+  void _showExpenseOptions(BuildContext context, Color primaryColor) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Add Expense',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ),
+            
+            // Options
+            ListTile(
+              leading: Icon(Icons.people, color: primaryColor),
+              title: const Text('Add Shared Expense'),
+              subtitle: const Text('Split with roommates'),
+              onTap: () {
+                Navigator.pop(context);
+                _showSharedExpenseDialog();
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.account_balance_wallet, color: primaryColor),
+              title: const Text('Add Personal Expense'),
+              subtitle: const Text('Track personal spending'),
+              onTap: () {
+                Navigator.pop(context);
+                _showPersonalExpenseDialog();
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSharedExpenseDialog() {
     if (_roommates.isEmpty || _currentRoomspaceId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Join a roomspace first to add expenses'),
+          content: Text('Join a roomspace first to add shared expenses'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -209,6 +306,44 @@ class _MobileDashboardState extends State<MobileDashboard> {
       roommates: _roommates,
       roomspaceId: _currentRoomspaceId!,
       onSubmit: _handleExpenseSubmission,
+    );
+  }
+
+  void _showPersonalExpenseDialog() {
+    PersonalExpenseDialog.show(
+      context,
+      onSubmit: (expense) async {
+        try {
+          // Create personal expense request
+          final request = PersonalExpenseCreateRequest.fromExpenseData(expense);
+
+          // Submit to API
+          await _apiService.createPersonalExpense(request.toJson());
+
+          // Refresh recent expenses to show the new personal expense
+          await _refreshRecentExpenses();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Added personal expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to add personal expense: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      },
     );
   }
 
@@ -665,7 +800,34 @@ class _MobileDashboardState extends State<MobileDashboard> {
       );
     }
 
-    if (_recentExpenses.isEmpty) {
+    // Combine and sort both shared and personal expenses by date
+    final combinedExpenses = <Map<String, dynamic>>[];
+    
+    // Add shared expenses
+    for (final expense in _recentExpenses) {
+      combinedExpenses.add({
+        'type': 'shared',
+        'data': expense,
+        'date': expense.createdAt ?? DateTime.now(),
+      });
+    }
+    
+    // Add personal expenses
+    for (final expense in _recentPersonalExpenses) {
+      combinedExpenses.add({
+        'type': 'personal',
+        'data': expense,
+        'date': expense.createdAt ?? DateTime.now(),
+      });
+    }
+    
+    // Sort by date (most recent first)
+    combinedExpenses.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    
+    // Take only the most recent 5 expenses
+    final recentExpenses = combinedExpenses.take(5).toList();
+
+    if (recentExpenses.isEmpty) {
       return Column(
         children: [
           const SizedBox(height: 20),
@@ -694,7 +856,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Add your first expense to start tracking shared costs',
+                  'Add your first expense to start tracking costs',
                   style: TextStyle(
                     color: Colors.grey[500],
                     fontSize: 14,
@@ -729,7 +891,16 @@ class _MobileDashboardState extends State<MobileDashboard> {
 
     return Column(
       children: [
-        ..._recentExpenses.map((expense) => _buildExpenseTile(expense, primaryColor)),
+        ...recentExpenses.map((expenseMap) {
+          final type = expenseMap['type'] as String;
+          final data = expenseMap['data'];
+          
+          if (type == 'shared') {
+            return _buildExpenseTile(data as ExpenseData, primaryColor);
+          } else {
+            return _buildPersonalExpenseTile(data as PersonalExpenseData, primaryColor);
+          }
+        }),
         const SizedBox(height: 100), // Extra space for bottom nav
       ],
     );
@@ -796,6 +967,74 @@ class _MobileDashboardState extends State<MobileDashboard> {
                   color: isPaidByCurrentUser 
                       ? const Color(0xFF10B981) 
                       : Colors.redAccent,
+                ),
+              ),
+              Text(
+                formattedDate,
+                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPersonalExpenseTile(PersonalExpenseData expense, Color primaryColor) {
+    final formattedDate = _formatExpenseDate(expense.createdAt);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.05),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.account_balance_wallet, color: Colors.orange),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  expense.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                Text(
+                  "Personal expense",
+                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                "Rs. ${expense.amount.toStringAsFixed(2)}",
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Colors.orange,
                 ),
               ),
               Text(
