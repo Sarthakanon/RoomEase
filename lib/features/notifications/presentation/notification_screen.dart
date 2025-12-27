@@ -4,6 +4,7 @@ import '../../../services/payment_notification_service.dart';
 import '../../../models/payment_notification.dart';
 import '../../../models/expense_models.dart';
 import '../../home/widgets/add_expense_dialog.dart';
+import '../../home/widgets/personal_expense_dialog.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -576,97 +577,211 @@ class _NotificationScreenState extends State<NotificationScreen> {
       final roomspacesResponse = await _apiService.getRoomspaces();
       final roomspaces = roomspacesResponse['data'] as List<dynamic>? ?? [];
       
-      if (roomspaces.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Join a roomspace first to add expenses'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
+      List<RoommateItem> roommates = [];
+      String? roomspaceId;
+      
+      if (roomspaces.isNotEmpty) {
+        roomspaceId = roomspaces[0]['id']?.toString();
+        final members = roomspaces[0]['members'] as List<dynamic>? ?? [];
+        roommates = members.map((m) {
+          final user = m['user'];
+          return RoommateItem(
+            id: m['firebase_uid'] ?? '',
+            name: user?['name'] ?? user?['email'] ?? 'Unknown',
+            email: user?['email'],
+          );
+        }).toList();
       }
 
-      final roomspaceId = roomspaces[0]['id']?.toString();
+      // Show expense type selection dialog
+      _showExpenseOptionsForPayment(payment, roommates, roomspaceId);
       
-      if (roomspaceId == null) {
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid roomspace ID'),
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
-        return;
       }
-      
-      final members = roomspaces[0]['members'] as List<dynamic>? ?? [];
-      final roommates = members.map((m) {
-        final user = m['user'];
-        return RoommateItem(
-          id: m['firebase_uid'] ?? '',
-          name: user?['name'] ?? user?['email'] ?? 'Unknown',
-          email: user?['email'],
-        );
-      }).toList();
-
-      if (roommates.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No roommates found to share expense with'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-
-      // Show the add expense dialog with pre-filled payment data
-      AddExpenseDialog.show(
-        context,
-        roommates: roommates,
-        roomspaceId: roomspaceId,
-        paymentNotification: payment,
-        onSubmit: (expense) async {
-          try {
-            // Create expense request
-            final request = ExpenseCreateRequest.fromExpenseData(
-              expense,
-              roomspaceId,
-            );
-
-            // Submit to API
-            await _apiService.createExpense(request.toJson());
-
-            // Mark payment as processed
-            _dismissPaymentNotification(payment);
-            
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Added payment expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
-                  ),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to add expense: ${e.toString()}'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          }
-        },
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading roommates: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
+  }
+
+  void _showExpenseOptionsForPayment(PaymentNotification payment, List<RoommateItem> roommates, String? roomspaceId) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Text(
+                    'Add Expense',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.payment, color: Colors.blue, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Payment: Rs. ${payment.amount?.toStringAsFixed(2) ?? 'Unknown'} to ${payment.merchant ?? 'Unknown'}',
+                            style: TextStyle(
+                              color: Colors.blue[800],
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Options
+            ListTile(
+              leading: Icon(Icons.people, color: primaryColor),
+              title: const Text('Add Shared Expense'),
+              subtitle: const Text('Split with roommates'),
+              enabled: roommates.isNotEmpty && roomspaceId != null,
+              onTap: roommates.isNotEmpty && roomspaceId != null ? () {
+                Navigator.pop(context);
+                _showSharedExpenseDialogForPayment(payment, roommates, roomspaceId!);
+              } : null,
+            ),
+            ListTile(
+              leading: Icon(Icons.account_balance_wallet, color: primaryColor),
+              title: const Text('Add Personal Expense'),
+              subtitle: const Text('Track personal spending'),
+              onTap: () {
+                Navigator.pop(context);
+                _showPersonalExpenseDialogForPayment(payment);
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSharedExpenseDialogForPayment(PaymentNotification payment, List<RoommateItem> roommates, String roomspaceId) {
+    AddExpenseDialog.show(
+      context,
+      roommates: roommates,
+      roomspaceId: roomspaceId,
+      paymentNotification: payment,
+      onSubmit: (expense) async {
+        try {
+          // Create expense request
+          final request = ExpenseCreateRequest.fromExpenseData(
+            expense,
+            roomspaceId,
+          );
+
+          // Submit to API
+          await _apiService.createExpense(request.toJson());
+
+          // Mark payment as processed
+          _dismissPaymentNotification(payment);
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Added payment expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to add expense: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      },
+    );
+  }
+
+  void _showPersonalExpenseDialogForPayment(PaymentNotification payment) {
+    PersonalExpenseDialog.show(
+      context,
+      paymentNotification: payment,
+      onSubmit: (expense) async {
+        try {
+          // Create personal expense request
+          final request = PersonalExpenseCreateRequest.fromExpenseData(expense);
+
+          // Submit to API
+          await _apiService.createPersonalExpense(request.toJson());
+
+          // Mark payment as processed
+          _dismissPaymentNotification(payment);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Added personal expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to add personal expense: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      },
+    );
   }
 }
