@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/payment_notification.dart';
+import '../services/api_service.dart';
 import 'notification_listener_service.dart';
 import 'sms_detection_service.dart';
 import 'transaction_validation_service.dart';
@@ -347,6 +348,14 @@ class PaymentNotificationService {
       // Remove from pending
       _pendingNotifications.removeWhere((n) => n.id == notification.id);
       
+      // Mark as processed in database if it has a numeric ID
+      final numericId = int.tryParse(notification.id);
+      if (numericId != null) {
+        ApiService().markPaymentNotificationAsProcessed(numericId).catchError((e) {
+          log('Error marking notification as processed in database: $e');
+        });
+      }
+      
       // Trigger expense dialog callback
       onExpenseRequested?.call(notification);
       
@@ -368,36 +377,86 @@ class PaymentNotificationService {
   /// Save notification to history
   Future<void> _saveNotificationHistory(PaymentNotification notification) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final historyKey = 'payment_notification_history';
+      // Save to database via API
+      final notificationData = {
+        'amount': notification.amount,
+        'merchant': notification.merchant ?? 'Unknown',
+        'app_name': notification.appName,
+        'raw_text': notification.rawText,
+        'type': notification.type.toString().split('.').last.toUpperCase(),
+        'timestamp': notification.timestamp.toIso8601String(),
+      };
       
-      final existingHistory = prefs.getStringList(historyKey) ?? [];
-      existingHistory.add(jsonEncode(notification.toJson()));
-      
-      // Keep only last 100 notifications
-      if (existingHistory.length > 100) {
-        existingHistory.removeRange(0, existingHistory.length - 100);
-      }
-      
-      await prefs.setStringList(historyKey, existingHistory);
+      await ApiService().createPaymentNotification(notificationData);
+      log('Payment notification saved to database');
     } catch (e) {
-      log('Error saving notification history: $e');
+      log('Error saving notification to database: $e');
+      
+      // Fallback to SharedPreferences for offline storage
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final historyKey = 'payment_notification_history';
+        
+        final existingHistory = prefs.getStringList(historyKey) ?? [];
+        existingHistory.add(jsonEncode(notification.toJson()));
+        
+        // Keep only last 100 notifications
+        if (existingHistory.length > 100) {
+          existingHistory.removeRange(0, existingHistory.length - 100);
+        }
+        
+        await prefs.setStringList(historyKey, existingHistory);
+        log('Payment notification saved to local storage as fallback');
+      } catch (localError) {
+        log('Error saving notification to local storage: $localError');
+      }
     }
   }
 
   /// Get notification history
   Future<List<PaymentNotification>> getNotificationHistory() async {
     try {
+      // Try to get from database first
+      final response = await ApiService().getPaymentNotifications(limit: 100);
+      
+      if (response['success'] == true && response['data'] != null) {
+        final List<dynamic> notificationData = response['data'];
+        final notifications = notificationData.map((data) {
+          return PaymentNotification(
+            id: data['id'].toString(),
+            source: 'database',
+            appName: data['app_name'] ?? 'Unknown',
+            rawText: data['raw_text'] ?? '',
+            amount: (data['amount'] as num?)?.toDouble(),
+            merchant: data['merchant'],
+            timestamp: DateTime.parse(data['timestamp']),
+            type: data['type'] == 'CREDIT' ? PaymentType.credit : PaymentType.debit,
+            isProcessed: data['is_processed'] ?? false,
+          );
+        }).toList();
+        
+        log('Loaded ${notifications.length} payment notifications from database');
+        return notifications;
+      }
+    } catch (e) {
+      log('Error getting notifications from database: $e');
+    }
+    
+    // Fallback to SharedPreferences
+    try {
       final prefs = await SharedPreferences.getInstance();
       final historyKey = 'payment_notification_history';
       
       final historyStrings = prefs.getStringList(historyKey) ?? [];
-      return historyStrings.map((str) {
+      final notifications = historyStrings.map((str) {
         final json = jsonDecode(str) as Map<String, dynamic>;
         return PaymentNotification.fromJson(json);
       }).toList();
+      
+      log('Loaded ${notifications.length} payment notifications from local storage');
+      return notifications;
     } catch (e) {
-      log('Error getting notification history: $e');
+      log('Error getting notification history from local storage: $e');
       return [];
     }
   }
