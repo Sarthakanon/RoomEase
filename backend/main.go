@@ -61,6 +61,7 @@ func main() {
 	roomspaceHandler := handlers.NewRoomspaceHandler(dbService)
 	notificationHandler := handlers.NewNotificationHandler(dbService)
 	expenseHandler := handlers.NewExpenseHandler(dbService)
+	paymentNotificationHandler := handlers.NewPaymentNotificationHandler(dbService)
 	healthHandler := handlers.NewHealthHandler()
 
 	// Health check endpoint (public)
@@ -111,6 +112,13 @@ func main() {
 		protected.POST("/personal-expenses", expenseHandler.CreatePersonalExpense)
 		protected.GET("/personal-expenses", expenseHandler.GetPersonalExpenses)
 		protected.DELETE("/personal-expenses/:id", expenseHandler.DeletePersonalExpense)
+		
+		// Payment Notification routes
+		protected.POST("/payment-notifications", paymentNotificationHandler.CreatePaymentNotification)
+		protected.GET("/payment-notifications", paymentNotificationHandler.GetPaymentNotifications)
+		protected.GET("/payment-notifications/:id", paymentNotificationHandler.GetPaymentNotification)
+		protected.PUT("/payment-notifications/:id/processed", paymentNotificationHandler.MarkPaymentNotificationAsProcessed)
+		protected.DELETE("/payment-notifications/:id", paymentNotificationHandler.DeletePaymentNotification)
 	}
 
 	// Start server
