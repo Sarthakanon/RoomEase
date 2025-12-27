@@ -399,6 +399,66 @@ class ApiService {
     }
   }
 
+  // Payment Notification API methods
+  Future<Map<String, dynamic>> createPaymentNotification(Map<String, dynamic> notificationData) async {
+    try {
+      final response = await post('/api/payment-notifications', data: notificationData);
+      return response;
+    } catch (e) {
+      throw Exception('Failed to create payment notification: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getPaymentNotifications({
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (limit != null) queryParams['limit'] = limit.toString();
+      if (offset != null) queryParams['offset'] = offset.toString();
+      
+      final path = '/api/payment-notifications${queryParams.isNotEmpty ? '?${Uri(queryParameters: queryParams).query}' : ''}';
+      return await get(path);
+    } catch (e) {
+      throw Exception('Failed to retrieve payment notifications: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getPaymentNotification(int notificationId) async {
+    try {
+      return await get('/api/payment-notifications/$notificationId');
+    } catch (e) {
+      throw Exception('Failed to retrieve payment notification: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> markPaymentNotificationAsProcessed(
+    int notificationId, {
+    int? expenseId,
+  }) async {
+    try {
+      final data = <String, dynamic>{};
+      if (expenseId != null) {
+        data['expense_id'] = expenseId;
+      }
+      
+      final response = await put('/api/payment-notifications/$notificationId/processed', data: data);
+      return response;
+    } catch (e) {
+      throw Exception('Failed to mark payment notification as processed: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> deletePaymentNotification(int notificationId) async {
+    try {
+      final response = await delete('/api/payment-notifications/$notificationId');
+      return response;
+    } catch (e) {
+      throw Exception('Failed to delete payment notification: ${e.toString()}');
+    }
+  }
+
   String _handleError(DioException error) {
     if (error.response != null) {
       final data = error.response!.data;
