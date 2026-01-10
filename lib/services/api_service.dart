@@ -1,8 +1,9 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, Directory;
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path_provider/path_provider.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -12,7 +13,8 @@ class ApiService {
   }
 
   late final Dio _dio;
-  late final CookieJar _cookieJar;
+  late CookieJar _cookieJar;
+  bool _initialized = false;
 
   // Using localhost with adb reverse works on any network
   // Just run: adb reverse tcp:8080 tcp:8080
@@ -55,6 +57,28 @@ class ApiService {
     _dio.interceptors.add(
       LogInterceptor(requestBody: true, responseBody: true, error: true),
     );
+  }
+
+  /// Initialize persistent cookie storage
+  Future<void> initializePersistentCookies() async {
+    if (_initialized || kIsWeb) return;
+    
+    try {
+      final Directory appDocDir = await getApplicationDocumentsDirectory();
+      final String appDocPath = appDocDir.path;
+      _cookieJar = PersistCookieJar(
+        ignoreExpires: true,
+        storage: FileStorage('$appDocPath/.cookies/'),
+      );
+      
+      // Remove old interceptor and add new one with persistent cookie jar
+      _dio.interceptors.removeWhere((i) => i is CookieManager);
+      _dio.interceptors.insert(0, CookieManager(_cookieJar));
+      _initialized = true;
+      print('Persistent cookie storage initialized at: $appDocPath/.cookies/');
+    } catch (e) {
+      print('Failed to initialize persistent cookies: $e');
+    }
   }
 
   Dio get dio {
