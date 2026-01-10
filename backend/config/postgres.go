@@ -15,6 +15,8 @@ func InitPostgreSQL(databaseURL string) error {
 	// Use sslmode=disable for local development
 	dsn := databaseURL + "?sslmode=disable&connect_timeout=10"
 	
+	log.Printf("Connecting to PostgreSQL with DSN: %s", dsn)
+	
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
