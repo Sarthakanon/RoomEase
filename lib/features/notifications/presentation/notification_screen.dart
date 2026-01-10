@@ -586,7 +586,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         roommates = members.map((m) {
           final user = m['user'];
           return RoommateItem(
-            id: m['firebase_uid'] ?? '',
+            id: m['user_id'] ?? '',  // Changed from 'firebase_uid' to 'user_id'
             name: user?['name'] ?? user?['email'] ?? 'Unknown',
             email: user?['email'],
           );
