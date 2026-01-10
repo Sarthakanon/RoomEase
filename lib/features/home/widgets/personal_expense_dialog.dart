@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import '../../../models/expense_models.dart';
 import '../../../models/payment_notification.dart';
 import '../../../services/payment_parser_service.dart';
+import '../../../services/ocr_service.dart';
+import 'receipt_scanner_dialog.dart';
 
 class PersonalExpenseDialog extends StatefulWidget {
   final Function(PersonalExpenseData) onSubmit;
@@ -106,6 +108,33 @@ class _PersonalExpenseDialogState extends State<PersonalExpenseDialog> {
     _descriptionController.text = 'Auto-detected from ${notification.appName} notification';
   }
 
+  /// Scan receipt using OCR
+  Future<void> _scanReceipt() async {
+    final result = await ReceiptScannerDialog.show(context);
+    
+    if (result != null && mounted) {
+      setState(() {
+        // Fill amount if found
+        if (result.amount != null) {
+          _amountController.text = result.amount!.toStringAsFixed(2);
+        }
+        
+        // Fill merchant as title if found
+        if (result.merchant != null && result.merchant!.isNotEmpty) {
+          _titleController.text = result.merchant!;
+        }
+        
+        // Add scan info to description
+        final descParts = <String>[];
+        if (result.date != null) {
+          descParts.add('Date: ${result.date}');
+        }
+        descParts.add('Scanned from receipt');
+        _descriptionController.text = descParts.join('\n');
+      });
+    }
+  }
+
   void _submit() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
@@ -183,12 +212,27 @@ class _PersonalExpenseDialogState extends State<PersonalExpenseDialog> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.grey[100],
-                      ),
+                    Row(
+                      children: [
+                        // Scan Receipt Button
+                        IconButton(
+                          onPressed: _scanReceipt,
+                          icon: const Icon(Icons.document_scanner),
+                          tooltip: 'Scan Receipt',
+                          style: IconButton.styleFrom(
+                            backgroundColor: primaryColor.withValues(alpha: 0.1),
+                            foregroundColor: primaryColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.grey[100],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
