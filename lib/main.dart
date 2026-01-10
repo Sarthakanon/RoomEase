@@ -19,12 +19,16 @@ import 'features/home/mobile_dashboard.dart';
 import 'features/expenses/presentation/expense_screen.dart';
 import 'features/expenses/presentation/expense_list_screen.dart';
 import 'features/expenses/presentation/personal_expenses_screen.dart';
+import 'services/api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize persistent cookie storage for API service
+  await ApiService().initializePersistentCookies();
 
   // Configure system UI overlay style for status bar
   SystemChrome.setSystemUIOverlayStyle(
