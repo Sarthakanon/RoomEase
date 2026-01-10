@@ -353,6 +353,7 @@ class PaymentNotificationService {
       if (numericId != null) {
         ApiService().markPaymentNotificationAsProcessed(numericId).catchError((e) {
           log('Error marking notification as processed in database: $e');
+          return <String, dynamic>{};
         });
       }
       
