@@ -21,7 +21,7 @@ func NewPaymentNotificationHandler(postgresService *services.PostgresService) *P
 
 // CreatePaymentNotification creates a new payment notification
 func (h *PaymentNotificationHandler) CreatePaymentNotification(c *gin.Context) {
-	userUID := c.GetString("user_uid")
+	userUID := c.GetString("user_id")
 	if userUID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
@@ -69,7 +69,7 @@ func (h *PaymentNotificationHandler) CreatePaymentNotification(c *gin.Context) {
 
 // GetPaymentNotifications gets payment notifications for the authenticated user
 func (h *PaymentNotificationHandler) GetPaymentNotifications(c *gin.Context) {
-	userUID := c.GetString("user_uid")
+	userUID := c.GetString("user_id")
 	if userUID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
@@ -122,7 +122,7 @@ func (h *PaymentNotificationHandler) GetPaymentNotifications(c *gin.Context) {
 
 // GetPaymentNotification gets a specific payment notification
 func (h *PaymentNotificationHandler) GetPaymentNotification(c *gin.Context) {
-	userUID := c.GetString("user_uid")
+	userUID := c.GetString("user_id")
 	if userUID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
@@ -168,7 +168,7 @@ func (h *PaymentNotificationHandler) GetPaymentNotification(c *gin.Context) {
 
 // MarkPaymentNotificationAsProcessed marks a payment notification as processed
 func (h *PaymentNotificationHandler) MarkPaymentNotificationAsProcessed(c *gin.Context) {
-	userUID := c.GetString("user_uid")
+	userUID := c.GetString("user_id")
 	if userUID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
@@ -215,7 +215,7 @@ func (h *PaymentNotificationHandler) MarkPaymentNotificationAsProcessed(c *gin.C
 
 // DeletePaymentNotification deletes a payment notification
 func (h *PaymentNotificationHandler) DeletePaymentNotification(c *gin.Context) {
-	userUID := c.GetString("user_uid")
+	userUID := c.GetString("user_id")
 	if userUID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
