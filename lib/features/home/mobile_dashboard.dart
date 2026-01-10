@@ -3,10 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/widgets/mobile_scaffold.dart';
 import '../../services/api_service.dart';
 import '../../services/payment_notification_service.dart';
+import '../../services/ocr_service.dart';
 import '../../models/payment_notification.dart';
 import '../../models/expense_models.dart';
 import 'widgets/add_expense_dialog.dart';
 import 'widgets/personal_expense_dialog.dart';
+import 'widgets/receipt_scanner_dialog.dart';
 
 class MobileDashboard extends StatefulWidget {
   const MobileDashboard({super.key});
@@ -381,6 +383,209 @@ class _MobileDashboardState extends State<MobileDashboard> {
     );
   }
 
+  /// Scan receipt and show expense type selection with scanned data
+  Future<void> _scanReceiptAndShowOptions() async {
+    final result = await ReceiptScannerDialog.show(context);
+    
+    if (result != null && mounted) {
+      // Show dialog to choose expense type with scanned data
+      _showScannedExpenseTypeDialog(result);
+    }
+  }
+
+  /// Show expense type selection dialog with scanned receipt data
+  void _showScannedExpenseTypeDialog(OcrScanResult scanResult) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            
+            // Header with scanned info
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Receipt Scanned',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[800],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        if (scanResult.amount != null)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Rs. ${scanResult.amount!.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green[800],
+                                ),
+                              ),
+                            ],
+                          ),
+                        if (scanResult.merchant != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            scanResult.merchant!,
+                            style: TextStyle(
+                              color: Colors.green[700],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Options
+            ListTile(
+              leading: Icon(Icons.people, color: primaryColor),
+              title: const Text('Add as Shared Expense'),
+              subtitle: const Text('Split with roommates'),
+              onTap: () {
+                Navigator.pop(context);
+                _showSharedExpenseDialogWithScan(scanResult);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.account_balance_wallet, color: primaryColor),
+              title: const Text('Add as Personal Expense'),
+              subtitle: const Text('Track personal spending'),
+              onTap: () {
+                Navigator.pop(context);
+                _showPersonalExpenseDialogWithScan(scanResult);
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show shared expense dialog with scanned data pre-filled
+  void _showSharedExpenseDialogWithScan(OcrScanResult scanResult) {
+    if (_roommates.isEmpty || _currentRoomspaceId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Join a roomspace first to add shared expenses'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Create a payment notification from scan result to use auto-fill
+    final notification = PaymentNotification(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      source: 'receipt_scan',
+      appName: 'Receipt Scanner',
+      rawText: scanResult.rawText,
+      amount: scanResult.amount,
+      merchant: scanResult.merchant,
+      timestamp: DateTime.now(),
+      type: PaymentType.debit,
+    );
+
+    AddExpenseDialog.show(
+      context,
+      roommates: _roommates,
+      roomspaceId: _currentRoomspaceId!,
+      paymentNotification: notification,
+      onSubmit: _handleExpenseSubmission,
+    );
+  }
+
+  /// Show personal expense dialog with scanned data pre-filled
+  void _showPersonalExpenseDialogWithScan(OcrScanResult scanResult) {
+    // Create a payment notification from scan result to use auto-fill
+    final notification = PaymentNotification(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      source: 'receipt_scan',
+      appName: 'Receipt Scanner',
+      rawText: scanResult.rawText,
+      amount: scanResult.amount,
+      merchant: scanResult.merchant,
+      timestamp: DateTime.now(),
+      type: PaymentType.debit,
+    );
+
+    PersonalExpenseDialog.show(
+      context,
+      paymentNotification: notification,
+      onSubmit: (expense) async {
+        try {
+          final request = PersonalExpenseCreateRequest.fromExpenseData(expense);
+          await _apiService.createPersonalExpense(request.toJson());
+          await _refreshRecentExpenses();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Added personal expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to add personal expense: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      },
+    );
+  }
+
   void _showExpenseDialogFromPayment(PaymentNotification notification) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     _showExpenseOptions(context, primaryColor, paymentNotification: notification);
@@ -601,13 +806,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
                     children: [
                       Expanded(
                         child: InkWell(
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Opening Scanner...'),
-                              ),
-                            );
-                          },
+                          onTap: _scanReceiptAndShowOptions,
                           child: Container(
                             height: 100,
                             decoration: BoxDecoration(
