@@ -63,6 +63,10 @@ func main() {
 	expenseHandler := handlers.NewExpenseHandler(dbService)
 	paymentNotificationHandler := handlers.NewPaymentNotificationHandler(dbService)
 	healthHandler := handlers.NewHealthHandler()
+	
+	// Initialize analytics service and handler
+	analyticsService := services.NewAnalyticsService(dbService)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService, dbService)
 
 	// Health check endpoint (public)
 	router.GET("/health", healthHandler.Check)
@@ -119,6 +123,16 @@ func main() {
 		protected.GET("/payment-notifications/:id", paymentNotificationHandler.GetPaymentNotification)
 		protected.PUT("/payment-notifications/:id/processed", paymentNotificationHandler.MarkPaymentNotificationAsProcessed)
 		protected.DELETE("/payment-notifications/:id", paymentNotificationHandler.DeletePaymentNotification)
+		
+		// Analytics routes
+		protected.GET("/analytics/summary", analyticsHandler.GetSummary)
+		protected.GET("/analytics/trends", analyticsHandler.GetTrends)
+		protected.GET("/analytics/predictions", analyticsHandler.GetPredictions)
+		protected.GET("/analytics/patterns", analyticsHandler.GetPatterns)
+		protected.GET("/analytics/anomalies", analyticsHandler.GetAnomalies)
+		protected.GET("/analytics/recommendations", analyticsHandler.GetRecommendations)
+		protected.GET("/analytics/roomspace/:id", analyticsHandler.GetRoomspaceAnalytics)
+		protected.POST("/analytics/feedback", analyticsHandler.SubmitFeedback)
 	}
 
 	// Start server
