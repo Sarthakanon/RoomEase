@@ -22,7 +22,7 @@ func TestPostgresService_CreateRoomspace(t *testing.T) {
 			roomspace: &models.Roomspace{
 				Name:        "Test Roomspace",
 				Description: stringPtr("Test Description"),
-				CreatorID:   "test-creator-id",
+				CreatorID:   stringPtr("test-creator-id"),
 				MaxMembers:  10,
 				InviteCode:  "ABC12345",
 			},
@@ -32,7 +32,7 @@ func TestPostgresService_CreateRoomspace(t *testing.T) {
 			name: "roomspace with minimal data",
 			roomspace: &models.Roomspace{
 				Name:       "Minimal Room",
-				CreatorID:  "creator-123",
+				CreatorID:  stringPtr("creator-123"),
 				MaxMembers: 5,
 				InviteCode: "XYZ98765",
 			},
@@ -71,7 +71,7 @@ func TestPostgresService_ValidateRoomspaceData(t *testing.T) {
 			name: "valid roomspace",
 			roomspace: &models.Roomspace{
 				Name:        "Valid Room",
-				CreatorID:   "creator-123",
+				CreatorID:   stringPtr("creator-123"),
 				MaxMembers:  10,
 				InviteCode:  "ABC12345",
 			},
@@ -81,7 +81,7 @@ func TestPostgresService_ValidateRoomspaceData(t *testing.T) {
 			name: "empty name",
 			roomspace: &models.Roomspace{
 				Name:        "",
-				CreatorID:   "creator-123",
+				CreatorID:   stringPtr("creator-123"),
 				MaxMembers:  10,
 				InviteCode:  "ABC12345",
 			},
@@ -92,7 +92,7 @@ func TestPostgresService_ValidateRoomspaceData(t *testing.T) {
 			name: "invalid max members",
 			roomspace: &models.Roomspace{
 				Name:        "Test Room",
-				CreatorID:   "creator-123",
+				CreatorID:   stringPtr("creator-123"),
 				MaxMembers:  1,
 				InviteCode:  "ABC12345",
 			},
@@ -359,7 +359,7 @@ func TestPostgresService_ErrorHandling(t *testing.T) {
 	t.Run("invalid roomspace data", func(t *testing.T) {
 		invalidRoomspace := models.Roomspace{
 			Name:       "", // Invalid: empty name
-			CreatorID:  "creator-123",
+			CreatorID:  stringPtr("creator-123"),
 			MaxMembers: 10,
 		}
 
