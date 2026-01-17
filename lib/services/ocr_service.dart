@@ -9,7 +9,7 @@ class OcrScanResult {
   final double? amount;
   final String? merchant;
   final String? date;
-  final String r
+  final String rawText;
   final List<String> allAmounts;
 
   OcrScanResult({
