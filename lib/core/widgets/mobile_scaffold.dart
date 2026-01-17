@@ -86,11 +86,21 @@ class _MobileScaffoldState extends State<MobileScaffold> {
                       },
                     ),
                     _NavBarItem(
-                      icon: Icons.person_rounded,
-                      label: 'Profile',
+                      icon: Icons.analytics_rounded,
+                      label: 'Analytics',
                       isActive: widget.currentIndex == 3,
                       onTap: () {
                         if (widget.currentIndex != 3) {
+                          Navigator.pushNamed(context, '/analytics');
+                        }
+                      },
+                    ),
+                    _NavBarItem(
+                      icon: Icons.person_rounded,
+                      label: 'Profile',
+                      isActive: widget.currentIndex == 4,
+                      onTap: () {
+                        if (widget.currentIndex != 4) {
                           Navigator.pushNamed(context, '/profile');
                         }
                       },
