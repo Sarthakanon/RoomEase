@@ -65,6 +65,40 @@ backend/vendor/
 *.log
 backend/serviceAccount.json
 
+# Compiled Go binaries
+backend/backend
+backend/main
+backend/roomease-backend
+backend/roomease-backend.exe
+
+# -------------------------
+# Machine Learning / Python
+# -------------------------
+# ML Pipeline artifacts
+ml_pipeline/models/*.pkl
+ml_pipeline/models/*.json
+ml_pipeline/models/exported/
+ml_pipeline/data/
+ml_pipeline/__pycache__/
+ml_pipeline/*.pyc
+ml_pipeline/**/*.pyc
+ml_pipeline/**/__pycache__/
+
+# Python virtual environments
+ml_pipeline/venv/
+ml_pipeline/ml_pipeline/venv/
+ml_pipeline/.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
 # -------------------------
 # Documentation / Temporary Files
 # -------------------------
