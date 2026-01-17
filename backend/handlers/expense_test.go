@@ -25,7 +25,7 @@ func TestExpenseHandler_validateExpenseRequest(t *testing.T) {
 		{
 			name: "valid equal split",
 			req: &models.CreateExpenseRequest{
-				RoomspaceID:       1,
+				RoomspaceID:       "1",
 				Title:             "Test Expense",
 				Amount:            100.0,
 				Category:          "Food",
@@ -37,7 +37,7 @@ func TestExpenseHandler_validateExpenseRequest(t *testing.T) {
 		{
 			name: "valid percentage split",
 			req: &models.CreateExpenseRequest{
-				RoomspaceID:       1,
+				RoomspaceID:       "1",
 				Title:             "Test Expense",
 				Amount:            100.0,
 				Category:          "Food",
@@ -50,7 +50,7 @@ func TestExpenseHandler_validateExpenseRequest(t *testing.T) {
 		{
 			name: "valid exact split",
 			req: &models.CreateExpenseRequest{
-				RoomspaceID:       1,
+				RoomspaceID:       "1",
 				Title:             "Test Expense",
 				Amount:            100.0,
 				Category:          "Food",
@@ -63,7 +63,7 @@ func TestExpenseHandler_validateExpenseRequest(t *testing.T) {
 		{
 			name: "invalid percentage split - doesn't sum to 100",
 			req: &models.CreateExpenseRequest{
-				RoomspaceID:       1,
+				RoomspaceID:       "1",
 				Title:             "Test Expense",
 				Amount:            100.0,
 				Category:          "Food",
@@ -77,7 +77,7 @@ func TestExpenseHandler_validateExpenseRequest(t *testing.T) {
 		{
 			name: "invalid exact split - doesn't sum to total",
 			req: &models.CreateExpenseRequest{
-				RoomspaceID:       1,
+				RoomspaceID:       "1",
 				Title:             "Test Expense",
 				Amount:            100.0,
 				Category:          "Food",
@@ -91,7 +91,7 @@ func TestExpenseHandler_validateExpenseRequest(t *testing.T) {
 		{
 			name: "no selected roommates",
 			req: &models.CreateExpenseRequest{
-				RoomspaceID:       1,
+				RoomspaceID:       "1",
 				Title:             "Test Expense",
 				Amount:            100.0,
 				Category:          "Food",
@@ -206,7 +206,7 @@ func TestExpenseHandler_CreateExpense_ValidationErrors(t *testing.T) {
 		{
 			name: "invalid split type",
 			requestBody: models.CreateExpenseRequest{
-				RoomspaceID:       1,
+				RoomspaceID:       "1",
 				Title:             "Test Expense",
 				Amount:            100.0,
 				Category:          "Food",
