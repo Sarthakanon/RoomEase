@@ -405,6 +405,10 @@ func (s *PostgresService) AutoMigrate() error {
 		&models.ExpenseSplit{},   // Depends on Expense and User
 		&models.PersonalExpense{}, // Depends on User only
 		&models.PaymentNotification{}, // Depends on User only
+		&models.AnalyticsCache{}, // Depends on User
+		&models.RecommendationFeedback{}, // Depends on User
+		&models.AnomalyAcknowledgment{}, // Depends on User and Expense
+		&models.MLModel{},        // No dependencies
 	)
 	if err != nil {
 		return err
@@ -843,4 +847,12 @@ func (s *PostgresService) MarkPaymentNotificationAsProcessed(id uint, expenseID 
 	}
 	
 	return s.UpdatePaymentNotification(id, updates)
+}
+
+// Analytics Operations
+
+// CreateRecommendationFeedback creates a new recommendation feedback record
+func (s *PostgresService) CreateRecommendationFeedback(feedback *models.RecommendationFeedback) error {
+	result := config.DB.Create(feedback)
+	return result.Error
 }
