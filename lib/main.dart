@@ -19,6 +19,7 @@ import 'features/home/mobile_dashboard.dart';
 import 'features/expenses/presentation/expense_screen.dart';
 import 'features/expenses/presentation/expense_list_screen.dart';
 import 'features/expenses/presentation/personal_expenses_screen.dart';
+import 'features/analytics/presentation/analytics_page.dart';
 import 'services/api_service.dart';
 
 void main() async {
@@ -122,6 +123,7 @@ class RoomEaseApp extends StatelessWidget {
         '/expenses': (context) => const ExpenseScreen(),
         '/expense-list': (context) => const ExpenseListScreen(),
         '/personal-expenses': (context) => const PersonalExpensesScreen(),
+        '/analytics': (context) => const AnalyticsPage(),
       },
     );
   }
