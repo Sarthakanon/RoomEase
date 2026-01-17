@@ -21,7 +21,7 @@ func TestRoomspace_Validate(t *testing.T) {
 				Name:        "Test Roomspace",
 				Description: stringPtr("Test Description"),
 				InviteCode:  "ABC12345",
-				CreatorID:   "test-creator-id",
+				CreatorID:   stringPtr("test-creator-id"),
 				MaxMembers:  10,
 			},
 			wantErr: false,
@@ -31,7 +31,7 @@ func TestRoomspace_Validate(t *testing.T) {
 			roomspace: Roomspace{
 				Name:       "",
 				InviteCode: "ABC12345",
-				CreatorID:  "test-creator-id",
+				CreatorID:  stringPtr("test-creator-id"),
 				MaxMembers: 10,
 			},
 			wantErr: true,
@@ -42,7 +42,7 @@ func TestRoomspace_Validate(t *testing.T) {
 			roomspace: Roomspace{
 				Name:       "This is a very long roomspace name that exceeds the maximum allowed length of 100 characters for testing purposes",
 				InviteCode: "ABC12345",
-				CreatorID:  "test-creator-id",
+				CreatorID:  stringPtr("test-creator-id"),
 				MaxMembers: 10,
 			},
 			wantErr: true,
@@ -59,7 +59,7 @@ func TestRoomspace_Validate(t *testing.T) {
 					"Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. " +
 					"Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium."),
 				InviteCode: "ABC12345",
-				CreatorID:  "test-creator-id",
+				CreatorID:  stringPtr("test-creator-id"),
 				MaxMembers: 10,
 			},
 			wantErr: true,
@@ -70,7 +70,7 @@ func TestRoomspace_Validate(t *testing.T) {
 			roomspace: Roomspace{
 				Name:       "Test Roomspace",
 				InviteCode: "ABC12345",
-				CreatorID:  "test-creator-id",
+				CreatorID:  stringPtr("test-creator-id"),
 				MaxMembers: 1,
 			},
 			wantErr: true,
@@ -81,7 +81,7 @@ func TestRoomspace_Validate(t *testing.T) {
 			roomspace: Roomspace{
 				Name:       "Test Roomspace",
 				InviteCode: "ABC12345",
-				CreatorID:  "test-creator-id",
+				CreatorID:  stringPtr("test-creator-id"),
 				MaxMembers: 51,
 			},
 			wantErr: true,
@@ -92,7 +92,7 @@ func TestRoomspace_Validate(t *testing.T) {
 			roomspace: Roomspace{
 				Name:       "Test Roomspace",
 				InviteCode: "ABC12345",
-				CreatorID:  "",
+				CreatorID:  stringPtr(""),
 				MaxMembers: 10,
 			},
 			wantErr: true,
@@ -103,7 +103,7 @@ func TestRoomspace_Validate(t *testing.T) {
 			roomspace: Roomspace{
 				Name:       "Test Roomspace",
 				InviteCode: "ABC123",
-				CreatorID:  "test-creator-id",
+				CreatorID:  stringPtr("test-creator-id"),
 				MaxMembers: 10,
 			},
 			wantErr: true,
@@ -114,7 +114,7 @@ func TestRoomspace_Validate(t *testing.T) {
 			roomspace: Roomspace{
 				Name:       "Test Roomspace",
 				InviteCode: "abc12345",
-				CreatorID:  "test-creator-id",
+				CreatorID:  stringPtr("test-creator-id"),
 				MaxMembers: 10,
 			},
 			wantErr: true,
@@ -137,7 +137,7 @@ func TestRoomspace_Validate(t *testing.T) {
 
 func TestRoomspace_IsCreator(t *testing.T) {
 	roomspace := Roomspace{
-		CreatorID: "test-creator-id",
+		CreatorID: stringPtr("test-creator-id"),
 	}
 
 	assert.True(t, roomspace.IsCreator("test-creator-id"))
@@ -277,7 +277,7 @@ func TestRoomspace_ToResponse(t *testing.T) {
 	roomspace := Roomspace{
 		ID:         uuid.New(),
 		Name:       "Test Roomspace",
-		CreatorID:  "creator1",
+		CreatorID:  stringPtr("creator1"),
 		MaxMembers: 10,
 		Members: []RoomspaceMember{
 			{UserID: "creator1", Role: RoleCreator, IsActive: true},
@@ -309,7 +309,7 @@ func TestRoomspace_BeforeCreate(t *testing.T) {
 	roomspace := Roomspace{
 		Name:       "Test Roomspace",
 		InviteCode: "ABC12345",
-		CreatorID:  "test-creator-id",
+		CreatorID:  stringPtr("test-creator-id"),
 	}
 
 	err := roomspace.BeforeCreate(nil)
