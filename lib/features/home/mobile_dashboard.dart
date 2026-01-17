@@ -874,6 +874,57 @@ class _MobileDashboardState extends State<MobileDashboard> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 15),
+                  // View Analytics Button
+                  InkWell(
+                    onTap: () {
+                      Navigator.pushNamed(context, '/analytics');
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            primaryColor.withValues(alpha: 0.1),
+                            primaryColor.withValues(alpha: 0.05),
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: primaryColor.withValues(alpha: 0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.analytics_rounded,
+                            color: primaryColor,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            "View Analytics",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: primaryColor,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: primaryColor,
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   if (!_hasRoomspace && !_isLoading) ...[
                     const SizedBox(height: 20),
                     Row(
