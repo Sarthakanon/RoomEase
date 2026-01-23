@@ -45,6 +45,11 @@ func main() {
 	// Initialize session store
 	sessionStore := services.NewInMemorySessionStore()
 	middleware.SessionStore = sessionStore
+	
+	// Initialize roomspace service for middleware
+	if dbService != nil {
+		middleware.RoomspaceService = dbService
+	}
 
 	// Create Gin router
 	router := gin.Default()
@@ -86,15 +91,16 @@ func main() {
 		// User routes
 		protected.GET("/user/profile", userHandler.GetProfile)
 		protected.PUT("/user/profile", userHandler.UpdateProfile)
+		protected.GET("/user/roomspaces/count", roomspaceHandler.GetRoomspaceCount)
 
 		// Roomspace routes
 		protected.GET("/roomspaces", roomspaceHandler.GetRoomspaces)
 		protected.POST("/roomspaces", roomspaceHandler.CreateRoomspace)
-		protected.GET("/roomspaces/:id", roomspaceHandler.GetRoomspace)
+		protected.GET("/roomspaces/:id", middleware.ValidateRoomspaceMembership(), roomspaceHandler.GetRoomspace)
 		protected.POST("/roomspaces/:id/join", roomspaceHandler.JoinRoomspace)
 		protected.GET("/roomspaces/code/:code", roomspaceHandler.SearchRoomspaceByCode)
 		protected.POST("/roomspaces/code/:code/join", roomspaceHandler.JoinRoomspaceByCode)
-		protected.DELETE("/roomspaces/:id/members", roomspaceHandler.RemoveMember)
+		protected.DELETE("/roomspaces/:id/members", middleware.ValidateRoomspaceMembership(), roomspaceHandler.RemoveMember)
 
 		// Notification routes
 		protected.GET("/notifications", notificationHandler.GetNotifications)
@@ -109,8 +115,8 @@ func main() {
 		protected.GET("/expenses/:id", expenseHandler.GetExpenseByID)
 		protected.PUT("/expenses/:id", expenseHandler.UpdateExpense)
 		protected.DELETE("/expenses/:id", expenseHandler.DeleteExpense)
-		protected.GET("/roomspaces/:id/expenses", expenseHandler.GetRoomspaceExpenses)
-		protected.GET("/roomspaces/:id/expenses/recent", expenseHandler.GetRecentExpenses)
+		protected.GET("/roomspaces/:id/expenses", middleware.ValidateRoomspaceMembership(), expenseHandler.GetRoomspaceExpenses)
+		protected.GET("/roomspaces/:id/expenses/recent", middleware.ValidateRoomspaceMembership(), expenseHandler.GetRecentExpenses)
 		
 		// Personal Expense routes
 		protected.POST("/personal-expenses", expenseHandler.CreatePersonalExpense)
@@ -131,7 +137,7 @@ func main() {
 		protected.GET("/analytics/patterns", analyticsHandler.GetPatterns)
 		protected.GET("/analytics/anomalies", analyticsHandler.GetAnomalies)
 		protected.GET("/analytics/recommendations", analyticsHandler.GetRecommendations)
-		protected.GET("/analytics/roomspace/:id", analyticsHandler.GetRoomspaceAnalytics)
+		protected.GET("/analytics/roomspace/:id", middleware.ValidateRoomspaceMembership(), analyticsHandler.GetRoomspaceAnalytics)
 		protected.POST("/analytics/feedback", analyticsHandler.SubmitFeedback)
 	}
 
