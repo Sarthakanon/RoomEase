@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
 import '../../../services/api_service.dart';
 import '../../../models/expense_models.dart';
+import '../../../providers/roomspace_provider.dart';
 import 'expense_list_screen.dart';
 import 'personal_expenses_screen.dart';
 import 'personal_expense_details_screen.dart';
@@ -27,6 +29,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void initState() {
     super.initState();
     _loadInitialData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Listen for roomspace changes
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    
+    // Reload data if roomspace changed
+    if (activeRoomspaceId != _currentRoomspaceId && activeRoomspaceId != null) {
+      _currentRoomspaceId = activeRoomspaceId;
+      _loadInitialData();
+    }
   }
 
   Future<void> _loadInitialData() async {
@@ -55,25 +71,25 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Future<void> _loadRecentSharedExpenses() async {
     try {
-      final roomspacesResponse = await _apiService.getRoomspaces();
-      if (roomspacesResponse.containsKey('data')) {
-        final roomspaces = roomspacesResponse['data'] as List<dynamic>;
-        if (roomspaces.isNotEmpty) {
-          _currentRoomspaceId = roomspaces[0]['id']?.toString();
-          
-          final response = await _apiService.getRoomspaceExpenses(
-            _currentRoomspaceId!,
-            limit: 5,
-            offset: 0,
-          );
+      // Get active roomspace from provider
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final activeRoomspace = roomspaceProvider.activeRoomspace;
+      
+      if (activeRoomspace != null) {
+        _currentRoomspaceId = activeRoomspace.id;
+        
+        final response = await _apiService.getRoomspaceExpenses(
+          _currentRoomspaceId!,
+          limit: 5,
+          offset: 0,
+        );
 
-          if (response.containsKey('data')) {
-            final data = response['data'];
-            if (data != null && data is List) {
-              _recentSharedExpenses = data
-                  .map((json) => ExpenseData.fromJson(json))
-                  .toList();
-            }
+        if (response.containsKey('data')) {
+          final data = response['data'];
+          if (data != null && data is List) {
+            _recentSharedExpenses = data
+                .map((json) => ExpenseData.fromJson(json))
+                .toList();
           }
         }
       }
