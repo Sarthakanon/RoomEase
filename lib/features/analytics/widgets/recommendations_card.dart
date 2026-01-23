@@ -342,7 +342,7 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
                   ),
                 ),
                 Text(
-                  'Rs. ${recommendation.potentialSavings.toStringAsFixed(2)}/month',
+                  'Rs. ${recommendation.potentialSavings.toStringAsFixed(2)}/m',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.green,
                     fontWeight: FontWeight.bold,
@@ -379,28 +379,30 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
           if (!hasFeedback)
             Row(
               children: [
-                Text(
-                  'Was this helpful?',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
+                Expanded(
+                  child: Text(
+                    'Was this helpful?',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
                   ),
                 ),
-                const Spacer(),
-                TextButton.icon(
+                IconButton(
                   onPressed: () => _submitFeedback(recommendation.id, 'helpful'),
-                  icon: const Icon(Icons.thumb_up_outlined, size: 16),
-                  label: const Text('Yes'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.green,
-                  ),
+                  icon: const Icon(Icons.thumb_up_outlined, size: 18),
+                  color: Colors.green,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Helpful',
                 ),
-                TextButton.icon(
+                const SizedBox(width: 12),
+                IconButton(
                   onPressed: () => _submitFeedback(recommendation.id, 'not_helpful'),
-                  icon: const Icon(Icons.thumb_down_outlined, size: 16),
-                  label: const Text('No'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red,
-                  ),
+                  icon: const Icon(Icons.thumb_down_outlined, size: 18),
+                  color: Colors.red,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Not helpful',
                 ),
               ],
             )
