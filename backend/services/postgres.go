@@ -99,6 +99,13 @@ func (s *PostgresService) GetRoomspaceByID(id string) (*models.Roomspace, error)
 
 // CreateRoomspace creates a new roomspace
 func (s *PostgresService) CreateRoomspace(roomspace *models.Roomspace) error {
+	// Check roomspace limit before creating
+	if roomspace.CreatorID != nil {
+		if err := s.CheckRoomspaceLimit(*roomspace.CreatorID); err != nil {
+			return err
+		}
+	}
+	
 	// Start a transaction
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		// Generate unique invite code
@@ -154,6 +161,20 @@ func (s *PostgresService) GetUserRoomspaces(firebaseUID string) ([]models.Roomsp
 	return roomspaces, nil
 }
 
+// GetUserRoomspaceCount retrieves the count of active roomspaces for a user
+func (s *PostgresService) GetUserRoomspaceCount(firebaseUID string) (int64, error) {
+	var count int64
+	err := config.DB.Model(&models.RoomspaceMember{}).
+		Where("user_id = ? AND is_active = ?", firebaseUID, true).
+		Count(&count).Error
+	
+	if err != nil {
+		return 0, err
+	}
+	
+	return count, nil
+}
+
 // GetRoomspaceByInviteCode retrieves a roomspace by its invite code
 func (s *PostgresService) GetRoomspaceByInviteCode(inviteCode string) (*models.Roomspace, error) {
 	var roomspace models.Roomspace
@@ -205,8 +226,45 @@ func (s *PostgresService) RemoveMemberFromRoomspace(roomspaceID string, memberFi
 	return nil
 }
 
+// CheckRoomspaceLimit verifies user hasn't exceeded 5 roomspace limit
+func (s *PostgresService) CheckRoomspaceLimit(userUID string) error {
+	var count int64
+	err := config.DB.Model(&models.RoomspaceMember{}).
+		Where("user_id = ? AND is_active = ?", userUID, true).
+		Count(&count).Error
+	
+	if err != nil {
+		return err
+	}
+	
+	if count >= 5 {
+		return errors.New("maximum roomspace limit (5) reached")
+	}
+	return nil
+}
+
+// ValidateRoomspaceMembership checks if user is member of requested roomspace
+func (s *PostgresService) ValidateRoomspaceMembership(userUID, roomspaceID string) error {
+	var member models.RoomspaceMember
+	err := config.DB.Where("user_id = ? AND roomspace_id = ? AND is_active = ?", 
+		userUID, roomspaceID, true).First(&member).Error
+	
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("user is not a member of this roomspace")
+		}
+		return err
+	}
+	return nil
+}
+
 // AddMemberToRoomspace adds a user to a roomspace
 func (s *PostgresService) AddMemberToRoomspace(roomspaceID string, firebaseUID string) error {
+	// Check roomspace limit before adding
+	if err := s.CheckRoomspaceLimit(firebaseUID); err != nil {
+		return err
+	}
+	
 	// Check if roomspace exists
 	var roomspace models.Roomspace
 	if err := config.DB.Where("id = ?", roomspaceID).First(&roomspace).Error; err != nil {
@@ -241,6 +299,11 @@ func (s *PostgresService) AddMemberToRoomspace(roomspaceID string, firebaseUID s
 
 // CreateJoinRequest creates a new join request
 func (s *PostgresService) CreateJoinRequest(roomspaceID string, requesterUID string, message string) (*models.JoinRequest, error) {
+	// Check roomspace limit before creating join request
+	if err := s.CheckRoomspaceLimit(requesterUID); err != nil {
+		return nil, err
+	}
+	
 	// Check if roomspace exists
 	var roomspace models.Roomspace
 	if err := config.DB.Where("id = ?", roomspaceID).First(&roomspace).Error; err != nil {
@@ -486,16 +549,64 @@ func (s *PostgresService) CreateExpense(expense *models.Expense) error {
 	return nil
 }
 
-// GetUserExpenses gets expenses for a user
-func (s *PostgresService) GetUserExpenses(userID string, limit, offset int) ([]models.Expense, error) {
+// GetUserExpenses gets expenses for a user with proper roomspace filtering
+func (s *PostgresService) GetUserExpenses(userID string, roomspaceID string, limit, offset int) ([]models.Expense, error) {
 	var expenses []models.Expense
 	
-	// Get expenses where the user is either the payer or has a split
-	query := config.DB.Where("paid_by = ?", userID).
-		Or("id IN (SELECT expense_id FROM expense_splits WHERE user_uid = ?)", userID).
-		Preload("Payer").
+	// If roomspace_id is provided, validate user membership first
+	if roomspaceID != "" {
+		if err := s.ValidateRoomspaceMembership(userID, roomspaceID); err != nil {
+			return nil, fmt.Errorf("access denied: %v", err)
+		}
+		
+		// Get expenses for the specific roomspace where user is involved
+		query := config.DB.Preload("Payer").
+			Preload("Splits").
+			Preload("Splits.User").
+			Where("roomspace_id = ?", roomspaceID).
+			Where("paid_by = ? OR id IN (SELECT expense_id FROM expense_splits WHERE user_uid = ?)", userID, userID).
+			Order("created_at DESC")
+		
+		if limit > 0 {
+			query = query.Limit(limit)
+		}
+		
+		if offset > 0 {
+			query = query.Offset(offset)
+		}
+		
+		err := query.Find(&expenses).Error
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user expenses: %v", err)
+		}
+		
+		return expenses, nil
+	}
+	
+	// If no roomspace_id provided, get expenses from all user's roomspaces
+	// First, get all roomspaces the user is a member of
+	var memberRecords []models.RoomspaceMember
+	if err := config.DB.Where("user_id = ? AND is_active = ?", userID, true).Find(&memberRecords).Error; err != nil {
+		return nil, fmt.Errorf("failed to get user roomspaces: %v", err)
+	}
+	
+	// Extract roomspace IDs
+	var roomspaceIDs []string
+	for _, member := range memberRecords {
+		roomspaceIDs = append(roomspaceIDs, member.RoomspaceID.String())
+	}
+	
+	// If user has no roomspaces, return empty list
+	if len(roomspaceIDs) == 0 {
+		return []models.Expense{}, nil
+	}
+	
+	// Get expenses from user's roomspaces where user is involved
+	query := config.DB.Preload("Payer").
 		Preload("Splits").
 		Preload("Splits.User").
+		Where("roomspace_id IN ?", roomspaceIDs).
+		Where("paid_by = ? OR id IN (SELECT expense_id FROM expense_splits WHERE user_uid = ?)", userID, userID).
 		Order("created_at DESC")
 	
 	if limit > 0 {
@@ -534,7 +645,8 @@ func (s *PostgresService) GetExpenseByID(id uint) (*models.Expense, error) {
 	return &expense, nil
 }
 
-// GetRoomspaceExpenses gets expenses for a roomspace
+// GetRoomspaceExpenses gets expenses for a roomspace with membership validation
+// Note: This method should be called after validating user membership in the handler
 func (s *PostgresService) GetRoomspaceExpenses(roomspaceID string, limit, offset int) ([]models.Expense, error) {
 	var expenses []models.Expense
 	
@@ -561,6 +673,7 @@ func (s *PostgresService) GetRoomspaceExpenses(roomspaceID string, limit, offset
 }
 
 // GetRecentExpenses gets recent expenses for a roomspace
+// Note: This method should be called after validating user membership in the handler
 func (s *PostgresService) GetRecentExpenses(roomspaceID string, limit int) ([]models.Expense, error) {
 	var expenses []models.Expense
 	
@@ -577,6 +690,17 @@ func (s *PostgresService) GetRecentExpenses(roomspaceID string, limit int) ([]mo
 	}
 	
 	return expenses, nil
+}
+
+// GetExpensesByRoomspaceWithValidation gets expenses for a roomspace with user membership validation
+func (s *PostgresService) GetExpensesByRoomspaceWithValidation(userID, roomspaceID string, limit, offset int) ([]models.Expense, error) {
+	// Validate user membership first
+	if err := s.ValidateRoomspaceMembership(userID, roomspaceID); err != nil {
+		return nil, fmt.Errorf("access denied: %v", err)
+	}
+	
+	// Get expenses for the roomspace
+	return s.GetRoomspaceExpenses(roomspaceID, limit, offset)
 }
 
 // UpdateExpense updates an existing expense
