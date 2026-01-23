@@ -46,6 +46,34 @@ func (h *RoomspaceHandler) GetRoomspaces(c *gin.Context) {
 	})
 }
 
+// GetRoomspaceCount retrieves the count of active roomspaces for the current user
+func (h *RoomspaceHandler) GetRoomspaceCount(c *gin.Context) {
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authenticated",
+		})
+		return
+	}
+
+	// Get count of user's active roomspaces
+	count, err := h.dbService.GetUserRoomspaceCount(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve roomspace count",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"count":   count,
+		"limit":   5,
+		"can_join_more": count < 5,
+	})
+}
+
 // CreateRoomspace creates a new roomspace
 func (h *RoomspaceHandler) CreateRoomspace(c *gin.Context) {
 	// Get user ID from context
