@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../controllers/auth_controller.dart';
+import '../../../providers/roomspace_provider.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -33,13 +35,22 @@ class _SignupScreenState extends State<SignupScreen> {
       final userCredential = await _authController.loginWithGoogle();
 
       if (userCredential != null && mounted) {
+        // Load roomspaces into the provider after authentication
+        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+        await roomspaceProvider.loadRoomspaces();
+        
+        if (!mounted) return;
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Welcome ${userCredential.user?.displayName ?? ""}!'),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pushReplacementNamed(context, '/roomspace-selection');
+        Navigator.pushReplacementNamed(
+          context,
+          roomspaceProvider.roomspaceCount == 0 ? '/roomspace-selection' : '/home',
+        );
       }
     } catch (e) {
       if (mounted) {
