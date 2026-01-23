@@ -119,6 +119,7 @@ func (h *ExpenseHandler) GetExpenses(c *gin.Context) {
 	// Parse query parameters
 	limitStr := c.DefaultQuery("limit", "20")
 	offsetStr := c.DefaultQuery("offset", "0")
+	roomspaceID := c.Query("roomspace_id")
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit < 0 {
@@ -130,8 +131,18 @@ func (h *ExpenseHandler) GetExpenses(c *gin.Context) {
 		offset = 0
 	}
 
-	// Get user's expenses
-	expenses, err := h.dbService.GetUserExpenses(userID.(string), limit, offset)
+	// If roomspace_id is provided, validate user membership
+	if roomspaceID != "" {
+		if err := h.verifyRoomspaceMembership(roomspaceID, userID.(string)); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
+
+	// Get user's expenses (filtered by roomspace if provided)
+	expenses, err := h.dbService.GetUserExpenses(userID.(string), roomspaceID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to retrieve expenses",
