@@ -8,6 +8,9 @@
 .DS_Store
 *.env
 
+# Commit scripts (don't commit to repo)
+commit_*.sh
+
 # -------------------------
 # IDEs / Editors
 # -------------------------
