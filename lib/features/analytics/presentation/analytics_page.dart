@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../models/analytics_models.dart';
 import '../../../services/analytics_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
+import '../../../providers/roomspace_provider.dart';
 import '../widgets/spending_trends_chart.dart';
 import '../widgets/category_breakdown_chart.dart';
 import '../widgets/recommendations_card.dart';
@@ -13,7 +15,7 @@ import '../widgets/skeleton_loader.dart';
 /// 
 /// Displays spending insights including:
 /// - Summary card with key metrics
-/// - Tab switching between Personal and Roomspace views
+/// - Roomspace-specific analytics filtered by active roomspace
 /// - Spending trends, category breakdown, predictions, recommendations, and anomalies
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -22,44 +24,47 @@ class AnalyticsPage extends StatefulWidget {
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
-class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProviderStateMixin {
+class _AnalyticsPageState extends State<AnalyticsPage> {
   final AnalyticsService _analyticsService = AnalyticsService();
   
-  late TabController _tabController;
   bool _isLoading = true;
   String? _error;
   DateTime? _lastUpdated;
   bool _isUsingCache = false;
   
-  // Personal analytics data
-  AnalyticsSummary? _personalSummary;
-  
-  // Selected roomspace for roomspace view
-  String? _selectedRoomspaceId;
+  // Analytics data for active roomspace
+  AnalyticsSummary? _summary;
+  String? _currentRoomspaceId;
   
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(_onTabChanged);
-    _loadPersonalAnalytics();
+    // Load analytics after first frame to access provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAnalytics();
+    });
   }
   
   @override
-  void dispose() {
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
-    super.dispose();
-  }
-  
-  void _onTabChanged() {
-    if (_tabController.index == 1 && _selectedRoomspaceId == null) {
-      // TODO: Show roomspace selector when switching to roomspace tab
-      // For now, just show empty state
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Listen for roomspace changes
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    
+    // Reload analytics if roomspace changed
+    if (activeRoomspaceId != _currentRoomspaceId && activeRoomspaceId != null) {
+      _currentRoomspaceId = activeRoomspaceId;
+      _loadAnalytics();
     }
   }
   
-  Future<void> _loadPersonalAnalytics() async {
+  Future<void> _loadAnalytics() async {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    
+    // Allow loading analytics even without active roomspace (for personal expenses)
     setState(() {
       _isLoading = true;
       _error = null;
@@ -67,21 +72,27 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
     });
     
     try {
-      final summary = await _analyticsService.getSummary();
+      final summary = await _analyticsService.getSummary(
+        roomspaceId: activeRoomspaceId, // null means personal expenses
+      );
       
       // Check if we're using cached data
-      final cacheKey = _analyticsService.getSummaryCacheKey();
+      final cacheKey = _analyticsService.getSummaryCacheKey(
+        roomspaceId: activeRoomspaceId,
+      );
       final cacheTimestamp = await _analyticsService.getCacheTimestamp(cacheKey);
       
       setState(() {
-        _personalSummary = summary;
+        _summary = summary;
         _isLoading = false;
         _lastUpdated = cacheTimestamp ?? DateTime.now();
         _isUsingCache = cacheTimestamp != null;
       });
     } catch (e) {
       // Try to get cache timestamp even on error
-      final cacheKey = _analyticsService.getSummaryCacheKey();
+      final cacheKey = _analyticsService.getSummaryCacheKey(
+        roomspaceId: activeRoomspaceId,
+      );
       final cacheTimestamp = await _analyticsService.getCacheTimestamp(cacheKey);
       
       setState(() {
@@ -94,32 +105,26 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
   }
   
   Future<void> _refreshAnalytics() async {
-    await _loadPersonalAnalytics();
+    await _loadAnalytics();
   }
   
   @override
   Widget build(BuildContext context) {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
+    final activeRoomspace = roomspaceProvider.activeRoomspace;
+    
     return MobileScaffold(
       currentIndex: 3, // Analytics tab index
       showBottomNav: true,
       body: SafeArea(
         child: Column(
           children: [
-            // Header
-            _buildHeader(),
-            
-            // Tab bar
-            _buildTabBar(),
+            // Header with roomspace name
+            _buildHeader(activeRoomspace?.name),
             
             // Content
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildPersonalView(),
-                  _buildRoomspaceView(),
-                ],
-              ),
+              child: _buildAnalyticsView(),
             ),
           ],
         ),
@@ -127,7 +132,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
     );
   }
   
-  Widget _buildHeader() {
+  Widget _buildHeader(String? roomspaceName) {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
+    final activeRoomspace = roomspaceProvider.activeRoomspace;
+    
     return Container(
       padding: const EdgeInsets.all(20),
       color: Colors.white,
@@ -141,17 +149,72 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
                 color: Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 12),
-              Text(
-                'Analytics',
-                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Analytics',
+                      style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    if (activeRoomspace != null)
+                      Row(
+                        children: [
+                          Text(
+                            'for ',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          // Visual indicator (color badge + icon)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: activeRoomspace.visualColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: activeRoomspace.visualColor.withValues(alpha: 0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  activeRoomspace.visualIcon,
+                                  size: 14,
+                                  color: activeRoomspace.visualColor,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  activeRoomspace.name,
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: activeRoomspace.visualColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Text(
+                        'Personal Expenses',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              const Spacer(),
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
                 onPressed: _refreshAnalytics,
                 tooltip: 'Refresh',
+                padding: const EdgeInsets.all(12),
               ),
             ],
           ),
@@ -160,7 +223,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
           if (_isUsingCache && _lastUpdated != null)
             Container(
               margin: const EdgeInsets.only(top: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.blue.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
@@ -175,7 +238,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
                     size: 16,
                     color: Colors.blue,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Showing cached data from ${_formatCacheTime(_lastUpdated!)}',
@@ -192,30 +255,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
     );
   }
   
-  Widget _buildTabBar() {
-    return Container(
-      color: Colors.white,
-      child: TabBar(
-        controller: _tabController,
-        labelColor: Theme.of(context).colorScheme.primary,
-        unselectedLabelColor: Colors.grey,
-        indicatorColor: Theme.of(context).colorScheme.primary,
-        indicatorWeight: 3,
-        tabs: const [
-          Tab(
-            icon: Icon(Icons.person_rounded),
-            text: 'Personal',
-          ),
-          Tab(
-            icon: Icon(Icons.group_rounded),
-            text: 'Roomspace',
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildPersonalView() {
+  Widget _buildAnalyticsView() {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    
     if (_isLoading) {
       return SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -268,13 +311,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
               onPressed: _refreshAnalytics,
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
             ),
           ],
         ),
       );
     }
     
-    if (_personalSummary == null) {
+    if (_summary == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -310,74 +356,34 @@ class _AnalyticsPageState extends State<AnalyticsPage> with SingleTickerProvider
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Summary card
-            _buildSummaryCard(_personalSummary!),
+            _buildSummaryCard(_summary!),
             
             const SizedBox(height: 24),
             
             // Spending trends chart
-            SpendingTrendsChart(roomspaceId: null),
+            SpendingTrendsChart(roomspaceId: activeRoomspaceId),
             
             const SizedBox(height: 16),
             
             // Category breakdown
-            CategoryBreakdownChart(categories: _personalSummary!.topCategories),
+            CategoryBreakdownChart(categories: _summary!.topCategories),
             
             const SizedBox(height: 16),
             
             // Predictions
-            PredictionsCard(roomspaceId: null),
+            PredictionsCard(roomspaceId: activeRoomspaceId),
             
             const SizedBox(height: 16),
             
             // Recommendations
-            RecommendationsCard(roomspaceId: null),
+            RecommendationsCard(roomspaceId: activeRoomspaceId),
             
             const SizedBox(height: 16),
             
             // Anomaly alerts
-            AnomalyAlertCard(roomspaceId: null),
+            AnomalyAlertCard(roomspaceId: activeRoomspaceId),
           ],
         ),
-      ),
-    );
-  }
-  
-  Widget _buildRoomspaceView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.group_outlined,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Roomspace Analytics',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Select a roomspace to view analytics',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              // TODO: Show roomspace selector
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Roomspace selector coming soon'),
-                ),
-              );
-            },
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Select Roomspace'),
-          ),
-        ],
       ),
     );
   }
