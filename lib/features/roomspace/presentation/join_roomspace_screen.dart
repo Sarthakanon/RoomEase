@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../services/api_service.dart';
+import '../../../providers/roomspace_provider.dart';
 
 // ==========================================
 // 1. LOGIC SECTION (The "Controller")
@@ -70,9 +72,42 @@ class _JoinRoomspaceScreenState extends State<JoinRoomspaceScreen> {
   
   // State Variable
   bool _isLoading = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    // Check limit on screen load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkRoomspaceLimit();
+    });
+  }
+  
+  // Check if user has reached the roomspace limit
+  void _checkRoomspaceLimit() {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    
+    if (!roomspaceProvider.canJoinMore) {
+      // Show error message if at limit
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Maximum roomspace limit reached (${roomspaceProvider.roomspaceCount}/5)'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
 
   // --- BUTTON ACTION ---
   Future<void> _handleJoinButton() async {
+    // Check limit before attempting to join
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    
+    if (!roomspaceProvider.canJoinMore) {
+      _showErrorSnackBar('Maximum roomspace limit reached. You can only join up to 5 roomspaces.');
+      return;
+    }
+    
     // 1. Validate the form (check if text field is empty)
     if (!_formKey.currentState!.validate()) return;
 
@@ -128,7 +163,7 @@ class _JoinRoomspaceScreenState extends State<JoinRoomspaceScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1), // Simpler opacity
+                  color: Colors.green.withValues(alpha: 0.1), // Simpler opacity
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.check_rounded, color: Colors.green, size: 32),
@@ -152,9 +187,16 @@ class _JoinRoomspaceScreenState extends State<JoinRoomspaceScreen> {
               
               // Button
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   Navigator.of(context).pop(); // Close dialog
-                  Navigator.pushReplacementNamed(context, '/home'); // Go home
+                  
+                  // Refresh roomspaces in the provider before navigating
+                  final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+                  await roomspaceProvider.refreshRoomspaces();
+                  
+                  if (context.mounted) {
+                    Navigator.pushReplacementNamed(context, '/home'); // Go home
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
@@ -177,34 +219,44 @@ class _JoinRoomspaceScreenState extends State<JoinRoomspaceScreen> {
   // ==========================================
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white, // Standard background
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(),       // Extracted for readability
-                const SizedBox(height: 40),
-                _buildInputField(),   // Extracted for readability
-                const SizedBox(height: 40),
-                _buildSubmitButton(), // Extracted for readability
-              ],
+    return Consumer<RoomspaceProvider>(
+      builder: (context, roomspaceProvider, child) {
+        return Scaffold(
+          backgroundColor: Colors.white, // Standard background
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ),
-        ),
-      ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),       // Extracted for readability
+                    const SizedBox(height: 16),
+                    _buildRoomspaceCounter(roomspaceProvider), // Show count
+                    const SizedBox(height: 24),
+                    if (!roomspaceProvider.canJoinMore)
+                      _buildLimitReachedWarning(), // Show warning if at limit
+                    if (!roomspaceProvider.canJoinMore)
+                      const SizedBox(height: 24),
+                    _buildInputField(roomspaceProvider),   // Extracted for readability
+                    const SizedBox(height: 40),
+                    _buildSubmitButton(roomspaceProvider), // Extracted for readability
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -227,8 +279,90 @@ class _JoinRoomspaceScreenState extends State<JoinRoomspaceScreen> {
       ],
     );
   }
+  
+  Widget _buildRoomspaceCounter(RoomspaceProvider provider) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: provider.canJoinMore ? Colors.blue.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: provider.canJoinMore ? Colors.blue.withValues(alpha: 0.3) : Colors.orange.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            provider.canJoinMore ? Icons.info_outline : Icons.warning_amber_rounded,
+            color: provider.canJoinMore ? Colors.blue : Colors.orange,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'You have ${provider.roomspaceCount}/5 roomspaces',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: provider.canJoinMore ? Colors.blue[800] : Colors.orange[800],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildLimitReachedWarning() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.red.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.error_outline,
+            color: Colors.red,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Maximum roomspace limit reached',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'You can only join up to 5 roomspaces. Please leave a roomspace before joining a new one.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.red[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  Widget _buildInputField() {
+  Widget _buildInputField(RoomspaceProvider provider) {
+    final isDisabled = !provider.canJoinMore;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -239,13 +373,19 @@ class _JoinRoomspaceScreenState extends State<JoinRoomspaceScreen> {
         const SizedBox(height: 8),
         TextFormField(
           controller: _roomIdController,
+          enabled: !isDisabled,
           textCapitalization: TextCapitalization.characters,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+            color: isDisabled ? Colors.grey[400] : Colors.black,
+          ),
           decoration: InputDecoration(
             hintText: 'ABC12345',
             filled: true,
-            fillColor: Colors.grey[100],
-            prefixIcon: const Icon(Icons.tag, color: Colors.grey),
+            fillColor: isDisabled ? Colors.grey[200] : Colors.grey[100],
+            prefixIcon: Icon(Icons.tag, color: isDisabled ? Colors.grey[400] : Colors.grey),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide.none,
@@ -266,21 +406,28 @@ class _JoinRoomspaceScreenState extends State<JoinRoomspaceScreen> {
     );
   }
 
-  Widget _buildSubmitButton() {
+  Widget _buildSubmitButton(RoomspaceProvider provider) {
+    final isDisabled = !provider.canJoinMore;
+    
     return SizedBox(
       width: double.infinity,
       height: 54,
       child: ElevatedButton(
-        onPressed: _isLoading ? null : _handleJoinButton,
+        onPressed: (_isLoading || isDisabled) ? null : _handleJoinButton,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Theme.of(context).primaryColor,
+          backgroundColor: isDisabled ? Colors.grey[400] : Theme.of(context).primaryColor,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          disabledBackgroundColor: Colors.grey[300],
         ),
         child: _isLoading
             ? const CircularProgressIndicator(color: Colors.white)
-            : const Text(
-                'Join Room',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+            : Text(
+                isDisabled ? 'Limit Reached' : 'Join Room',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDisabled ? Colors.grey[600] : Colors.white,
+                ),
               ),
       ),
     );
