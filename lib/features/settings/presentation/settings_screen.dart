@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../../services/firebase_auth_service.dart';
 import '../../../services/api_service.dart';
+import '../../../providers/roomspace_provider.dart';
+import '../../../models/roomspace_data.dart';
+import '../../../core/widgets/skeleton_loader.dart';
 import 'payment_notification_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -17,9 +21,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ---------------------------------------------------
   String _userName = "Loading...";
   String _userEmail = "Loading...";
-  String _currentRoomId = "Loading...";
-  String _roomspaceName = "Loading...";
-  bool _hasRoomspace = false;
 
   bool _notificationsEnabled = true;
   bool _isLoading = true;
@@ -45,22 +46,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _userEmail = user.email ?? "No email";
         });
 
-        try {
-          final response = await _apiService.getRoomspaces();
-          if (response.containsKey('data')) {
-            final roomspaces = response['data'] as List<dynamic>;
-            if (roomspaces.isNotEmpty) {
-              final roomspace = roomspaces[0];
-              setState(() {
-                _hasRoomspace = true;
-                _roomspaceName = roomspace['name'] ?? 'Unknown';
-                _currentRoomId = roomspace['invite_code'] ?? 'N/A';
-              });
-            }
-          }
-        } catch (e) {
-          setState(() => _hasRoomspace = false);
-        }
+        // Load roomspaces through provider
+        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+        await roomspaceProvider.loadRoomspaces();
 
         setState(() => _isLoading = false);
       }
@@ -76,8 +64,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Actions
   // ---------------------------------------------------
 
-  void _copyRoomId() {
-    Clipboard.setData(ClipboardData(text: _currentRoomId));
+  void _copyInviteCode(String inviteCode) {
+    Clipboard.setData(ClipboardData(text: inviteCode));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Invite code copied to clipboard!'),
@@ -268,25 +256,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _leaveRoomspace() {
+  void _leaveRoomspace(RoomspaceData roomspace) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Leave Room',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        content: Text('Are you sure you want to leave "$_roomspaceName"?'),
+        content: Text('Are you sure you want to leave "${roomspace.name}"?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushReplacementNamed(context, '/roomspace-selection');
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              
+              // Show loading indicator
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Leaving roomspace...'),
+                  duration: const Duration(seconds: 2),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+              
+              try {
+                final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+                await roomspaceProvider.leaveRoomspace(roomspace.id);
+                
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Left "${roomspace.name}" successfully'),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  );
+                  
+                  // If no roomspaces left, navigate to roomspace selection
+                  if (roomspaceProvider.roomspaceCount == 0) {
+                    Navigator.pushReplacementNamed(context, '/roomspace-selection');
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to leave roomspace: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
@@ -308,98 +336,115 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: primaryColor))
-          : CustomScrollView(
-              slivers: [
-                // Custom Header
-                SliverAppBar(
-                  backgroundColor: const Color(0xFFF8F9FA),
-                  elevation: 0,
-                  pinned: true,
-                  centerTitle: true,
-                  title: const Text(
-                    'Settings',
-                    style: TextStyle(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-
-                // Content
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 1. Profile Card
-                        _buildProfileCard(),
-                        const SizedBox(height: 24),
-
-                        // 2. Roomspace Section
-                        const Text(
-                          "Room Management",
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey,
-                          ),
+    return Consumer<RoomspaceProvider>(
+      builder: (context, roomspaceProvider, child) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8F9FA),
+          body: _isLoading || roomspaceProvider.isLoading
+              ? Center(child: CircularProgressIndicator(color: primaryColor))
+              : CustomScrollView(
+                  slivers: [
+                    // Custom Header
+                    SliverAppBar(
+                      backgroundColor: const Color(0xFFF8F9FA),
+                      elevation: 0,
+                      pinned: true,
+                      centerTitle: true,
+                      title: const Text(
+                        'Settings',
+                        style: TextStyle(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(height: 10),
-                        _hasRoomspace ? _buildRoomCard() : _buildNoRoomCard(),
-                        const SizedBox(height: 24),
+                      ),
+                    ),
 
-                        // 3. General Settings
-                        const Text(
-                          "Account & App",
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey,
-                          ),
+                    // Content
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
                         ),
-                        const SizedBox(height: 10),
-                        _buildSettingsContainer(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 1. Profile Card
+                            _buildProfileCard(),
+                            const SizedBox(height: 24),
 
-                        const SizedBox(height: 30),
-
-                        // 4. Logout Button
-                        SizedBox(
-                          width: double.infinity,
-                          child: TextButton(
-                            onPressed: _showLogoutDialog,
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.grey.shade200),
-                              ),
-                            ),
-                            child: const Text(
-                              "Log Out",
+                            // 2. Roomspace Section
+                            const Text(
+                              "Room Management",
                               style: TextStyle(
-                                color: Colors.red,
+                                fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                                color: Colors.grey,
                               ),
                             ),
-                          ),
+                            const SizedBox(height: 10),
+                            
+                            // Roomspace Dropdown Selector
+                            if (roomspaceProvider.isLoading)
+                              const RoomspaceListSkeleton(itemCount: 1)
+                            else if (roomspaceProvider.roomspaces.isEmpty)
+                              _buildNoRoomCard()
+                            else
+                              _buildRoomspaceDropdown(roomspaceProvider),
+                            
+                            const SizedBox(height: 16),
+                            
+                            // Join Another Room button
+                            _buildJoinAnotherRoomButton(roomspaceProvider),
+                            
+                            const SizedBox(height: 24),
+
+                            // 3. General Settings
+                            const Text(
+                              "Account & App",
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            _buildSettingsContainer(),
+
+                            const SizedBox(height: 30),
+
+                            // 4. Logout Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: TextButton(
+                                onPressed: _showLogoutDialog,
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    side: BorderSide(color: Colors.grey.shade200),
+                                  ),
+                                ),
+                                child: const Text(
+                                  "Log Out",
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 40),
+                          ],
                         ),
-                        const SizedBox(height: 40),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+        );
+      },
     );
   }
 
@@ -468,13 +513,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildRoomCard() {
+  /// Build list of all roomspace cards
+  List<Widget> _buildRoomspacesList(List<RoomspaceData> roomspaces) {
+    return roomspaces.map((roomspace) => Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _buildRoomspaceCard(roomspace),
+    )).toList();
+  }
+
+  /// Build roomspace dropdown selector
+  Widget _buildRoomspaceDropdown(RoomspaceProvider roomspaceProvider) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final activeRoomspace = roomspaceProvider.activeRoomspace;
+    
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
@@ -484,76 +540,357 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+              Icon(Icons.home_work_rounded, color: primaryColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Active Roomspace',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[600],
                 ),
-                child: const Icon(Icons.home_rounded, color: Color(0xFF10B981)),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              const Spacer(),
+              Text(
+                '${roomspaceProvider.roomspaceCount}/5',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: activeRoomspace?.id,
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: primaryColor, width: 2),
+              ),
+            ),
+            icon: Icon(Icons.arrow_drop_down, color: primaryColor),
+            isExpanded: true,
+            items: roomspaceProvider.roomspaces.map((roomspace) {
+              return DropdownMenuItem<String>(
+                value: roomspace.id,
+                child: Row(
                   children: [
-                    Text(
-                      _roomspaceName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: roomspace.visualColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        roomspace.visualIcon,
+                        color: roomspace.visualColor,
+                        size: 16,
                       ),
                     ),
-                    Text(
-                      "Invite Code: $_currentRoomId",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                        fontFamily: 'monospace',
-                        letterSpacing: 1,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${roomspace.name} (${roomspace.memberCount})',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
+              );
+            }).toList(),
+            onChanged: (String? newRoomspaceId) async {
+              if (newRoomspaceId != null && newRoomspaceId != activeRoomspace?.id) {
+                try {
+                  await roomspaceProvider.setActiveRoomspace(newRoomspaceId);
+                  final newRoomspace = roomspaceProvider.getRoomspaceById(newRoomspaceId);
+                  if (mounted && newRoomspace != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Switched to "${newRoomspace.name}"'),
+                        backgroundColor: Colors.green,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Failed to switch roomspace'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          // Quick actions row
+          Row(
+            children: [
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: activeRoomspace != null 
+                      ? () => _copyInviteCode(activeRoomspace.inviteCode)
+                      : null,
+                  icon: Icon(Icons.copy_rounded, size: 16, color: primaryColor),
+                  label: Text(
+                    'Copy Code',
+                    style: TextStyle(color: primaryColor, fontSize: 12),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
               ),
-              IconButton(
-                onPressed: _copyRoomId,
-                icon: Icon(Icons.copy_rounded, color: primaryColor, size: 20),
+              Container(width: 1, height: 20, color: Colors.grey[200]),
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: activeRoomspace != null 
+                      ? () => _leaveRoomspace(activeRoomspace)
+                      : null,
+                  icon: const Icon(Icons.exit_to_app_rounded, size: 16, color: Colors.orange),
+                  label: const Text(
+                    'Leave',
+                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Divider(height: 1, color: Colors.grey[100]),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: _leaveRoomspace,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(
-                    Icons.exit_to_app_rounded,
-                    color: Colors.orange,
-                    size: 18,
+        ],
+      ),
+    );
+  }
+
+  /// Build a single roomspace card
+  Widget _buildRoomspaceCard(RoomspaceData roomspace) {
+    return Consumer<RoomspaceProvider>(
+      builder: (context, roomspaceProvider, child) {
+        final primaryColor = Theme.of(context).colorScheme.primary;
+        final isActive = roomspaceProvider.getActiveRoomspaceId() == roomspace.id;
+        
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: isActive 
+                ? Border.all(color: primaryColor, width: 2)
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  // Visual indicator (color + icon)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: roomspace.visualColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      roomspace.visualIcon,
+                      color: roomspace.visualColor,
+                      size: 24,
+                    ),
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    "Leave Room",
-                    style: TextStyle(
-                      color: Colors.orange,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                roomspace.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                            if (isActive) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: primaryColor,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'ACTIVE',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Invite Code: ${roomspace.inviteCode}",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[500],
+                            fontFamily: 'monospace',
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "${roomspace.memberCount} member${roomspace.memberCount != 1 ? 's' : ''}",
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _copyInviteCode(roomspace.inviteCode),
+                    icon: Icon(Icons.copy_rounded, color: primaryColor, size: 20),
+                    tooltip: 'Copy invite code',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Divider(height: 1, color: Colors.grey[100]),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  // Switch to this roomspace button
+                  if (!isActive)
+                    Expanded(
+                      child: InkWell(
+                        onTap: () async {
+                          try {
+                            await roomspaceProvider.setActiveRoomspace(roomspace.id);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Switched to "${roomspace.name}"'),
+                                  backgroundColor: Colors.green,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to switch roomspace'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.swap_horiz_rounded,
+                                color: primaryColor,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "Switch to this room",
+                                style: TextStyle(
+                                  color: primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (!isActive) ...[
+                    Container(
+                      width: 1,
+                      height: 20,
+                      color: Colors.grey[200],
+                    ),
+                  ],
+                  // Leave room button
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _leaveRoomspace(roomspace),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(
+                              Icons.exit_to_app_rounded,
+                              color: Colors.orange,
+                              size: 18,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              "Leave Room",
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -599,6 +936,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Build "Join Another Room" button
+  Widget _buildJoinAnotherRoomButton(RoomspaceProvider provider) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final canJoin = provider.canJoinMore;
+    
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: canJoin
+            ? () => Navigator.pushNamed(context, '/join-roomspace')
+            : null,
+        icon: Icon(
+          Icons.add_home_rounded,
+          color: canJoin ? Colors.white : Colors.grey[400],
+        ),
+        label: Text(
+          canJoin ? "Join Another Room" : "Maximum Limit Reached (5/5)",
+          style: TextStyle(
+            color: canJoin ? Colors.white : Colors.grey[400],
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: canJoin ? primaryColor : Colors.grey[200],
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: canJoin ? 2 : 0,
+        ),
       ),
     );
   }
