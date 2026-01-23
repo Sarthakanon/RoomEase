@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:room_ease/models/expense_models.dart';
 import 'package:room_ease/services/expense_service.dart';
 import 'package:room_ease/services/api_service.dart';
+import 'package:room_ease/providers/roomspace_provider.dart';
+import 'package:room_ease/core/widgets/skeleton_loader.dart';
 import 'package:room_ease/features/expenses/presentation/expense_details_screen.dart';
 import 'package:room_ease/features/home/widgets/add_expense_dialog.dart';
 import 'package:room_ease/features/home/widgets/personal_expense_dialog.dart';
@@ -44,7 +47,10 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _loadExpenses(reset: true);
+    // Delay loading to ensure provider is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadExpenses(reset: true);
+    });
   }
 
   @override
@@ -76,6 +82,13 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     try {
       List<ExpenseData> expenses;
       
+      // Get active roomspace from provider if not specified
+      String? effectiveRoomspaceId = widget.roomspaceId;
+      if (!widget.isPersonalExpenses && effectiveRoomspaceId == null) {
+        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+        effectiveRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+      }
+      
       if (widget.isPersonalExpenses) {
          // Using the generic fetch for now, ensuring logic handles personal flag
          // Assuming ExpenseService has a method for personal expenses or handles it internally
@@ -87,9 +100,9 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
           limit: _pageSize,
           offset: _currentPage * _pageSize,
         );
-      } else if (widget.roomspaceId != null) {
+      } else if (effectiveRoomspaceId != null) {
         final response = await _expenseService.getRoomspaceExpenses(
-          widget.roomspaceId!,
+          effectiveRoomspaceId,
           limit: _pageSize,
           offset: _currentPage * _pageSize,
         );
@@ -184,6 +197,16 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   }
 
   Widget _buildHeader(Color themeColor) {
+    // Get roomspace name from provider
+    String roomspaceName = '';
+    if (!widget.isPersonalExpenses) {
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final activeRoomspace = roomspaceProvider.activeRoomspace;
+      if (activeRoomspace != null) {
+        roomspaceName = activeRoomspace.name;
+      }
+    }
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.only(
@@ -219,14 +242,30 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
               ),
               const SizedBox(width: 15),
               Expanded(
-                child: Text(
-                  widget.isPersonalExpenses ? 'Personal Expenses' : 'Shared Expenses',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.isPersonalExpenses ? 'Personal Expenses' : 'Shared Expenses',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (roomspaceName.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        roomspaceName,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ),
               ),
               Row(
@@ -281,8 +320,9 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   Widget _buildBody(Color themeColor) {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: themeColor),
+      return const SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 80),
+        child: ExpenseListSkeleton(itemCount: 8),
       );
     }
 
@@ -713,20 +753,41 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   Future<void> _showSharedExpenseDialog() async {
      try {
-      final roomspacesResponse = await _apiService.getRoomspaces();
-      final roomspaces = roomspacesResponse['data'] as List<dynamic>? ?? [];
+      // Get active roomspace from provider
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final activeRoomspace = roomspaceProvider.activeRoomspace;
       
-      if (roomspaces.isEmpty) {
+      if (activeRoomspace == null) {
         if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Join a roomspace first'), backgroundColor: Colors.orange),
+            const SnackBar(content: Text('No active roomspace. Please select a roomspace first.'), backgroundColor: Colors.orange),
           );
         }
         return;
       }
 
-      final roomspaceId = roomspaces[0]['id']?.toString();
-      final members = roomspaces[0]['members'] as List<dynamic>? ?? [];
+      final roomspaceId = activeRoomspace.id;
+      
+      // Fetch members for the active roomspace
+      final roomspacesResponse = await _apiService.getRoomspaces();
+      final roomspaces = roomspacesResponse['data'] as List<dynamic>? ?? [];
+      
+      // Find the active roomspace in the response
+      final roomspaceData = roomspaces.firstWhere(
+        (r) => r['id']?.toString() == roomspaceId,
+        orElse: () => null,
+      );
+      
+      if (roomspaceData == null) {
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Roomspace not found'), backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
+      
+      final members = roomspaceData['members'] as List<dynamic>? ?? [];
       
       final roommates = members.map((m) {
         final user = m['user'];
@@ -741,7 +802,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
         AddExpenseDialog.show(
           context,
           roommates: roommates,
-          roomspaceId: roomspaceId!,
+          roomspaceId: roomspaceId,
           onSubmit: (expense) async {
             try {
               final request = ExpenseCreateRequest.fromExpenseData(expense, roomspaceId);
