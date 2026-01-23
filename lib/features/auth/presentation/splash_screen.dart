@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import '../../../services/auth_state_service.dart';
+import '../../../providers/roomspace_provider.dart';
 import '../controllers/auth_controller.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -39,14 +41,20 @@ class _SplashScreenState extends State<SplashScreen> {
               // Authenticate with backend using Firebase token
               await _authController.authenticateWithBackend(idToken);
               
-              // Now check roomspaces
-              final roomspaces = await _authController.getUserRoomspaces(currentUser.uid);
-              
+              // Load roomspaces into the provider after authentication
               if (mounted) {
-                Navigator.pushReplacementNamed(
-                  context,
-                  roomspaces.isEmpty ? '/roomspace-selection' : '/home',
-                );
+                final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+                await roomspaceProvider.loadRoomspaces();
+                
+                // Check if user has roomspaces
+                final hasRoomspaces = roomspaceProvider.roomspaceCount > 0;
+                
+                if (mounted) {
+                  Navigator.pushReplacementNamed(
+                    context,
+                    hasRoomspaces ? '/home' : '/roomspace-selection',
+                  );
+                }
               }
               return;
             }
