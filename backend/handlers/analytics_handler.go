@@ -41,6 +41,16 @@ func (h *AnalyticsHandler) GetSummary(c *gin.Context) {
 	startDateStr := c.Query("start_date")
 	endDateStr := c.Query("end_date")
 
+	// If roomspace_id is provided, validate user membership
+	if roomspaceID != "" {
+		if err := h.verifyRoomspaceMembership(roomspaceID, userID.(string)); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
+
 	// Default to last 30 days if not specified
 	endDate := time.Now()
 	startDate := endDate.AddDate(0, 0, -30)
@@ -128,6 +138,16 @@ func (h *AnalyticsHandler) GetTrends(c *gin.Context) {
 	endDateStr := c.Query("end_date")
 	groupBy := c.DefaultQuery("group_by", "day") // day, week, month
 
+	// If roomspace_id is provided, validate user membership
+	if roomspaceID != "" {
+		if err := h.verifyRoomspaceMembership(roomspaceID, userID.(string)); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
+
 	// Validate group_by parameter
 	if groupBy != "day" && groupBy != "week" && groupBy != "month" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -205,6 +225,16 @@ func (h *AnalyticsHandler) GetPredictions(c *gin.Context) {
 	// Parse query parameters
 	roomspaceID := c.Query("roomspace_id")
 
+	// If roomspace_id is provided, validate user membership
+	if roomspaceID != "" {
+		if err := h.verifyRoomspaceMembership(roomspaceID, userID.(string)); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
+
 	// Get roomspace ID pointer if provided
 	var roomspaceIDPtr *string
 	if roomspaceID != "" {
@@ -241,6 +271,16 @@ func (h *AnalyticsHandler) GetPatterns(c *gin.Context) {
 
 	// Parse query parameters
 	roomspaceID := c.Query("roomspace_id")
+
+	// If roomspace_id is provided, validate user membership
+	if roomspaceID != "" {
+		if err := h.verifyRoomspaceMembership(roomspaceID, userID.(string)); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
 
 	// Get roomspace ID pointer if provided
 	var roomspaceIDPtr *string
@@ -310,6 +350,16 @@ func (h *AnalyticsHandler) GetAnomalies(c *gin.Context) {
 	// Parse query parameters
 	roomspaceID := c.Query("roomspace_id")
 
+	// If roomspace_id is provided, validate user membership
+	if roomspaceID != "" {
+		if err := h.verifyRoomspaceMembership(roomspaceID, userID.(string)); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
+
 	// Get roomspace ID pointer if provided
 	var roomspaceIDPtr *string
 	if roomspaceID != "" {
@@ -349,6 +399,16 @@ func (h *AnalyticsHandler) GetRecommendations(c *gin.Context) {
 
 	// Parse query parameters
 	roomspaceID := c.Query("roomspace_id")
+
+	// If roomspace_id is provided, validate user membership
+	if roomspaceID != "" {
+		if err := h.verifyRoomspaceMembership(roomspaceID, userID.(string)); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
 
 	// Get roomspace ID pointer if provided
 	var roomspaceIDPtr *string
