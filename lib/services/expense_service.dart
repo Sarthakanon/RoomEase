@@ -30,18 +30,21 @@ class ExpenseService {
     }
   }
 
-  /// Retrieves expenses for the current user across all roomspaces
+  /// Retrieves expenses for the current user across all roomspaces or filtered by roomspace
   /// 
+  /// [roomspaceId] - Optional roomspace ID to filter expenses
   /// [limit] - Maximum number of expenses to retrieve (default: 20)
   /// [offset] - Number of expenses to skip for pagination (default: 0)
   /// 
   /// Returns a list of [ExpenseData] and metadata
   Future<ExpenseListResponse> getExpenses({
+    String? roomspaceId,
     int? limit,
     int? offset,
   }) async {
     try {
       final response = await _apiService.getExpenses(
+        roomspaceId: roomspaceId,
         limit: limit,
         offset: offset,
       );
@@ -147,17 +150,17 @@ class ExpenseService {
 
   /// Retrieves recent expenses for a roomspace (typically for dashboard)
   /// 
-  /// [roomspaceId] - ID of the roomspace
+  /// [roomspaceId] - Optional ID of the roomspace (if not provided, gets recent expenses across all roomspaces)
   /// [limit] - Maximum number of recent expenses to retrieve (default: 3)
   /// 
   /// Returns a list of recent [ExpenseData]
-  Future<List<ExpenseData>> getRecentExpenses(
-    String roomspaceId, {
+  Future<List<ExpenseData>> getRecentExpenses({
+    String? roomspaceId,
     int limit = 3,
   }) async {
     try {
       final response = await _apiService.getRecentExpenses(
-        roomspaceId,
+        roomspaceId: roomspaceId,
         limit: limit,
       );
       
