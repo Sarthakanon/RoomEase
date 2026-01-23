@@ -315,11 +315,13 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getPersonalExpenses({
+    String? roomspaceId,
     int? limit,
     int? offset,
   }) async {
     try {
       final queryParams = <String, String>{};
+      if (roomspaceId != null) queryParams['roomspace_id'] = roomspaceId;
       if (limit != null) queryParams['limit'] = limit.toString();
       if (offset != null) queryParams['offset'] = offset.toString();
       
@@ -342,11 +344,13 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getExpenses({
+    String? roomspaceId,
     int? limit,
     int? offset,
   }) async {
     try {
       final queryParams = <String, String>{};
+      if (roomspaceId != null) queryParams['roomspace_id'] = roomspaceId;
       if (limit != null) queryParams['limit'] = limit.toString();
       if (offset != null) queryParams['offset'] = offset.toString();
       
@@ -382,12 +386,19 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> getRecentExpenses(
-    String roomspaceId, {
+  Future<Map<String, dynamic>> getRecentExpenses({
+    String? roomspaceId,
     int limit = 3,
   }) async {
     try {
-      return await get('/api/roomspaces/$roomspaceId/expenses/recent?limit=$limit');
+      if (roomspaceId != null) {
+        // Use roomspace-specific endpoint
+        final path = '/api/roomspaces/$roomspaceId/expenses?limit=$limit&offset=0';
+        return await get(path);
+      } else {
+        // Use personal expenses endpoint
+        return await getPersonalExpenses(limit: limit, offset: 0);
+      }
     } catch (e) {
       throw Exception('Failed to retrieve recent expenses: ${e.toString()}');
     }
@@ -434,11 +445,13 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getPaymentNotifications({
+    String? roomspaceId,
     int? limit,
     int? offset,
   }) async {
     try {
       final queryParams = <String, String>{};
+      if (roomspaceId != null) queryParams['roomspace_id'] = roomspaceId;
       if (limit != null) queryParams['limit'] = limit.toString();
       if (offset != null) queryParams['offset'] = offset.toString();
       
