@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import '../../core/widgets/mobile_scaffold.dart';
+import '../../core/widgets/roomspace_switcher.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../../services/api_service.dart';
 import '../../services/payment_notification_service.dart';
 import '../../services/ocr_service.dart';
 import '../../models/payment_notification.dart';
 import '../../models/expense_models.dart';
+import '../../providers/roomspace_provider.dart';
 import 'widgets/add_expense_dialog.dart';
 import 'widgets/personal_expense_dialog.dart';
 import 'widgets/receipt_scanner_dialog.dart';
@@ -37,6 +41,26 @@ class _MobileDashboardState extends State<MobileDashboard> {
     _checkRoomspace();
     _loadUnreadCount();
     _initializePaymentNotifications();
+    
+    // Listen to roomspace provider changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      roomspaceProvider.addListener(_onRoomspaceChanged);
+    });
+  }
+  
+  @override
+  void dispose() {
+    // Remove listener when widget is disposed
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    roomspaceProvider.removeListener(_onRoomspaceChanged);
+    super.dispose();
+  }
+  
+  /// Called when the active roomspace changes
+  void _onRoomspaceChanged() {
+    // Refresh data when roomspace changes
+    _loadRecentExpenses();
   }
 
   Future<void> _initializePaymentNotifications() async {
@@ -73,12 +97,18 @@ class _MobileDashboardState extends State<MobileDashboard> {
         _expensesError = null;
       });
       
+      // Get active roomspace from provider
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+      
+      print('📊 Loading recent expenses for roomspace: $activeRoomspaceId');
+      
       // Load both shared and personal expenses concurrently
       final futures = <Future>[];
       
-      // Load shared expenses if user has a roomspace
-      if (_currentRoomspaceId != null) {
-        futures.add(_apiService.getRecentExpenses(_currentRoomspaceId!, limit: 3));
+      // Load shared expenses if user has an active roomspace
+      if (activeRoomspaceId != null) {
+        futures.add(_apiService.getRecentExpenses(roomspaceId: activeRoomspaceId, limit: 3));
       }
       
       // Always load personal expenses
@@ -92,26 +122,30 @@ class _MobileDashboardState extends State<MobileDashboard> {
       int resultIndex = 0;
       
       // Process shared expenses if we loaded them
-      if (_currentRoomspaceId != null) {
+      if (activeRoomspaceId != null) {
         final sharedResponse = results[resultIndex++];
+        print('📊 Shared expenses response: $sharedResponse');
         if (sharedResponse.containsKey('data')) {
           final data = sharedResponse['data'];
           if (data != null && data is List) {
             sharedExpenses = data
                 .map((expense) => ExpenseData.fromJson(expense))
                 .toList();
+            print('✅ Loaded ${sharedExpenses.length} shared expenses');
           }
         }
       }
       
       // Process personal expenses
       final personalResponse = results[resultIndex];
+      print('📊 Personal expenses response: $personalResponse');
       if (personalResponse.containsKey('data')) {
         final data = personalResponse['data'];
         if (data != null && data is List) {
           personalExpenses = data
               .map((expense) => PersonalExpenseData.fromJson(expense))
               .toList();
+          print('✅ Loaded ${personalExpenses.length} personal expenses');
         }
       }
       
@@ -122,7 +156,9 @@ class _MobileDashboardState extends State<MobileDashboard> {
           _isLoadingExpenses = false;
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Error loading recent expenses: $e');
+      print('Stack trace: $stackTrace');
       if (mounted) {
         setState(() {
           _expensesError = 'Failed to load recent expenses';
@@ -162,49 +198,54 @@ class _MobileDashboardState extends State<MobileDashboard> {
 
   Future<void> _checkRoomspace() async {
     try {
-      final response = await _apiService.getRoomspaces();
-      if (response.containsKey('data')) {
-        // Debug: Print full response
-        print('DEBUG: Roomspaces API response: $response');
-        
-        final roomspaces = response['data'] as List<dynamic>;
-        print('DEBUG: Found ${roomspaces.length} roomspaces');
-        
-        if (mounted) {
-          setState(() {
-            _hasRoomspace = roomspaces.isNotEmpty;
-            _isLoading = false;
-          });
+      // Load roomspaces through the provider
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      await roomspaceProvider.loadRoomspaces();
+      
+      // Get the active roomspace
+      final activeRoomspace = roomspaceProvider.activeRoomspace;
+      
+      if (mounted) {
+        setState(() {
+          _hasRoomspace = roomspaceProvider.roomspaceCount > 0;
+          _isLoading = false;
+        });
 
-          // Load roommates from first roomspace
-          if (roomspaces.isNotEmpty) {
-            _currentRoomspaceId = roomspaces[0]['id']?.toString();
-            final members = roomspaces[0]['members'] as List<dynamic>? ?? [];
+        // Load roommates from active roomspace if available
+        if (activeRoomspace != null) {
+          _currentRoomspaceId = activeRoomspace.id;
+          
+          // Fetch full roomspace details to get members
+          final response = await _apiService.getRoomspaces();
+          final roomspacesData = response['data'] as List<dynamic>?;
+          
+          if (roomspacesData != null) {
+            final roomspaceData = roomspacesData.firstWhere(
+              (r) => r['id']?.toString() == activeRoomspace.id,
+              orElse: () => null,
+            );
             
-            // Debug: Print member data
-            print('DEBUG: Loading ${members.length} members');
-            for (var i = 0; i < members.length; i++) {
-              print('DEBUG: Member $i: ${members[i]}');
-            }
-            
-            _roommates = members.map((m) {
-              final user = m['user'];
-              final firebaseUid = m['user_id'] ?? '';  // Changed from 'firebase_uid' to 'user_id'
-              print('DEBUG: Creating roommate - user_id: "$firebaseUid", user: $user');
+            if (roomspaceData != null) {
+              final members = roomspaceData['members'] as List<dynamic>? ?? [];
               
-              return RoommateItem(
-                id: firebaseUid,
-                name: user?['name'] ?? user?['email'] ?? 'Unknown',
-                email: user?['email'],
-              );
-            }).toList();
-            
-            // Load recent expenses after roomspace is loaded
-            _loadRecentExpenses();
-          } else {
-            // Even without a roomspace, load personal expenses
-            _loadRecentExpenses();
+              _roommates = members.map((m) {
+                final user = m['user'];
+                final firebaseUid = m['user_id'] ?? '';
+                
+                return RoommateItem(
+                  id: firebaseUid,
+                  name: user?['name'] ?? user?['email'] ?? 'Unknown',
+                  email: user?['email'],
+                );
+              }).toList();
+            }
           }
+          
+          // Load recent expenses after roomspace is loaded
+          _loadRecentExpenses();
+        } else {
+          // Even without a roomspace, load personal expenses
+          _loadRecentExpenses();
         }
       }
     } catch (e) {
@@ -738,6 +779,57 @@ class _MobileDashboardState extends State<MobileDashboard> {
                     ],
                   ),
                   const SizedBox(height: 20),
+                  // Active Roomspace Name Display
+                  Consumer<RoomspaceProvider>(
+                    builder: (context, roomspaceProvider, child) {
+                      final activeRoomspace = roomspaceProvider.activeRoomspace;
+                      
+                      if (activeRoomspace == null) {
+                        return const SizedBox.shrink();
+                      }
+                      
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: activeRoomspace.visualColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              activeRoomspace.visualIcon,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                activeRoomspace.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
                   Row(
                     children: [
                       Expanded(
@@ -1027,16 +1119,11 @@ class _MobileDashboardState extends State<MobileDashboard> {
 
   Widget _buildRecentActivityList(Color primaryColor) {
     if (_isLoadingExpenses) {
-      return Column(
+      return const Column(
         children: [
-          const SizedBox(height: 20),
-          const CircularProgressIndicator(),
-          const SizedBox(height: 10),
-          Text(
-            'Loading recent expenses...',
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 100),
+          SizedBox(height: 20),
+          ExpenseListSkeleton(itemCount: 3),
+          SizedBox(height: 20),
         ],
       );
     }
