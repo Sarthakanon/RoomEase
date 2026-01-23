@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'features/auth/presentation/splash_screen.dart';
@@ -21,6 +22,7 @@ import 'features/expenses/presentation/expense_list_screen.dart';
 import 'features/expenses/presentation/personal_expenses_screen.dart';
 import 'features/analytics/presentation/analytics_page.dart';
 import 'services/api_service.dart';
+import 'providers/roomspace_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,81 +52,85 @@ class RoomEaseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'RoomEase',
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.indigo,
-          secondary: Colors.amber,
-          tertiary: Colors.teal,
-        ),
-        textTheme: GoogleFonts.poppinsTextTheme(
-          Theme.of(context).textTheme.copyWith(
-            displayLarge: GoogleFonts.poppins(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Colors.indigo,
-            ),
-            displayMedium: GoogleFonts.poppins(
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-            ),
-            bodyLarge: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
-            bodyMedium: GoogleFonts.poppins(fontSize: 14),
+    // Wrap MaterialApp with ChangeNotifierProvider for roomspace state management
+    return ChangeNotifierProvider(
+      create: (_) => RoomspaceProvider(),
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'RoomEase',
+        theme: ThemeData(
+          primarySwatch: Colors.indigo,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.indigo,
+            secondary: Colors.amber,
+            tertiary: Colors.teal,
           ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.indigo,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
+          textTheme: GoogleFonts.poppinsTextTheme(
+            Theme.of(context).textTheme.copyWith(
+              displayLarge: GoogleFonts.poppins(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.indigo,
+              ),
+              displayMedium: GoogleFonts.poppins(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+              ),
+              bodyLarge: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+              bodyMedium: GoogleFonts.poppins(fontSize: 14),
+            ),
+          ),
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.indigo,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: Colors.grey[100],
+            border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.indigo, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
             ),
           ),
         ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.grey[100],
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.indigo, width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 16,
-          ),
-        ),
+        initialRoute: '/',
+        routes: {
+          '/': (context) => const SplashScreen(),
+          '/login': (context) => const LoginScreen(),
+          '/signup': (context) => const SignupScreen(),
+          '/forgot-password': (context) => const ForgotPasswordScreen(),
+          '/roomspace-selection': (context) => const RoomspaceSelectionScreen(),
+          '/create-roomspace': (context) => const CreateRoomspaceScreen(),
+          '/join-roomspace': (context) => const JoinRoomspaceScreen(),
+          '/roomspace': (context) => const RoomspaceRouter(),
+          '/roomspace-details': (context) => const RoomspaceDetailsScreen(),
+          '/settings': (context) => const SettingsScreen(),
+          '/profile': (context) => const ProfileScreen(),
+          '/notifications': (context) => const NotificationScreen(),
+          '/home': (context) => const MobileDashboard(),
+          '/expenses': (context) => const ExpenseScreen(),
+          '/expense-list': (context) => const ExpenseListScreen(),
+          '/personal-expenses': (context) => const PersonalExpensesScreen(),
+          '/analytics': (context) => const AnalyticsPage(),
+        },
       ),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const SplashScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/signup': (context) => const SignupScreen(),
-        '/forgot-password': (context) => const ForgotPasswordScreen(),
-        '/roomspace-selection': (context) => const RoomspaceSelectionScreen(),
-        '/create-roomspace': (context) => const CreateRoomspaceScreen(),
-        '/join-roomspace': (context) => const JoinRoomspaceScreen(),
-        '/roomspace': (context) => const RoomspaceRouter(),
-        '/roomspace-details': (context) => const RoomspaceDetailsScreen(),
-        '/settings': (context) => const SettingsScreen(),
-        '/profile': (context) => const ProfileScreen(),
-        '/notifications': (context) => const NotificationScreen(),
-        '/home': (context) => const MobileDashboard(),
-        '/expenses': (context) => const ExpenseScreen(),
-        '/expense-list': (context) => const ExpenseListScreen(),
-        '/personal-expenses': (context) => const PersonalExpensesScreen(),
-        '/analytics': (context) => const AnalyticsPage(),
-      },
     );
   }
 }
