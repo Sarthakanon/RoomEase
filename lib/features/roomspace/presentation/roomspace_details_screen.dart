@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import '../../../services/api_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
+import '../../../core/widgets/roomspace_switcher.dart';
+import '../../../providers/roomspace_provider.dart';
 
 class RoomspaceDetailsScreen extends StatefulWidget {
   const RoomspaceDetailsScreen({super.key});
@@ -24,23 +27,50 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
   void initState() {
     super.initState();
     _currentUserUid = FirebaseAuth.instance.currentUser?.uid;
-    _loadRoomspaceDetails();
+    // Load after first frame to ensure provider is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadRoomspaceDetails();
+    });
   }
 
   Future<void> _loadRoomspaceDetails() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    
     try {
+      // Get active roomspace from provider
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+      
+      if (activeRoomspaceId == null) {
+        // No active roomspace, redirect to selection
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/roomspace-selection');
+        }
+        return;
+      }
+      
       final response = await _apiService.getRoomspaces();
       if (response['success'] == true && response['data'] != null) {
         final roomspaces = response['data'] as List<dynamic>;
-        if (roomspaces.isNotEmpty) {
+        
+        // Find the active roomspace
+        final activeRoomspace = roomspaces.firstWhere(
+          (rs) => rs['id'] == activeRoomspaceId,
+          orElse: () => roomspaces.isNotEmpty ? roomspaces[0] : null,
+        );
+        
+        if (activeRoomspace != null) {
           setState(() {
-            _roomspace = roomspaces[0];
+            _roomspace = activeRoomspace;
             _members = _roomspace?['members'] ?? [];
-            _isCreator = _roomspace?['creator_id'] == _currentUserUid; // Use creator_id instead of created_by
+            _isCreator = _roomspace?['creator_id'] == _currentUserUid;
             _isLoading = false;
           });
         } else {
-          // No roomspace, redirect to selection
+          // No roomspace found, redirect to selection
           if (mounted) {
             Navigator.pushReplacementNamed(context, '/roomspace-selection');
           }
@@ -222,6 +252,40 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Roomspace Switcher (shown when user has multiple roomspaces)
+                Consumer<RoomspaceProvider>(
+                  builder: (context, roomspaceProvider, child) {
+                    // Only show if user has multiple roomspaces
+                    if (!roomspaceProvider.hasMultipleRoomspaces) {
+                      return const SizedBox.shrink();
+                    }
+                    
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Current Roomspace',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[600],
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        RoomspaceSwitcher(
+                          compact: false,
+                          onRoomspaceChanged: () {
+                            // Reload roomspace details when changed
+                            _loadRoomspaceDetails();
+                          },
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    );
+                  },
+                ),
+                
                 // Roomspace Card
                 _buildRoomspaceCard(primaryColor),
                 const SizedBox(height: 24),
