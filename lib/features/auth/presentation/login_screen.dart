@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../controllers/auth_controller.dart';
 import '../../../services/auth_state_service.dart';
+import '../../../providers/roomspace_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -60,9 +62,10 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         }
 
-        final roomspaces = await _authController.getUserRoomspaces(
-          userCredential.user!.uid,
-        );
+        // Load roomspaces into the provider after authentication
+        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+        await roomspaceProvider.loadRoomspaces();
+        
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -74,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         Navigator.pushReplacementNamed(
           context,
-          roomspaces.isEmpty ? '/roomspace-selection' : '/home',
+          roomspaceProvider.roomspaceCount == 0 ? '/roomspace-selection' : '/home',
         );
       }
     } catch (e) {
@@ -104,9 +107,9 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         }
 
-        final roomspaces = await _authController.getUserRoomspaces(
-          userCredential.user!.uid,
-        );
+        // Load roomspaces into the provider after authentication
+        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+        await roomspaceProvider.loadRoomspaces();
 
         if (!mounted) return;
 
@@ -119,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         Navigator.pushReplacementNamed(
           context,
-          roomspaces.isEmpty ? '/roomspace-selection' : '/home',
+          roomspaceProvider.roomspaceCount == 0 ? '/roomspace-selection' : '/home',
         );
       }
     } catch (e) {
