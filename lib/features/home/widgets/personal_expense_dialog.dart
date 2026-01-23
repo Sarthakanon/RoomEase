@@ -206,7 +206,7 @@ class _PersonalExpenseDialogState extends State<PersonalExpenseDialog> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Add Personal Expense',
+                      'Add Expense',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -384,7 +384,7 @@ class _PersonalExpenseDialogState extends State<PersonalExpenseDialog> {
                                   ],
                                 )
                               : const Text(
-                                  'Add Personal Expense',
+                                  'Add Expense',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
