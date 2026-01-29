@@ -647,11 +647,22 @@ func (s *PostgresService) GetExpenseByID(id uint) (*models.Expense, error) {
 
 // GetRoomspaceExpenses gets expenses for a roomspace with membership validation
 // Note: This method should be called after validating user membership in the handler
-func (s *PostgresService) GetRoomspaceExpenses(roomspaceID string, limit, offset int) ([]models.Expense, error) {
+// Optional month/year filtering: if year and month are provided (> 0), filters by that month
+func (s *PostgresService) GetRoomspaceExpenses(roomspaceID string, limit, offset int, year, month int) ([]models.Expense, error) {
 	var expenses []models.Expense
 	
-	query := config.DB.Where("roomspace_id = ?", roomspaceID).
-		Preload("Payer").
+	query := config.DB.Where("roomspace_id = ?", roomspaceID)
+	
+	// Add month/year filtering if provided
+	if year > 0 && month > 0 {
+		// Filter by year and month using EXTRACT
+		query = query.Where("EXTRACT(YEAR FROM created_at) = ? AND EXTRACT(MONTH FROM created_at) = ?", year, month)
+	} else if year > 0 {
+		// Filter by year only
+		query = query.Where("EXTRACT(YEAR FROM created_at) = ?", year)
+	}
+	
+	query = query.Preload("Payer").
 		Preload("Splits").
 		Preload("Splits.User").
 		Order("created_at DESC")
@@ -674,11 +685,20 @@ func (s *PostgresService) GetRoomspaceExpenses(roomspaceID string, limit, offset
 
 // GetRecentExpenses gets recent expenses for a roomspace
 // Note: This method should be called after validating user membership in the handler
-func (s *PostgresService) GetRecentExpenses(roomspaceID string, limit int) ([]models.Expense, error) {
+// Optional month/year filtering: if year and month are provided (> 0), filters by that month
+func (s *PostgresService) GetRecentExpenses(roomspaceID string, limit int, year, month int) ([]models.Expense, error) {
 	var expenses []models.Expense
 	
-	err := config.DB.Where("roomspace_id = ?", roomspaceID).
-		Preload("Payer").
+	query := config.DB.Where("roomspace_id = ?", roomspaceID)
+	
+	// Add month/year filtering if provided
+	if year > 0 && month > 0 {
+		query = query.Where("EXTRACT(YEAR FROM created_at) = ? AND EXTRACT(MONTH FROM created_at) = ?", year, month)
+	} else if year > 0 {
+		query = query.Where("EXTRACT(YEAR FROM created_at) = ?", year)
+	}
+	
+	err := query.Preload("Payer").
 		Preload("Splits").
 		Preload("Splits.User").
 		Order("created_at DESC").
@@ -693,14 +713,14 @@ func (s *PostgresService) GetRecentExpenses(roomspaceID string, limit int) ([]mo
 }
 
 // GetExpensesByRoomspaceWithValidation gets expenses for a roomspace with user membership validation
-func (s *PostgresService) GetExpensesByRoomspaceWithValidation(userID, roomspaceID string, limit, offset int) ([]models.Expense, error) {
+func (s *PostgresService) GetExpensesByRoomspaceWithValidation(userID, roomspaceID string, limit, offset int, year, month int) ([]models.Expense, error) {
 	// Validate user membership first
 	if err := s.ValidateRoomspaceMembership(userID, roomspaceID); err != nil {
 		return nil, fmt.Errorf("access denied: %v", err)
 	}
 	
 	// Get expenses for the roomspace
-	return s.GetRoomspaceExpenses(roomspaceID, limit, offset)
+	return s.GetRoomspaceExpenses(roomspaceID, limit, offset, year, month)
 }
 
 // UpdateExpense updates an existing expense
@@ -783,11 +803,20 @@ func (s *PostgresService) CreatePersonalExpense(expense *models.PersonalExpense)
 }
 
 // GetPersonalExpenses gets personal expenses for a user
-func (s *PostgresService) GetPersonalExpenses(userUID string, limit, offset int) ([]models.PersonalExpense, error) {
+// Optional month/year filtering: if year and month are provided (> 0), filters by that month
+func (s *PostgresService) GetPersonalExpenses(userUID string, limit, offset int, year, month int) ([]models.PersonalExpense, error) {
 	var expenses []models.PersonalExpense
 	
-	query := config.DB.Where("user_uid = ?", userUID).
-		Order("created_at DESC")
+	query := config.DB.Where("user_uid = ?", userUID)
+	
+	// Add month/year filtering if provided
+	if year > 0 && month > 0 {
+		query = query.Where("EXTRACT(YEAR FROM created_at) = ? AND EXTRACT(MONTH FROM created_at) = ?", year, month)
+	} else if year > 0 {
+		query = query.Where("EXTRACT(YEAR FROM created_at) = ?", year)
+	}
+	
+	query = query.Order("created_at DESC")
 	
 	if limit > 0 {
 		query = query.Limit(limit)
