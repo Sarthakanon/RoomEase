@@ -6,6 +6,7 @@ import (
 	"roomease/backend/models"
 	"roomease/backend/services"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -256,8 +257,11 @@ func (h *ExpenseHandler) GetRoomspaceExpenses(c *gin.Context) {
 		offset = 0
 	}
 
+	// Parse month/year filters (default to current month if not provided)
+	year, month := h.parseDateFilters(c)
+
 	// Get roomspace expenses
-	expenses, err := h.dbService.GetRoomspaceExpenses(roomspaceID, limit, offset)
+	expenses, err := h.dbService.GetRoomspaceExpenses(roomspaceID, limit, offset, year, month)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to retrieve expenses",
@@ -284,6 +288,8 @@ func (h *ExpenseHandler) GetRoomspaceExpenses(c *gin.Context) {
 			"limit":  limit,
 			"offset": offset,
 			"count":  len(responses),
+			"year":   year,
+			"month":  month,
 		},
 	})
 }
@@ -317,8 +323,11 @@ func (h *ExpenseHandler) GetRecentExpenses(c *gin.Context) {
 		limit = 3
 	}
 
+	// Parse month/year filters (default to current month if not provided)
+	year, month := h.parseDateFilters(c)
+
 	// Get recent expenses
-	expenses, err := h.dbService.GetRecentExpenses(roomspaceID, limit)
+	expenses, err := h.dbService.GetRecentExpenses(roomspaceID, limit, year, month)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to retrieve recent expenses",
@@ -779,8 +788,11 @@ func (h *ExpenseHandler) GetPersonalExpenses(c *gin.Context) {
 		offset = 0
 	}
 
+	// Parse month/year filters (default to current month if not provided)
+	year, month := h.parseDateFilters(c)
+
 	// Get personal expenses from database
-	expenses, err := h.dbService.GetPersonalExpenses(userID.(string), limit, offset)
+	expenses, err := h.dbService.GetPersonalExpenses(userID.(string), limit, offset, year, month)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to retrieve personal expenses",
@@ -859,4 +871,31 @@ func (h *ExpenseHandler) DeletePersonalExpense(c *gin.Context) {
 		"success": true,
 		"message": "Personal expense deleted successfully",
 	})
+}
+
+
+// parseDateFilters parses month and year query parameters
+// Returns year and month (defaults to current month if not provided)
+func (h *ExpenseHandler) parseDateFilters(c *gin.Context) (int, int) {
+	now := time.Now()
+	
+	// Parse year parameter
+	yearStr := c.Query("year")
+	year := now.Year()
+	if yearStr != "" {
+		if y, err := strconv.Atoi(yearStr); err == nil && y > 0 {
+			year = y
+		}
+	}
+	
+	// Parse month parameter
+	monthStr := c.Query("month")
+	month := int(now.Month())
+	if monthStr != "" {
+		if m, err := strconv.Atoi(monthStr); err == nil && m >= 1 && m <= 12 {
+			month = m
+		}
+	}
+	
+	return year, month
 }
