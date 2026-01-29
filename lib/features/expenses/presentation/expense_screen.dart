@@ -5,6 +5,7 @@ import '../../../core/widgets/global_roomspace_selector.dart';
 import '../../../services/api_service.dart';
 import '../../../models/expense_models.dart';
 import '../../../providers/roomspace_provider.dart';
+import '../widgets/month_selector.dart';
 import 'expense_list_screen.dart';
 import 'personal_expenses_screen.dart';
 import 'personal_expense_details_screen.dart';
@@ -25,6 +26,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool _hasError = false;
   String _errorMessage = '';
   String? _currentRoomspaceId;
+  DateTime _selectedMonth = DateTime.now(); // Default to current month
 
   @override
   void initState() {
@@ -93,8 +95,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         
         final response = await _apiService.getRoomspaceExpenses(
           _currentRoomspaceId!,
-          limit: 5,
+          limit: 50, // Show more for monthly view
           offset: 0,
+          month: _selectedMonth, // Pass selected month
         );
 
         if (response.containsKey('data')) {
@@ -114,8 +117,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Future<void> _loadRecentPersonalExpenses() async {
     try {
       final response = await _apiService.getPersonalExpenses(
-        limit: 5,
+        limit: 50, // Show more for monthly view
         offset: 0,
+        month: _selectedMonth, // Pass selected month
       );
 
       if (response.containsKey('data')) {
@@ -133,6 +137,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Future<void> _refreshData() async {
     await _loadInitialData();
+  }
+  
+  void _onMonthChanged(DateTime newMonth) {
+    setState(() {
+      _selectedMonth = newMonth;
+    });
+    _loadInitialData();
   }
 
   double get _totalRecentSpending {
@@ -169,7 +180,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             // 1. Header Section
             _buildHeader(primaryColor),
 
-            // 2. Body Content
+            // 2. Month Selector
+            MonthSelector(
+              selectedMonth: _selectedMonth,
+              onMonthChanged: _onMonthChanged,
+            ),
+
+            // 3. Body Content
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
