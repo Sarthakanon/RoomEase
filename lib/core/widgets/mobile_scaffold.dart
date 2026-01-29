@@ -65,14 +65,21 @@ class _MobileScaffoldState extends State<MobileScaffold> {
           ? Consumer<RoomspaceProvider>(
               builder: (context, roomspaceProvider, child) {
                 final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+                final screenWidth = MediaQuery.of(context).size.width;
+                
+                // Responsive sizing based on screen width
+                final horizontalMargin = screenWidth < 360 ? 12.0 : 24.0;
+                final iconSize = screenWidth < 360 ? 22.0 : 24.0;
+                final fontSize = screenWidth < 360 ? 12.0 : 14.0;
+                final navBarHeight = screenWidth < 360 ? 70.0 : 80.0;
                 
                 return SafeArea(
                   child: Container(
-                    // Limit the height to prevent full-screen expansion
-                    height: 80,
+                    // Responsive height
+                    height: navBarHeight,
                     padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 24,
+                    margin: EdgeInsets.symmetric(
+                      horizontal: horizontalMargin,
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
@@ -87,59 +94,79 @@ class _MobileScaffoldState extends State<MobileScaffold> {
                       ],
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _NavBarItem(
-                          icon: Icons.dashboard_rounded,
-                          label: 'Home',
-                          isActive: widget.currentIndex == 0,
-                          onTap: () {
-                            if (widget.currentIndex != 0) {
-                              Navigator.pushReplacementNamed(context, '/home');
-                            }
-                          },
-                        ),
-                        // Hide Rooms tab in personal space
-                        if (!isPersonalSpace)
-                          _NavBarItem(
-                            icon: Icons.meeting_room_rounded,
-                            label: 'Rooms',
-                            isActive: widget.currentIndex == 1,
+                        Expanded(
+                          child: _NavBarItem(
+                            icon: Icons.dashboard_rounded,
+                            label: 'Home',
+                            isActive: widget.currentIndex == 0,
+                            iconSize: iconSize,
+                            fontSize: fontSize,
                             onTap: () {
-                              if (widget.currentIndex != 1) {
-                                Navigator.pushNamed(context, '/roomspace');
+                              if (widget.currentIndex != 0) {
+                                Navigator.pushReplacementNamed(context, '/home');
                               }
                             },
                           ),
-                        _NavBarItem(
-                          icon: Icons.receipt_long_rounded,
-                          label: 'Expenses',
-                          isActive: widget.currentIndex == 2,
-                          onTap: () {
-                            if (widget.currentIndex != 2) {
-                              Navigator.pushNamed(context, '/expenses');
-                            }
-                          },
                         ),
-                        _NavBarItem(
-                          icon: Icons.analytics_rounded,
-                          label: 'Analytics',
-                          isActive: widget.currentIndex == 3,
-                          onTap: () {
-                            if (widget.currentIndex != 3) {
-                              Navigator.pushNamed(context, '/analytics');
-                            }
-                          },
+                        // Hide Rooms tab in personal space
+                        if (!isPersonalSpace)
+                          Expanded(
+                            child: _NavBarItem(
+                              icon: Icons.meeting_room_rounded,
+                              label: 'Rooms',
+                              isActive: widget.currentIndex == 1,
+                              iconSize: iconSize,
+                              fontSize: fontSize,
+                              onTap: () {
+                                if (widget.currentIndex != 1) {
+                                  Navigator.pushNamed(context, '/roomspace');
+                                }
+                              },
+                            ),
+                          ),
+                        Expanded(
+                          child: _NavBarItem(
+                            icon: Icons.receipt_long_rounded,
+                            label: 'Expenses',
+                            isActive: widget.currentIndex == 2,
+                            iconSize: iconSize,
+                            fontSize: fontSize,
+                            onTap: () {
+                              if (widget.currentIndex != 2) {
+                                Navigator.pushNamed(context, '/expenses');
+                              }
+                            },
+                          ),
                         ),
-                        _NavBarItem(
-                          icon: Icons.person_rounded,
-                          label: 'Profile',
-                          isActive: widget.currentIndex == 4,
-                          onTap: () {
-                            if (widget.currentIndex != 4) {
-                              Navigator.pushNamed(context, '/profile');
-                            }
-                          },
+                        Expanded(
+                          child: _NavBarItem(
+                            icon: Icons.analytics_rounded,
+                            label: 'Analytics',
+                            isActive: widget.currentIndex == 3,
+                            iconSize: iconSize,
+                            fontSize: fontSize,
+                            onTap: () {
+                              if (widget.currentIndex != 3) {
+                                Navigator.pushNamed(context, '/analytics');
+                              }
+                            },
+                          ),
+                        ),
+                        Expanded(
+                          child: _NavBarItem(
+                            icon: Icons.person_rounded,
+                            label: 'Profile',
+                            isActive: widget.currentIndex == 4,
+                            iconSize: iconSize,
+                            fontSize: fontSize,
+                            onTap: () {
+                              if (widget.currentIndex != 4) {
+                                Navigator.pushNamed(context, '/profile');
+                              }
+                            },
+                          ),
                         ),
                       ],
                     ),
@@ -157,25 +184,37 @@ class _NavBarItem extends StatelessWidget {
   final String label;
   final bool isActive;
   final VoidCallback onTap;
+  final double iconSize;
+  final double fontSize;
 
   const _NavBarItem({
     required this.icon,
     required this.label,
     required this.isActive,
     required this.onTap,
+    this.iconSize = 24.0,
+    this.fontSize = 14.0,
   });
 
   @override
   Widget build(BuildContext context) {
     // Use theme primary color
     final Color primaryColor = Theme.of(context).colorScheme.primary;
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    // Responsive padding
+    final horizontalPadding = screenWidth < 360 ? 8.0 : 12.0;
+    final verticalPadding = screenWidth < 360 ? 6.0 : 8.0;
 
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: verticalPadding,
+        ),
         decoration: BoxDecoration(
           color: isActive
               ? primaryColor.withValues(alpha: 0.1)
@@ -185,15 +224,16 @@ class _NavBarItem extends StatelessWidget {
         child: Row(
           // CRITICAL FIX: Minimize main axis size to prevent stretching
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
               color: isActive ? primaryColor : Colors.grey[400],
-              size: 24,
+              size: iconSize,
             ),
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              width: isActive ? 8 : 0,
+              width: isActive ? (screenWidth < 360 ? 4 : 8) : 0,
             ),
             if (isActive)
               Flexible(
@@ -202,7 +242,7 @@ class _NavBarItem extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: fontSize,
                     fontWeight: FontWeight.bold,
                     color: primaryColor,
                   ),
