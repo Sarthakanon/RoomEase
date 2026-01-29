@@ -62,7 +62,6 @@ class BalanceService {
     try {
       final response = await _apiService.post(
         '/api/roomspaces/$roomspaceId/balances/refresh',
-        {},
       );
 
       return response['success'] == true;
