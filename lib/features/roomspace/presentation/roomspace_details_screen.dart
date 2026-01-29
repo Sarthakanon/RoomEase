@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../../services/api_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
-import '../../../core/widgets/roomspace_switcher.dart';
+import '../../../core/widgets/global_roomspace_selector.dart';
 import '../../../providers/roomspace_provider.dart';
 
 class RoomspaceDetailsScreen extends StatefulWidget {
@@ -173,6 +173,7 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
 
     return MobileScaffold(
       currentIndex: 1,
+      showAppBar: false, // Disable default AppBar
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: primaryColor))
           : _error != null
@@ -229,7 +230,7 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
           backgroundColor: const Color(0xFFF8F9FA),
           elevation: 0,
           pinned: true,
-          centerTitle: true,
+          automaticallyImplyLeading: false,
           title: const Text(
             'My Roomspace',
             style: TextStyle(
@@ -238,10 +239,16 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
             ),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
-              color: Colors.black87,
-              onPressed: () => Navigator.pushNamed(context, '/settings'),
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Center(
+                child: GlobalRoomspaceSelector(
+                  onRoomspaceChanged: () {
+                    // Reload roomspace details when changed
+                    _loadRoomspaceDetails();
+                  },
+                ),
+              ),
             ),
           ],
         ),
@@ -252,40 +259,6 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Roomspace Switcher (shown when user has multiple roomspaces)
-                Consumer<RoomspaceProvider>(
-                  builder: (context, roomspaceProvider, child) {
-                    // Only show if user has multiple roomspaces
-                    if (!roomspaceProvider.hasMultipleRoomspaces) {
-                      return const SizedBox.shrink();
-                    }
-                    
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Current Roomspace',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[600],
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        RoomspaceSwitcher(
-                          compact: false,
-                          onRoomspaceChanged: () {
-                            // Reload roomspace details when changed
-                            _loadRoomspaceDetails();
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    );
-                  },
-                ),
-                
                 // Roomspace Card
                 _buildRoomspaceCard(primaryColor),
                 const SizedBox(height: 24),
