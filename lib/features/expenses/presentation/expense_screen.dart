@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
+import '../../../core/widgets/global_roomspace_selector.dart';
 import '../../../services/api_service.dart';
 import '../../../models/expense_models.dart';
 import '../../../providers/roomspace_provider.dart';
@@ -37,9 +38,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // Listen for roomspace changes
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    final isPersonalSpace = roomspaceProvider.isPersonalSpace;
     
-    // Reload data if roomspace changed
-    if (activeRoomspaceId != _currentRoomspaceId && activeRoomspaceId != null) {
+    // Reload data if roomspace changed or switched to/from personal space
+    if (activeRoomspaceId != _currentRoomspaceId || isPersonalSpace) {
       _currentRoomspaceId = activeRoomspaceId;
       _loadInitialData();
     }
@@ -52,10 +54,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     });
 
     try {
-      await Future.wait([
-        _loadRecentSharedExpenses(),
-        _loadRecentPersonalExpenses(),
-      ]);
+      // Get roomspace provider to check if in personal space
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+      
+      if (isPersonalSpace) {
+        // Only load personal expenses in personal space
+        await _loadRecentPersonalExpenses();
+        _recentSharedExpenses = []; // Clear shared expenses
+      } else {
+        // Load both in roomspace mode
+        await Future.wait([
+          _loadRecentSharedExpenses(),
+          _loadRecentPersonalExpenses(),
+        ]);
+      }
       
       setState(() {
         _isLoading = false;
@@ -134,6 +147,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
     return MobileScaffold(
       currentIndex: 2,
+      showAppBar: false, // Disable AppBar for expense screen
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: primaryColor))
           : _hasError
@@ -143,6 +157,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Widget _buildContent(Color primaryColor) {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
+    final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+    
     return RefreshIndicator(
       onRefresh: _refreshData,
       child: SingleChildScrollView(
@@ -158,23 +175,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Shared Expenses
-                  _buildSectionHeader(
-                    title: "Shared Expenses", 
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ExpenseListScreen(
-                          isPersonalExpenses: false,
+                  // Shared Expenses - Only show in roomspace mode
+                  if (!isPersonalSpace) ...[
+                    _buildSectionHeader(
+                      title: "Shared Expenses", 
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ExpenseListScreen(
+                            isPersonalExpenses: false,
+                          ),
                         ),
                       ),
+                      color: primaryColor,
                     ),
-                    color: primaryColor,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildSharedList(primaryColor),
-
-                  const SizedBox(height: 30),
+                    const SizedBox(height: 12),
+                    _buildSharedList(primaryColor),
+                    const SizedBox(height: 30),
+                  ],
 
                   // Personal Expenses
                   _buildSectionHeader(
@@ -223,13 +241,25 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Expenses',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
+          // Title and Global Selector Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Expenses',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              GlobalRoomspaceSelector(
+                onRoomspaceChanged: () {
+                  // Reload expense data
+                  _loadInitialData();
+                },
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           Row(
