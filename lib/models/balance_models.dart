@@ -18,6 +18,21 @@ class BalanceSummary {
     required this.lastUpdated,
   });
 
+  factory BalanceSummary.fromJson(Map<String, dynamic> json) {
+    return BalanceSummary(
+      roomspaceId: json['roomspace_id'] as String,
+      totalExpenses: (json['total_expenses'] as num).toDouble(),
+      expenseCount: json['expense_count'] as int,
+      userBalances: Map<String, double>.from(
+        (json['user_balances'] as Map).map(
+          (key, value) => MapEntry(key as String, (value as num).toDouble()),
+        ),
+      ),
+      members: List<Map<String, dynamic>>.from(json['members'] ?? []),
+      lastUpdated: DateTime.parse(json['last_updated'] as String),
+    );
+  }
+
   /// Gets users who are owed money (positive balance)
   Map<String, double> get creditors {
     return Map.fromEntries(
@@ -70,6 +85,18 @@ class UserBalance {
     required this.lastUpdated,
   });
 
+  factory UserBalance.fromJson(Map<String, dynamic> json) {
+    return UserBalance(
+      userId: json['user_id'] as String,
+      roomspaceId: json['roomspace_id'] as String,
+      balance: (json['balance'] as num).toDouble(),
+      totalPaid: (json['total_paid'] as num).toDouble(),
+      totalOwed: (json['total_owed'] as num).toDouble(),
+      expenseCount: json['expense_count'] as int,
+      lastUpdated: DateTime.parse(json['last_updated'] as String),
+    );
+  }
+
   /// Whether user is owed money
   bool get isOwedMoney => balance > 0.01;
 
@@ -84,20 +111,30 @@ class UserBalance {
 }
 
 /// Settlement suggestion between two users
-class Settlement {
+class SettlementSuggestion {
   final String fromUserId; // User who should pay
   final String fromUserName;
   final String toUserId; // User who should receive
   final String toUserName;
   final double amount;
 
-  Settlement({
+  SettlementSuggestion({
     required this.fromUserId,
     required this.fromUserName,
     required this.toUserId,
     required this.toUserName,
     required this.amount,
   });
+
+  factory SettlementSuggestion.fromJson(Map<String, dynamic> json) {
+    return SettlementSuggestion(
+      fromUserId: json['from_user_id'] as String,
+      fromUserName: json['from_user_name'] as String? ?? 'Unknown',
+      toUserId: json['to_user_id'] as String,
+      toUserName: json['to_user_name'] as String? ?? 'Unknown',
+      amount: (json['amount'] as num).toDouble(),
+    );
+  }
 
   /// Description of the settlement
   String get description {
