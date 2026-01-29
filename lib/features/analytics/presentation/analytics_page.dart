@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../models/analytics_models.dart';
 import '../../../services/analytics_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
+import '../../../core/widgets/global_roomspace_selector.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../widgets/spending_trends_chart.dart';
 import '../widgets/category_breakdown_chart.dart';
@@ -116,6 +117,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return MobileScaffold(
       currentIndex: 3, // Analytics tab index
       showBottomNav: true,
+      showAppBar: false, // Disable default AppBar
       body: SafeArea(
         child: Column(
           children: [
@@ -150,64 +152,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Analytics',
-                      style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    if (activeRoomspace != null)
-                      Row(
-                        children: [
-                          Text(
-                            'for ',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          // Visual indicator (color badge + icon)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: activeRoomspace.visualColor.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: activeRoomspace.visualColor.withValues(alpha: 0.3),
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  activeRoomspace.visualIcon,
-                                  size: 14,
-                                  color: activeRoomspace.visualColor,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  activeRoomspace.name,
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: activeRoomspace.visualColor,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      Text(
-                        'Personal Expenses',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                  ],
+                child: Text(
+                  'Analytics',
+                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
               ),
               IconButton(
@@ -215,6 +164,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 onPressed: _refreshAnalytics,
                 tooltip: 'Refresh',
                 padding: const EdgeInsets.all(12),
+              ),
+              const SizedBox(width: 8),
+              GlobalRoomspaceSelector(
+                onRoomspaceChanged: () {
+                  _loadAnalytics();
+                },
               ),
             ],
           ),
