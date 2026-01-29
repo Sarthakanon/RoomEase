@@ -72,6 +72,10 @@ func main() {
 	// Initialize analytics service and handler
 	analyticsService := services.NewAnalyticsService(dbService)
 	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService, dbService)
+	
+	// Initialize balance service and handler
+	balanceService := services.NewBalanceService()
+	balanceHandler := handlers.NewBalanceHandler(balanceService, dbService)
 
 	// Health check endpoint (public)
 	router.GET("/health", healthHandler.Check)
@@ -139,6 +143,14 @@ func main() {
 		protected.GET("/analytics/recommendations", analyticsHandler.GetRecommendations)
 		protected.GET("/analytics/roomspace/:id", middleware.ValidateRoomspaceMembership(), analyticsHandler.GetRoomspaceAnalytics)
 		protected.POST("/analytics/feedback", analyticsHandler.SubmitFeedback)
+		
+		// Balance routes
+		protected.GET("/roomspaces/:id/balances", middleware.ValidateRoomspaceMembership(), balanceHandler.GetRoomspaceBalances)
+		protected.GET("/roomspaces/:id/balances/:userId", middleware.ValidateRoomspaceMembership(), balanceHandler.GetUserBalance)
+		protected.POST("/roomspaces/:id/settlements", middleware.ValidateRoomspaceMembership(), balanceHandler.CreateSettlement)
+		protected.GET("/roomspaces/:id/settlements", middleware.ValidateRoomspaceMembership(), balanceHandler.GetSettlementHistory)
+		protected.GET("/roomspaces/:id/settlements/suggestions", middleware.ValidateRoomspaceMembership(), balanceHandler.GetSettlementSuggestions)
+		protected.POST("/roomspaces/:id/balances/refresh", middleware.ValidateRoomspaceMembership(), balanceHandler.RefreshBalanceCache)
 	}
 
 	// Start server
