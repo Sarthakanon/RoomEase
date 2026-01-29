@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/mobile_scaffold.dart';
 import '../../core/widgets/roomspace_switcher.dart';
+import '../../core/widgets/global_roomspace_selector.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../services/api_service.dart';
 import '../../services/payment_notification_service.dart';
@@ -100,14 +101,15 @@ class _MobileDashboardState extends State<MobileDashboard> {
       // Get active roomspace from provider
       final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
       final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+      final isPersonalSpace = roomspaceProvider.isPersonalSpace;
       
-      print('📊 Loading recent expenses for roomspace: $activeRoomspaceId');
+      print('📊 Loading recent expenses for roomspace: $activeRoomspaceId (Personal Space: $isPersonalSpace)');
       
       // Load both shared and personal expenses concurrently
       final futures = <Future>[];
       
-      // Load shared expenses if user has an active roomspace
-      if (activeRoomspaceId != null) {
+      // Load shared expenses ONLY if NOT in personal space
+      if (!isPersonalSpace && activeRoomspaceId != null) {
         futures.add(_apiService.getRecentExpenses(roomspaceId: activeRoomspaceId, limit: 3));
       }
       
@@ -122,7 +124,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
       int resultIndex = 0;
       
       // Process shared expenses if we loaded them
-      if (activeRoomspaceId != null) {
+      if (!isPersonalSpace && activeRoomspaceId != null) {
         final sharedResponse = results[resultIndex++];
         print('📊 Shared expenses response: $sharedResponse');
         if (sharedResponse.containsKey('data')) {
@@ -677,6 +679,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
 
     return MobileScaffold(
       currentIndex: 0,
+      showAppBar: false, // Disable AppBar for home screen
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -727,107 +730,70 @@ class _MobileDashboardState extends State<MobileDashboard> {
                           ),
                         ],
                       ),
-                      GestureDetector(
-                        onTap: () async {
-                          await Navigator.pushNamed(context, '/notifications');
-                          _loadUnreadCount();
-                        },
-                        child: Stack(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.notifications_outlined,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                            ),
-                            if (_unreadNotificationCount > 0)
-                              Positioned(
-                                right: 0,
-                                top: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
+                      Row(
+                        children: [
+                          // Global Roomspace Selector
+                          GlobalRoomspaceSelector(
+                            onRoomspaceChanged: () {
+                              // Reload dashboard data
+                              _checkRoomspace();
+                              _loadRecentExpenses();
+                            },
+                          ),
+                          const SizedBox(width: 12),
+                          // Notification Icon
+                          GestureDetector(
+                            onTap: () async {
+                              await Navigator.pushNamed(context, '/notifications');
+                              _loadUnreadCount();
+                            },
+                            child: Stack(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
                                     shape: BoxShape.circle,
                                   ),
-                                  constraints: const BoxConstraints(
-                                    minWidth: 16,
-                                    minHeight: 16,
-                                  ),
-                                  child: Text(
-                                    _unreadNotificationCount > 9
-                                        ? '9+'
-                                        : '$_unreadNotificationCount',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    textAlign: TextAlign.center,
+                                  child: const Icon(
+                                    Icons.notifications_outlined,
+                                    color: Colors.white,
+                                    size: 22,
                                   ),
                                 ),
-                              ),
-                          ],
-                        ),
+                                if (_unreadNotificationCount > 0)
+                                  Positioned(
+                                    right: 0,
+                                    top: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      constraints: const BoxConstraints(
+                                        minWidth: 16,
+                                        minHeight: 16,
+                                      ),
+                                      child: Text(
+                                        _unreadNotificationCount > 9
+                                            ? '9+'
+                                            : '$_unreadNotificationCount',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Active Roomspace Name Display
-                  Consumer<RoomspaceProvider>(
-                    builder: (context, roomspaceProvider, child) {
-                      final activeRoomspace = roomspaceProvider.activeRoomspace;
-                      
-                      if (activeRoomspace == null) {
-                        return const SizedBox.shrink();
-                      }
-                      
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: activeRoomspace.visualColor,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              activeRoomspace.visualIcon,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                activeRoomspace.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
                   ),
                   const SizedBox(height: 20),
                   Row(
