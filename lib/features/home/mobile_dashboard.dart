@@ -811,7 +811,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'Rs. 450.00',
+                              'Rs. 450',
                               style: TextStyle(
                                 color: Colors.greenAccent,
                                 fontSize: 32,
@@ -839,7 +839,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'Rs. 120.00',
+                              'Rs. 120',
                               style: TextStyle(
                                 color: Colors.redAccent,
                                 fontSize: 32,
