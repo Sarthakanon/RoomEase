@@ -43,17 +43,32 @@ class MonthSelector extends StatelessWidget {
             tooltip: 'Previous month',
           ),
           
-          // Month and year display
+          // Month and year display - tap to open calendar
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                DateFormat('MMMM yyyy').format(selectedMonth),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).primaryColor,
+            child: InkWell(
+              onTap: () => _showDatePicker(context),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      DateFormat('MMMM yyyy').format(selectedMonth),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.calendar_today,
+                      size: 16,
+                      color: Theme.of(context).primaryColor.withOpacity(0.7),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -96,5 +111,33 @@ class MonthSelector extends StatelessWidget {
     final selected = DateTime(selectedMonth.year, selectedMonth.month, 1);
     
     return selected.isBefore(currentMonth);
+  }
+  
+  Future<void> _showDatePicker(BuildContext context) async {
+    final now = DateTime.now();
+    
+    // Show date picker for selecting specific date
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: selectedMonth,
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: now,
+      helpText: 'Select Date',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Theme.of(context).primaryColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (picked != null) {
+      // Use the exact date picked (not just first day of month)
+      onMonthChanged(picked);
+    }
   }
 }
