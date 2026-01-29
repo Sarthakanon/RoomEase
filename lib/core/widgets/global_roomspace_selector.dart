@@ -98,7 +98,7 @@ class _GlobalRoomspaceSelectorState extends State<GlobalRoomspaceSelector> {
                 // Text
                 Flexible(
                   child: Text(
-                    activeRoomspace?.name ?? 'Personal',
+                    activeRoomspace?.name ?? 'Per',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -163,7 +163,7 @@ class _GlobalRoomspaceSelectorState extends State<GlobalRoomspaceSelector> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    'Personal Space',
+                    'Per',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
