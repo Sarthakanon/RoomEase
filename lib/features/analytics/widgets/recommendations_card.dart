@@ -342,7 +342,7 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
                   ),
                 ),
                 Text(
-                  'Rs. ${recommendation.potentialSavings.toStringAsFixed(2)}/m',
+                  'Rs. ${recommendation.potentialSavings.toStringAsFixed(2)}/mr',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.green,
                     fontWeight: FontWeight.bold,
