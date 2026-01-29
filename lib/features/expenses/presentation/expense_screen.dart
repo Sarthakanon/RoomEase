@@ -26,7 +26,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool _hasError = false;
   String _errorMessage = '';
   String? _currentRoomspaceId;
-  DateTime _selectedMonth = DateTime.now(); // Default to current month
+  // Initialize with first day of current month
+  late DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
   @override
   void initState() {
