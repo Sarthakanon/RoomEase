@@ -45,32 +45,15 @@ class MonthSelector extends StatelessWidget {
           
           // Month and year display
           Expanded(
-            child: InkWell(
-              onTap: () => _showMonthPicker(context),
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  children: [
-                    Text(
-                      DateFormat('MMMM yyyy').format(selectedMonth),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Tap to select',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).primaryColor.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                DateFormat('MMMM yyyy').format(selectedMonth),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).primaryColor,
                 ),
               ),
             ),
@@ -96,7 +79,7 @@ class MonthSelector extends StatelessWidget {
     final newMonth = DateTime(
       selectedMonth.year,
       selectedMonth.month + delta,
-      1,
+      1, // Always set to first day of month
     );
     
     // Don't allow future months
@@ -113,35 +96,5 @@ class MonthSelector extends StatelessWidget {
     final selected = DateTime(selectedMonth.year, selectedMonth.month, 1);
     
     return selected.isBefore(currentMonth);
-  }
-  
-  Future<void> _showMonthPicker(BuildContext context) async {
-    final now = DateTime.now();
-    
-    // Show a custom month/year picker dialog
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: selectedMonth,
-      firstDate: DateTime(2020, 1),
-      lastDate: now,
-      initialDatePickerMode: DatePickerMode.day,
-      helpText: 'Select Month',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Theme.of(context).primaryColor,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    
-    if (picked != null) {
-      // Set to first day of the selected month
-      final newMonth = DateTime(picked.year, picked.month, 1);
-      onMonthChanged(newMonth);
-    }
   }
 }
