@@ -161,7 +161,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     return MobileScaffold(
-      currentIndex: 3,
+      currentIndex: 4,
+      showAppBar: false, // Disable AppBar for profile screen
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: primaryColor))
           : CustomScrollView(
@@ -170,7 +171,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   backgroundColor: const Color(0xFFF8F9FA),
                   elevation: 0,
                   pinned: true,
-                  centerTitle: true,
+                  automaticallyImplyLeading: false,
                   title: const Text(
                     'Profile',
                     style: TextStyle(
