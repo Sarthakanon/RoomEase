@@ -318,12 +318,19 @@ class ApiService {
     String? roomspaceId,
     int? limit,
     int? offset,
+    DateTime? month,
   }) async {
     try {
       final queryParams = <String, String>{};
       if (roomspaceId != null) queryParams['roomspace_id'] = roomspaceId;
       if (limit != null) queryParams['limit'] = limit.toString();
       if (offset != null) queryParams['offset'] = offset.toString();
+      
+      // Add month/year filtering
+      if (month != null) {
+        queryParams['year'] = month.year.toString();
+        queryParams['month'] = month.month.toString();
+      }
       
       final path = '/api/personal-expenses${queryParams.isNotEmpty ? '?${Uri(queryParameters: queryParams).query}' : ''}';
       return await get(path);
@@ -373,11 +380,18 @@ class ApiService {
     String roomspaceId, {
     int? limit,
     int? offset,
+    DateTime? month,
   }) async {
     try {
       final queryParams = <String, String>{};
       if (limit != null) queryParams['limit'] = limit.toString();
       if (offset != null) queryParams['offset'] = offset.toString();
+      
+      // Add month/year filtering
+      if (month != null) {
+        queryParams['year'] = month.year.toString();
+        queryParams['month'] = month.month.toString();
+      }
       
       final path = '/api/roomspaces/$roomspaceId/expenses${queryParams.isNotEmpty ? '?${Uri(queryParameters: queryParams).query}' : ''}';
       return await get(path);
@@ -389,15 +403,27 @@ class ApiService {
   Future<Map<String, dynamic>> getRecentExpenses({
     String? roomspaceId,
     int limit = 3,
+    DateTime? month,
   }) async {
     try {
       if (roomspaceId != null) {
         // Use roomspace-specific endpoint
-        final path = '/api/roomspaces/$roomspaceId/expenses?limit=$limit&offset=0';
+        final queryParams = <String, String>{
+          'limit': limit.toString(),
+          'offset': '0',
+        };
+        
+        // Add month/year filtering
+        if (month != null) {
+          queryParams['year'] = month.year.toString();
+          queryParams['month'] = month.month.toString();
+        }
+        
+        final path = '/api/roomspaces/$roomspaceId/expenses?${Uri(queryParameters: queryParams).query}';
         return await get(path);
       } else {
         // Use personal expenses endpoint
-        return await getPersonalExpenses(limit: limit, offset: 0);
+        return await getPersonalExpenses(limit: limit, offset: 0, month: month);
       }
     } catch (e) {
       throw Exception('Failed to retrieve recent expenses: ${e.toString()}');
