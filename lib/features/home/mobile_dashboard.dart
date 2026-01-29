@@ -711,153 +711,179 @@ class _MobileDashboardState extends State<MobileDashboard> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Hi, ',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 14,
+                      // User greeting - flexible to shrink if needed
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Hi, ',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontSize: 14,
+                              ),
                             ),
-                          ),
-                          Text(
-                            user?.displayName ?? 'User',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          // Global Roomspace Selector
-                          GlobalRoomspaceSelector(
-                            onRoomspaceChanged: () {
-                              // Reload dashboard data
-                              _checkRoomspace();
-                              _loadRecentExpenses();
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          // Notification Icon
-                          GestureDetector(
-                            onTap: () async {
-                              await Navigator.pushNamed(context, '/notifications');
-                              _loadUnreadCount();
-                            },
-                            child: Stack(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.notifications_outlined,
-                                    color: Colors.white,
-                                    size: 22,
-                                  ),
+                            Flexible(
+                              child: Text(
+                                user?.displayName ?? 'User',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                if (_unreadNotificationCount > 0)
-                                  Positioned(
-                                    right: 0,
-                                    top: 0,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
-                                        color: Colors.red,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      constraints: const BoxConstraints(
-                                        minWidth: 16,
-                                        minHeight: 16,
-                                      ),
-                                      child: Text(
-                                        _unreadNotificationCount > 9
-                                            ? '9+'
-                                            : '$_unreadNotificationCount',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Right side controls - shrink if needed
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Global Roomspace Selector
+                            Flexible(
+                              child: GlobalRoomspaceSelector(
+                                onRoomspaceChanged: () {
+                                  // Reload dashboard data
+                                  _checkRoomspace();
+                                  _loadRecentExpenses();
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Notification Icon
+                            GestureDetector(
+                              onTap: () async {
+                                await Navigator.pushNamed(context, '/notifications');
+                                _loadUnreadCount();
+                              },
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.notifications_outlined,
+                                      color: Colors.white,
+                                      size: 22,
                                     ),
                                   ),
-                              ],
+                                  if (_unreadNotificationCount > 0)
+                                    Positioned(
+                                      right: 0,
+                                      top: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.red,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        constraints: const BoxConstraints(
+                                          minWidth: 16,
+                                          minHeight: 16,
+                                        ),
+                                        child: Text(
+                                          _unreadNotificationCount > 9
+                                              ? '9+'
+                                              : '$_unreadNotificationCount',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'You are owed',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
-                                fontSize: 13,
-                              ),
+                  // Balance section - responsive font sizes
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final screenWidth = constraints.maxWidth;
+                      final balanceFontSize = screenWidth < 320 ? 24.0 : 32.0;
+                      final labelFontSize = screenWidth < 320 ? 11.0 : 13.0;
+                      
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'You are owed',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: labelFontSize,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Rs. 450',
+                                  style: TextStyle(
+                                    color: Colors.greenAccent,
+                                    fontSize: balanceFontSize,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Rs. 450',
-                              style: TextStyle(
-                                color: Colors.greenAccent,
-                                fontSize: 32,
-                                fontWeight: FontWeight.w900,
-                              ),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 60,
+                            color: Colors.white.withValues(alpha: 0.3),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'You owe',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: labelFontSize,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Rs. 120',
+                                  style: TextStyle(
+                                    color: Colors.redAccent,
+                                    fontSize: balanceFontSize,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        width: 1,
-                        height: 60,
-                        color: Colors.white.withValues(alpha: 0.3),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'You owe',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Rs. 120',
-                              style: TextStyle(
-                                color: Colors.redAccent,
-                                fontSize: 32,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
             ),
 
-            // FIXED: Action Buttons
+            // FIXED: Action Buttons - Responsive
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(MediaQuery.of(context).size.width < 360 ? 16 : 20),
               child: Column(
                 children: [
                   Row(
@@ -1041,14 +1067,16 @@ class _MobileDashboardState extends State<MobileDashboard> {
 
             // Recent Activity Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(
+                horizontal: MediaQuery.of(context).size.width < 360 ? 16 : 20,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     "Recent Activity",
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: MediaQuery.of(context).size.width < 360 ? 16 : 18,
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[800],
                     ),
@@ -1074,7 +1102,9 @@ class _MobileDashboardState extends State<MobileDashboard> {
             // RECENT ACTIVITY LIST
             // ---------------------------------------------
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(
+                horizontal: MediaQuery.of(context).size.width < 360 ? 16 : 20,
+              ),
               child: _buildRecentActivityList(primaryColor),
             ),
           ],
