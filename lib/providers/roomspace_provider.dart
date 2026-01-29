@@ -55,6 +55,7 @@ class RoomspaceProvider extends ChangeNotifier {
   bool get canJoinMore => _roomspaces.length < 5;
   int get roomspaceCount => _roomspaces.length;
   bool get hasNoRoomspaces => _roomspaces.isEmpty;
+  bool get isPersonalSpace => _activeRoomspace == null;
   
   /// Load all roomspaces for the authenticated user from the API
   /// Includes retry logic for network failures
@@ -94,13 +95,10 @@ class RoomspaceProvider extends ChangeNotifier {
         
         // Restore active roomspace from SharedPreferences
         await _restoreActiveRoomspace();
-        print('🎯 Active roomspace: ${_activeRoomspace?.name ?? "None"}');
+        print('🎯 Active roomspace: ${_activeRoomspace?.name ?? "Personal Space"}');
         
-        // If no active roomspace is set and we have roomspaces, set the first one
-        if (_activeRoomspace == null && _roomspaces.isNotEmpty) {
-          print('⚠️ No active roomspace set, setting first one as active');
-          await setActiveRoomspace(_roomspaces.first.id);
-        }
+        // Don't automatically set first roomspace - respect personal space mode
+        // User can explicitly switch using the global selector
         
         // Handle no roomspaces scenario
         if (_roomspaces.isEmpty) {
@@ -222,6 +220,29 @@ class RoomspaceProvider extends ChangeNotifier {
       _errorType = isNetworkError 
           ? RoomspaceErrorType.networkFailure 
           : RoomspaceErrorType.unknown;
+      print('❌ $_error');
+      notifyListeners();
+    }
+  }
+  
+  /// Switch to personal space (no active roomspace)
+  /// Clears the active roomspace and persists to SharedPreferences
+  Future<void> switchToPersonalSpace() async {
+    print('🏠 Switching to personal space');
+    try {
+      _activeRoomspace = null;
+      _error = null;
+      _errorType = null;
+      
+      // Clear from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_activeRoomspaceKey);
+      
+      print('✅ Switched to personal space');
+      notifyListeners();
+    } catch (e) {
+      _error = 'Failed to switch to personal space: ${e.toString()}';
+      _errorType = RoomspaceErrorType.unknown;
       print('❌ $_error');
       notifyListeners();
     }
@@ -381,10 +402,8 @@ class RoomspaceProvider extends ChangeNotifier {
       // Restore active roomspace
       await _restoreActiveRoomspace();
       
-      // If no active roomspace is set and we have roomspaces, set the first one
-      if (_activeRoomspace == null && _roomspaces.isNotEmpty) {
-        _activeRoomspace = _roomspaces.first;
-      }
+      // Don't automatically set first roomspace - respect personal space mode
+      // User can explicitly switch using the global selector
       
       print('Loaded ${_roomspaces.length} roomspaces from cache');
       notifyListeners();
@@ -437,15 +456,9 @@ class RoomspaceProvider extends ChangeNotifier {
           (r) => r.id == savedRoomspaceId,
           orElse: () {
             // If saved roomspace no longer exists, clear it from preferences
-            // and fall back to first available
-            print('Saved roomspace $savedRoomspaceId no longer available. Falling back to first available.');
+            // Stay in personal space mode instead of forcing a roomspace
+            print('Saved roomspace $savedRoomspaceId no longer available. Staying in personal space.');
             prefs.remove(_activeRoomspaceKey);
-            
-            if (_roomspaces.isNotEmpty) {
-              // Set first available as active
-              prefs.setString(_activeRoomspaceKey, _roomspaces.first.id);
-              return _roomspaces.first;
-            }
             
             throw RoomspaceException(
               'Previously active roomspace is no longer available.',
@@ -455,19 +468,19 @@ class RoomspaceProvider extends ChangeNotifier {
         );
         
         _activeRoomspace = roomspace;
+      } else {
+        // No saved roomspace - stay in personal space mode
+        print('No saved roomspace found. Staying in personal space mode.');
+        _activeRoomspace = null;
       }
     } on RoomspaceException catch (e) {
       print('RoomspaceException restoring active roomspace: ${e.message}');
-      // Fallback to first roomspace if available
-      if (_roomspaces.isNotEmpty) {
-        _activeRoomspace = _roomspaces.first;
-      }
+      // Stay in personal space mode instead of forcing a roomspace
+      _activeRoomspace = null;
     } catch (e) {
       print('Failed to restore active roomspace: ${e.toString()}');
-      // If restoration fails, we'll set the first roomspace as active in loadRoomspaces
-      if (_roomspaces.isNotEmpty) {
-        _activeRoomspace = _roomspaces.first;
-      }
+      // Stay in personal space mode instead of forcing a roomspace
+      _activeRoomspace = null;
     }
   }
   
