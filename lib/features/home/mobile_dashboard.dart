@@ -6,6 +6,7 @@ import '../../core/widgets/roomspace_switcher.dart';
 import '../../core/widgets/global_roomspace_selector.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../services/api_service.dart';
+import '../../services/balance_service.dart';
 import '../../services/payment_notification_service.dart';
 import '../../services/ocr_service.dart';
 import '../../models/payment_notification.dart';
@@ -24,6 +25,7 @@ class MobileDashboard extends StatefulWidget {
 
 class _MobileDashboardState extends State<MobileDashboard> {
   final ApiService _apiService = ApiService();
+  final BalanceService _balanceService = BalanceService();
   bool _hasRoomspace = false;
   bool _isLoading = true;
   List<RoommateItem> _roommates = [];
@@ -35,12 +37,18 @@ class _MobileDashboardState extends State<MobileDashboard> {
   List<PersonalExpenseData> _recentPersonalExpenses = [];
   bool _isLoadingExpenses = true;
   String? _expensesError;
+  
+  // Balance state
+  double _youAreOwed = 0.0;
+  double _youOwe = 0.0;
+  bool _isLoadingBalance = false;
 
   @override
   void initState() {
     super.initState();
     _checkRoomspace();
     _loadUnreadCount();
+    _loadBalance();
     _initializePaymentNotifications();
     
     // Listen to roomspace provider changes
@@ -62,6 +70,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
   void _onRoomspaceChanged() {
     // Refresh data when roomspace changes
     _loadRecentExpenses();
+    _loadBalance();
   }
 
   Future<void> _initializePaymentNotifications() async {
@@ -172,6 +181,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
 
   Future<void> _refreshRecentExpenses() async {
     await _loadRecentExpenses();
+    await _loadBalance(); // Refresh balance when expenses change
   }
 
   Future<void> _loadUnreadCount() async {
@@ -209,55 +219,75 @@ class _MobileDashboardState extends State<MobileDashboard> {
       
       if (mounted) {
         setState(() {
-          _hasRoomspace = roomspaceProvider.roomspaceCount > 0;
+          _hasRoomspace = activeRoomspace != null;
           _isLoading = false;
         });
-
-        // Load roommates from active roomspace if available
-        if (activeRoomspace != null) {
-          _currentRoomspaceId = activeRoomspace.id;
-          
-          // Fetch full roomspace details to get members
-          final response = await _apiService.getRoomspaces();
-          final roomspacesData = response['data'] as List<dynamic>?;
-          
-          if (roomspacesData != null) {
-            final roomspaceData = roomspacesData.firstWhere(
-              (r) => r['id']?.toString() == activeRoomspace.id,
-              orElse: () => null,
-            );
-            
-            if (roomspaceData != null) {
-              final members = roomspaceData['members'] as List<dynamic>? ?? [];
-              
-              _roommates = members.map((m) {
-                final user = m['user'];
-                final firebaseUid = m['user_id'] ?? '';
-                
-                return RoommateItem(
-                  id: firebaseUid,
-                  name: user?['name'] ?? user?['email'] ?? 'Unknown',
-                  email: user?['email'],
-                );
-              }).toList();
-            }
-          }
-          
-          // Load recent expenses after roomspace is loaded
-          _loadRecentExpenses();
-        } else {
-          // Even without a roomspace, load personal expenses
-          _loadRecentExpenses();
-        }
       }
+      
+      // Load recent expenses after checking roomspace
+      await _loadRecentExpenses();
     } catch (e) {
       if (mounted) {
         setState(() {
-          _hasRoomspace = false;
           _isLoading = false;
         });
-        // Even if roomspace loading fails, try to load personal expenses
-        _loadRecentExpenses();
+      }
+    }
+  }
+
+  Future<void> _loadBalance() async {
+    setState(() {
+      _isLoadingBalance = true;
+    });
+
+    try {
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+      final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+      final currentUser = FirebaseAuth.instance.currentUser;
+
+      // Hide balance in personal space or if no roomspace
+      if (isPersonalSpace || activeRoomspaceId == null || currentUser == null) {
+        setState(() {
+          _youAreOwed = 0.0;
+          _youOwe = 0.0;
+          _isLoadingBalance = false;
+        });
+        return;
+      }
+
+      // Fetch balance from API
+      final balance = await _balanceService.getUserBalance(
+        activeRoomspaceId,
+        currentUser.uid,
+      );
+
+      if (balance != null && mounted) {
+        setState(() {
+          if (balance.balance > 0) {
+            _youAreOwed = balance.balance;
+            _youOwe = 0.0;
+          } else {
+            _youAreOwed = 0.0;
+            _youOwe = balance.balance.abs();
+          }
+          _isLoadingBalance = false;
+        });
+      } else if (mounted) {
+        setState(() {
+          _youAreOwed = 0.0;
+          _youOwe = 0.0;
+          _isLoadingBalance = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading balance: $e');
+      if (mounted) {
+        setState(() {
+          _youAreOwed = 0.0;
+          _youOwe = 0.0;
+          _isLoadingBalance = false;
+        });
       }
     }
   }
@@ -266,7 +296,6 @@ class _MobileDashboardState extends State<MobileDashboard> {
     final primaryColor = Theme.of(context).colorScheme.primary;
     _showExpenseOptions(context, primaryColor);
   }
-
   void _showExpenseOptions(BuildContext context, Color primaryColor, {PaymentNotification? paymentNotification}) {
     showModalBottomSheet(
       context: context,
@@ -832,15 +861,23 @@ class _MobileDashboardState extends State<MobileDashboard> {
                                   ),
                                 ),
                                 const SizedBox(height: 6),
-                                Text(
-                                  'Rs. 450',
-                                  style: TextStyle(
-                                    color: Colors.greenAccent,
-                                    fontSize: balanceFontSize,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                _isLoadingBalance
+                                  ? SizedBox(
+                                      height: balanceFontSize,
+                                      child: const CircularProgressIndicator(
+                                        color: Colors.greenAccent,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text(
+                                      'Rs. ${_youAreOwed.round()}',
+                                      style: TextStyle(
+                                        color: Colors.greenAccent,
+                                        fontSize: balanceFontSize,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                               ],
                             ),
                           ),
@@ -861,15 +898,23 @@ class _MobileDashboardState extends State<MobileDashboard> {
                                   ),
                                 ),
                                 const SizedBox(height: 6),
-                                Text(
-                                  'Rs. 120',
-                                  style: TextStyle(
-                                    color: Colors.redAccent,
-                                    fontSize: balanceFontSize,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                _isLoadingBalance
+                                  ? SizedBox(
+                                      height: balanceFontSize,
+                                      child: const CircularProgressIndicator(
+                                        color: Colors.redAccent,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text(
+                                      'Rs. ${_youOwe.round()}',
+                                      style: TextStyle(
+                                        color: Colors.redAccent,
+                                        fontSize: balanceFontSize,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                               ],
                             ),
                           ),
