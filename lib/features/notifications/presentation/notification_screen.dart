@@ -354,6 +354,22 @@ class _NotificationScreenState extends State<NotificationScreen> {
         icon = Icons.person_off;
         iconColor = Colors.orange;
         break;
+      case 'PAYMENT_REMINDER':
+        icon = Icons.notifications_active;
+        iconColor = Colors.orange;
+        break;
+      case 'PAYMENT_CLAIM':
+        icon = Icons.payment;
+        iconColor = Colors.blue;
+        break;
+      case 'PAYMENT_CONFIRMED':
+        icon = Icons.check_circle;
+        iconColor = Colors.green;
+        break;
+      case 'PAYMENT_REJECTED':
+        icon = Icons.cancel;
+        iconColor = Colors.red;
+        break;
       default:
         icon = Icons.notifications;
         iconColor = Colors.grey;
