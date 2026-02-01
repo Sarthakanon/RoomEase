@@ -23,7 +23,7 @@ class MobileDashboard extends StatefulWidget {
   State<MobileDashboard> createState() => _MobileDashboardState();
 }
 
-class _MobileDashboardState extends State<MobileDashboard> {
+class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingObserver {
   final ApiService _apiService = ApiService();
   final BalanceService _balanceService = BalanceService();
   bool _hasRoomspace = false;
@@ -46,6 +46,7 @@ class _MobileDashboardState extends State<MobileDashboard> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkRoomspace();
     _loadUnreadCount();
     _loadBalance();
@@ -60,10 +61,21 @@ class _MobileDashboardState extends State<MobileDashboard> {
   
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // Remove listener when widget is disposed
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     roomspaceProvider.removeListener(_onRoomspaceChanged);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh data when app comes back to foreground
+      _loadBalance();
+      _loadRecentExpenses();
+      _loadUnreadCount();
+    }
   }
   
   /// Called when the active roomspace changes
