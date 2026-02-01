@@ -1,7 +1,14 @@
 package models
 
 import (
+	"errors"
 	"time"
+)
+
+// Error types for balance operations
+var (
+	ErrSelfSettlement = errors.New("cannot settle with yourself")
+	ErrInvalidAmount  = errors.New("settlement amount must be positive")
 )
 
 // UserBalance represents a user's balance in a specific roomspace
