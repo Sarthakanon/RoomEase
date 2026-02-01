@@ -472,6 +472,9 @@ func (s *PostgresService) AutoMigrate() error {
 		&models.RecommendationFeedback{}, // Depends on User
 		&models.AnomalyAcknowledgment{}, // Depends on User and Expense
 		&models.MLModel{},        // No dependencies
+		&models.UserBalance{},    // Depends on User and Roomspace
+		&models.Settlement{},     // Depends on User and Roomspace
+		&models.PaymentConfirmation{}, // Depends on User and Roomspace
 	)
 	if err != nil {
 		return err
