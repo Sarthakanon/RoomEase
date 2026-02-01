@@ -16,6 +16,10 @@ const (
 	NotificationTypeExpenseAdded   NotificationType = "EXPENSE_ADDED"
 	NotificationTypeMemberRemoved  NotificationType = "MEMBER_REMOVED"
 	NotificationTypeYouRemovedUser NotificationType = "YOU_REMOVED_USER"
+	NotificationTypePaymentReminder NotificationType = "PAYMENT_REMINDER"
+	NotificationTypePaymentClaim   NotificationType = "PAYMENT_CLAIM"
+	NotificationTypePaymentConfirmed NotificationType = "PAYMENT_CONFIRMED"
+	NotificationTypePaymentRejected NotificationType = "PAYMENT_REJECTED"
 )
 
 // Notification represents a notification for a user
