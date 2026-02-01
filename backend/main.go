@@ -76,6 +76,10 @@ func main() {
 	// Initialize balance service and handler
 	balanceService := services.NewBalanceService()
 	balanceHandler := handlers.NewBalanceHandler(balanceService, dbService)
+	
+	// Initialize payment confirmation service and handler
+	paymentConfirmationService := services.NewPaymentConfirmationService(config.DB, balanceService, dbService)
+	paymentConfirmationHandler := handlers.NewPaymentConfirmationHandler(paymentConfirmationService, dbService)
 
 	// Health check endpoint (public)
 	router.GET("/health", healthHandler.Check)
@@ -108,6 +112,7 @@ func main() {
 
 		// Notification routes
 		protected.GET("/notifications", notificationHandler.GetNotifications)
+		protected.POST("/notifications/send-reminder", notificationHandler.SendPaymentReminder)
 		protected.PUT("/notifications/:id/read", notificationHandler.MarkAsRead)
 		protected.GET("/join-requests", notificationHandler.GetJoinRequests)
 		protected.GET("/join-requests/pending", notificationHandler.GetPendingJoinRequest)
@@ -151,6 +156,14 @@ func main() {
 		protected.GET("/roomspaces/:id/settlements", middleware.ValidateRoomspaceMembership(), balanceHandler.GetSettlementHistory)
 		protected.GET("/roomspaces/:id/settlements/suggestions", middleware.ValidateRoomspaceMembership(), balanceHandler.GetSettlementSuggestions)
 		protected.POST("/roomspaces/:id/balances/refresh", middleware.ValidateRoomspaceMembership(), balanceHandler.RefreshBalanceCache)
+		
+		// Payment Confirmation routes
+		protected.POST("/roomspaces/:id/payments/confirm", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.CreatePaymentConfirmation)
+		protected.PUT("/roomspaces/:id/payments/:paymentId/confirm", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.ConfirmPayment)
+		protected.PUT("/roomspaces/:id/payments/:paymentId/reject", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.RejectPayment)
+		protected.GET("/roomspaces/:id/payments/pending", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.GetPendingConfirmations)
+		protected.GET("/roomspaces/:id/payments/history", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.GetPaymentHistory)
+		protected.GET("/roomspaces/:id/payments/stats", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.GetPaymentStats)
 	}
 
 	// Start server
