@@ -9,6 +9,8 @@ import '../widgets/month_selector.dart';
 import 'expense_list_screen.dart';
 import 'personal_expenses_screen.dart';
 import 'personal_expense_details_screen.dart';
+import 'payment_confirmation_screen.dart';
+import 'who_owes_who_screen.dart';
 
 class ExpenseScreen extends StatefulWidget {
   const ExpenseScreen({super.key});
@@ -22,6 +24,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   
   List<ExpenseData> _recentSharedExpenses = [];
   List<PersonalExpenseData> _recentPersonalExpenses = [];
+  int _pendingPaymentsCount = 0;
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
@@ -65,11 +68,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         // Only load personal expenses in personal space
         await _loadRecentPersonalExpenses();
         _recentSharedExpenses = []; // Clear shared expenses
+        _pendingPaymentsCount = 0; // Clear pending payments
       } else {
         // Load both in roomspace mode
         await Future.wait([
           _loadRecentSharedExpenses(),
           _loadRecentPersonalExpenses(),
+          _loadPendingPaymentsCount(),
         ]);
       }
       
@@ -133,6 +138,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       }
     } catch (e) {
       debugPrint('Error loading personal expenses: $e');
+    }
+  }
+
+  Future<void> _loadPendingPaymentsCount() async {
+    try {
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final activeRoomspace = roomspaceProvider.activeRoomspace;
+      
+      if (activeRoomspace != null) {
+        final response = await _apiService.dio.get(
+          '/api/roomspaces/${activeRoomspace.id}/payments/pending',
+        );
+        
+        if (response.statusCode == 200 && response.data['success'] == true) {
+          final List<dynamic> payments = response.data['data'] ?? [];
+          setState(() {
+            _pendingPaymentsCount = payments.length;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading pending payments count: $e');
+      setState(() {
+        _pendingPaymentsCount = 0;
+      });
     }
   }
 
@@ -209,6 +239,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     ),
                     const SizedBox(height: 12),
                     _buildSharedList(primaryColor),
+                    const SizedBox(height: 30),
+                    
+                    // Who Owes Who Section
+                    _buildWhoOwesWhoSection(primaryColor),
+                    const SizedBox(height: 30),
+                    
+                    // Payment Confirmations Section
+                    _buildPaymentConfirmationsSection(primaryColor),
                     const SizedBox(height: 30),
                   ],
 
@@ -330,12 +368,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
+        Flexible(
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         TextButton(
@@ -553,5 +594,223 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${months[date.month - 1]} ${date.day}';
+  }
+
+  Widget _buildPaymentConfirmationsSection(Color primaryColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          title: "Payment Confirmations",
+          onTap: () {
+            final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+            final activeRoomspace = roomspaceProvider.activeRoomspace;
+            if (activeRoomspace != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PaymentConfirmationScreen(
+                    roomspaceId: activeRoomspace.id,
+                  ),
+                ),
+              ).then((_) => _loadPendingPaymentsCount());
+            }
+          },
+          color: Colors.blue,
+        ),
+        const SizedBox(height: 12),
+        _buildPaymentConfirmationsPreview(),
+      ],
+    );
+  }
+
+  Widget _buildWhoOwesWhoSection(Color primaryColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          title: "Who Owes Who",
+          onTap: () {
+            final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+            final activeRoomspace = roomspaceProvider.activeRoomspace;
+            if (activeRoomspace != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => WhoOwesWhoScreen(
+                    roomspaceId: activeRoomspace.id,
+                  ),
+                ),
+              );
+            }
+          },
+          color: Colors.purple,
+        ),
+        const SizedBox(height: 12),
+        _buildWhoOwesWhoPreview(),
+      ],
+    );
+  }
+
+  Widget _buildWhoOwesWhoPreview() {
+    return InkWell(
+      onTap: () {
+        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+        final activeRoomspace = roomspaceProvider.activeRoomspace;
+        if (activeRoomspace != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => WhoOwesWhoScreen(
+                roomspaceId: activeRoomspace.id,
+              ),
+            ),
+          );
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.purple[50]!, Colors.purple[100]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.purple[200]!),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.purple,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.people, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Balance Overview',
+                    style: TextStyle(
+                      color: Colors.purple[900],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'See who owes who and settle up',
+                    style: TextStyle(
+                      color: Colors.purple[700],
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.purple[700]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentConfirmationsPreview() {
+    if (_pendingPaymentsCount == 0) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: Colors.grey[400]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'No pending payment confirmations',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: () {
+        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+        final activeRoomspace = roomspaceProvider.activeRoomspace;
+        if (activeRoomspace != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PaymentConfirmationScreen(
+                roomspaceId: activeRoomspace.id,
+              ),
+            ),
+          ).then((_) => _loadPendingPaymentsCount());
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue[50]!, Colors.blue[100]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.blue[200]!),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.payment, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$_pendingPaymentsCount Pending Payment${_pendingPaymentsCount > 1 ? 's' : ''}',
+                    style: TextStyle(
+                      color: Colors.blue[900],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap to review and confirm',
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.blue[700]),
+          ],
+        ),
+      ),
+    );
   }
 }
