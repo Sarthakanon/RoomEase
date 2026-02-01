@@ -63,13 +63,33 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 		}
 	}
 
-	// Convert members to interface slice for JSON
+	// Apply settlements (payments) to balances
+	var settlements []models.Settlement
+	result = config.DB.
+		Where("roomspace_id = ?", roomspaceID).
+		Find(&settlements)
+	
+	if result.Error != nil {
+		return nil, fmt.Errorf("failed to fetch settlements: %w", result.Error)
+	}
+
+	for _, settlement := range settlements {
+		// When FromUser pays ToUser:
+		// - FromUser's balance increases (they paid their debt)
+		// - ToUser's balance decreases (they received what they were owed)
+		userBalances[settlement.FromUserID] += settlement.Amount
+		userBalances[settlement.ToUserID] -= settlement.Amount
+	}
+
+	// Convert members to interface slice for JSON with their balances
 	memberInterfaces := make([]interface{}, len(members))
 	for i, member := range members {
 		memberInterfaces[i] = map[string]interface{}{
 			"user_id":   member.UserID,
 			"user_name": member.User.Name,
+			"name":      member.User.Name, // Add 'name' field for frontend compatibility
 			"role":      member.Role,
+			"balance":   userBalances[member.UserID], // Include the calculated balance
 		}
 	}
 
@@ -135,8 +155,37 @@ func (s *BalanceService) GetUserBalance(roomspaceID, userID string) (*models.Use
 		totalOwed += split.Amount
 	}
 
-	// Calculate net balance
+	// Calculate net balance from expenses
 	balance := totalPaid - totalOwed
+
+	// Apply settlements (payments) to balance
+	// Get settlements where user paid someone
+	var settlementsFrom []models.Settlement
+	result = config.DB.
+		Where("roomspace_id = ? AND from_user_id = ?", roomspaceID, userID).
+		Find(&settlementsFrom)
+	
+	if result.Error != nil {
+		return nil, fmt.Errorf("failed to fetch settlements from user: %w", result.Error)
+	}
+
+	for _, settlement := range settlementsFrom {
+		balance += settlement.Amount // User paid debt, balance increases
+	}
+
+	// Get settlements where user received payment
+	var settlementsTo []models.Settlement
+	result = config.DB.
+		Where("roomspace_id = ? AND to_user_id = ?", roomspaceID, userID).
+		Find(&settlementsTo)
+	
+	if result.Error != nil {
+		return nil, fmt.Errorf("failed to fetch settlements to user: %w", result.Error)
+	}
+
+	for _, settlement := range settlementsTo {
+		balance -= settlement.Amount // User received payment, balance decreases
+	}
 
 	userBalance := &models.UserBalance{
 		UserID:       userID,
