@@ -293,12 +293,16 @@ class _SpendingTrendsChartState extends State<SpendingTrendsChart> {
     final adjustedMinY = (minY - yPadding).clamp(0.0, double.infinity);
     final adjustedMaxY = maxY + yPadding;
     
+    // Calculate horizontal interval, ensuring it's never zero
+    final yRange = adjustedMaxY - adjustedMinY;
+    final horizontalInterval = yRange > 0 ? yRange / 5 : 1.0;
+    
     return LineChart(
       LineChartData(
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
-          horizontalInterval: (adjustedMaxY - adjustedMinY) / 5,
+          horizontalInterval: horizontalInterval,
           getDrawingHorizontalLine: (value) {
             return FlLine(
               color: Colors.grey[300],
