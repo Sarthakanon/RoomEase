@@ -200,3 +200,58 @@ func (h *NotificationHandler) notifyRoomspaceMembers(roomspaceID uint, excludeUI
 		h.dbService.CreateNotification(notification)
 	}
 }
+
+// SendPaymentReminder sends a reminder notification to a user to pay their debt
+func (h *NotificationHandler) SendPaymentReminder(c *gin.Context) {
+	senderUID, _ := c.Get("user_id")
+
+	var req struct {
+		RecipientUID string  `json:"recipient_uid" binding:"required"`
+		RoomspaceID  string  `json:"roomspace_id" binding:"required"`
+		Amount       float64 `json:"amount" binding:"required,gt=0"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		return
+	}
+
+	// Get sender and recipient names
+	sender, err := h.dbService.GetUserByFirebaseUID(senderUID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get sender info"})
+		return
+	}
+
+	recipient, err := h.dbService.GetUserByFirebaseUID(req.RecipientUID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get recipient info"})
+		return
+	}
+
+	// Get roomspace name
+	roomspace, err := h.dbService.GetRoomspaceByID(req.RoomspaceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get roomspace info"})
+		return
+	}
+
+	// Create notification
+	notification := &models.Notification{
+		RecipientUID: req.RecipientUID,
+		Type:         "PAYMENT_REMINDER",
+		Title:        "Payment Reminder",
+		Message:      sender.Name + " reminds you to pay Rs." + strconv.FormatFloat(req.Amount, 'f', 2, 64) + " in " + roomspace.Name,
+		Data:         `{"roomspace_id":"` + req.RoomspaceID + `","amount":` + strconv.FormatFloat(req.Amount, 'f', 2, 64) + `,"sender_uid":"` + senderUID.(string) + `"}`,
+	}
+
+	if err := h.dbService.CreateNotification(notification); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create notification"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Reminder sent to " + recipient.Name,
+	})
+}
