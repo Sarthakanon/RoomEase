@@ -4,6 +4,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
+import '../core/constants.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -16,24 +17,24 @@ class ApiService {
   late CookieJar _cookieJar;
   bool _initialized = false;
 
-  // Using localhost with adb reverse works on any network
-  // Just run: adb reverse tcp:8080 tcp:8080
+  // Backend server IP address - update in lib/core/constants.dart
+  static const String _backendIp = AppConstants.backendIp;
+  static const int _backendPort = AppConstants.backendPort;
+
   static String get baseUrl {
     if (kIsWeb) {
-      return 'http://localhost:8080';
+      return 'http://localhost:$_backendPort';
     }
 
-    // adb reverse makes localhost work on physical Android devices via USB
-    // This is network-independent - works on any WiFi/hotspot
+    // Use machine IP for physical Android devices
     if (Platform.isAndroid) {
-      return 'http://localhost:8080';
+      return 'http://$_backendIp:$_backendPort';
     } else if (Platform.isIOS) {
       // iOS requires the actual IP address for physical devices
-      // For simulator, localhost works
-      return 'http://localhost:8080';
+      return 'http://$_backendIp:$_backendPort';
     }
 
-    return 'http://localhost:8080';
+    return 'http://$_backendIp:$_backendPort';
   }
 
   ApiService._internal() {
