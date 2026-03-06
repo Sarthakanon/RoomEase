@@ -39,6 +39,14 @@ func main() {
 			log.Printf("⚠️  WARNING: Failed to run migrations: %v", err)
 		} else {
 			log.Println("✅ Database migrations completed successfully")
+			
+			// Cleanup expired analytics cache on startup
+			analyticsCacheService := services.NewAnalyticsCacheService(dbService)
+			if err := analyticsCacheService.CleanupExpiredCache(); err != nil {
+				log.Printf("⚠️  WARNING: Failed to cleanup expired cache: %v", err)
+			} else {
+				log.Println("✅ Expired analytics cache cleaned up")
+			}
 		}
 	}
 
