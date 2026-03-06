@@ -7,6 +7,7 @@ import '../../../core/widgets/mobile_scaffold.dart';
 import '../../../core/widgets/global_roomspace_selector.dart';
 import '../../../providers/roomspace_provider.dart';
 
+/// Roomspace Details screen — view and manage members, share invite codes, and see room metadata.
 class RoomspaceDetailsScreen extends StatefulWidget {
   const RoomspaceDetailsScreen({super.key});
 
@@ -27,143 +28,66 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
   void initState() {
     super.initState();
     _currentUserUid = FirebaseAuth.instance.currentUser?.uid;
-    // Load after first frame to ensure provider is available
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadRoomspaceDetails();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDetails());
   }
 
-  Future<void> _loadRoomspaceDetails() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    
+  Future<void> _loadDetails() async {
+    setState(() => _isLoading = true);
     try {
-      // Get active roomspace from provider
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-      final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-      
-      if (activeRoomspaceId == null) {
-        // No active roomspace, redirect to selection
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/roomspace-selection');
-        }
+      final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final activeId = provider.getActiveRoomspaceId();
+      if (activeId == null) {
+        if (mounted) Navigator.pushReplacementNamed(context, '/roomspace-selection');
         return;
       }
-      
-      final response = await _apiService.getRoomspaces();
-      if (response['success'] == true && response['data'] != null) {
-        final roomspaces = response['data'] as List<dynamic>;
-        
-        // Find the active roomspace
-        final activeRoomspace = roomspaces.firstWhere(
-          (rs) => rs['id'] == activeRoomspaceId,
-          orElse: () => roomspaces.isNotEmpty ? roomspaces[0] : null,
-        );
-        
-        if (activeRoomspace != null) {
+      final res = await _apiService.getRoomspaces();
+      if (res['success'] == true && res['data'] != null) {
+        final list = res['data'] as List<dynamic>;
+        final active = list.firstWhere((rs) => rs['id'] == activeId, orElse: () => list.isNotEmpty ? list[0] : null);
+        if (active != null) {
           setState(() {
-            _roomspace = activeRoomspace;
+            _roomspace = active;
             _members = _roomspace?['members'] ?? [];
             _isCreator = _roomspace?['creator_id'] == _currentUserUid;
             _isLoading = false;
           });
-        } else {
-          // No roomspace found, redirect to selection
-          if (mounted) {
-            Navigator.pushReplacementNamed(context, '/roomspace-selection');
-          }
+        } else if (mounted) {
+          Navigator.pushReplacementNamed(context, '/roomspace-selection');
         }
       }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      setState(() { _error = e.toString(); _isLoading = false; });
     }
   }
 
-  Future<void> _removeMember(
-    String memberFirebaseUid,
-    String memberName,
-  ) async {
+  Future<void> _removeMember(String uid, String name) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Remove Member'),
-        content: Text(
-          'Are you sure you want to remove $memberName from this roomspace?',
-        ),
+        title: const Text('Remove Member', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Text('Are you sure you want to remove $name?', style: const TextStyle(fontSize: 14)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Remove'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600))),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.w700))),
         ],
       ),
     );
-
     if (confirmed != true) return;
-
     setState(() => _isLoading = true);
-
     try {
-      final roomspaceId = _roomspace?['id'];
-      if (roomspaceId == null) throw Exception('Roomspace ID not found');
-
-      await _apiService.removeMemberFromRoomspace(
-        roomspaceId,
-        memberFirebaseUid,
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Member removed successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        _loadRoomspaceDetails(); // Refresh the list
-      }
-    } catch (e) {
+      await _apiService.removeMemberFromRoomspace(_roomspace?['id'], uid);
+      _loadDetails();
+    } catch (_) {
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to remove member: ${e.toString().replaceFirst("Exception: ", "")}',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 
-  void _copyInviteCode() {
+  void _copyCode() {
     final code = _roomspace?['invite_code'] ?? '';
     if (code.isNotEmpty) {
       Clipboard.setData(ClipboardData(text: code));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Invite code copied!'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invite code copied!')));
     }
   }
 
@@ -173,111 +97,55 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
 
     return MobileScaffold(
       currentIndex: 1,
-      showAppBar: false, // Disable default AppBar
+      showAppBar: false,
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: primaryColor))
           : _error != null
-          ? _buildErrorState()
-          : _buildContent(primaryColor),
+              ? _buildError()
+              : _buildContent(primaryColor),
     );
   }
 
-  Widget _buildErrorState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load roomspace',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error ?? 'Unknown error',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _isLoading = true;
-                  _error = null;
-                });
-                _loadRoomspaceDetails();
-              },
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
+  Widget _buildError() {
+    return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey),
+      const SizedBox(height: 16),
+      const Text('Something went wrong', style: TextStyle(fontWeight: FontWeight.w700)),
+      TextButton(onPressed: _loadDetails, child: const Text('Try Again'))
+    ]));
   }
 
-  Widget _buildContent(Color primaryColor) {
+  Widget _buildContent(Color primary) {
     return CustomScrollView(
       slivers: [
-        // Header
         SliverAppBar(
-          backgroundColor: const Color(0xFFF8F9FA),
+          backgroundColor: Colors.white,
           elevation: 0,
           pinned: true,
-          automaticallyImplyLeading: false,
-          title: const Text(
-            'My Roomspace',
-            style: TextStyle(
-              color: Colors.black87,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          centerTitle: true,
+          title: const Text('Room Details', style: TextStyle(color: Color(0xFF1A1A2E), fontWeight: FontWeight.w700, fontSize: 17)),
           actions: [
             Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Center(
-                child: GlobalRoomspaceSelector(
-                  onRoomspaceChanged: () {
-                    // Reload roomspace details when changed
-                    _loadRoomspaceDetails();
-                  },
-                ),
-              ),
+              padding: const EdgeInsets.only(right: 12),
+              child: GlobalRoomspaceSelector(onRoomspaceChanged: _loadDetails),
             ),
           ],
+          bottom: PreferredSize(preferredSize: const Size.fromHeight(1), child: Container(color: const Color(0xFFF0F0F0), height: 1)),
         ),
-
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Roomspace Card
-                _buildRoomspaceCard(primaryColor),
+                _buildInfoPanel(primary),
                 const SizedBox(height: 24),
-
-                // Invite Code Section
-                _buildInviteCodeSection(primaryColor),
-                const SizedBox(height: 24),
-
-                // Members Section
-                Text(
-                  'Members (${_members.length})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
+                _buildInviteSection(primary),
+                const SizedBox(height: 32),
+                _buildSectionTitle('RESIDENTS (${_members.length})'),
                 const SizedBox(height: 12),
-                _buildMembersList(primaryColor),
+                _buildMemberPanel(primary),
+                const SizedBox(height: 100),
               ],
             ),
           ),
@@ -286,78 +154,27 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
     );
   }
 
-  Widget _buildRoomspaceCard(Color primaryColor) {
+  Widget _buildInfoPanel(Color primary) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [primaryColor, primaryColor.withValues(alpha: 0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: primaryColor.withValues(alpha: 0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFF7F7FB), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFEEEEF2))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.home_rounded,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
+              Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Icon(Icons.maps_home_work_outlined, color: primary, size: 24)),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      _roomspace?['name'] ?? 'My Roomspace',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    if (_roomspace?['description'] != null &&
-                        _roomspace!['description'].toString().isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          _roomspace!['description'],
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withValues(alpha: 0.8),
-                          ),
-                        ),
-                      ),
+                    Text(_roomspace?['name'] ?? 'My Room', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
+                    Text(_roomspace?['description'] ?? 'Shared roomspace', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                   ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              _buildStatItem(Icons.people, '${_members.length}', 'Members'),
-              const SizedBox(width: 24),
-              _buildStatItem(Icons.receipt_long, '0', 'Expenses'),
             ],
           ),
         ],
@@ -365,256 +182,87 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
     );
   }
 
-  Widget _buildStatItem(IconData icon, String value, String label) {
-    return Row(
+  Widget _buildInviteSection(Color primary) {
+    final code = _roomspace?['invite_code'] ?? 'N/A';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: Colors.white.withValues(alpha: 0.8), size: 18),
-        const SizedBox(width: 6),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.8),
-            fontSize: 14,
+        _buildSectionTitle('SHARE ACCESS'),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFEEEEF2))),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Invite Code', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey)),
+                    Text(code, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: primary, letterSpacing: 1)),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _copyCode,
+                icon: const Icon(Icons.copy_rounded, size: 16),
+                label: const Text('Copy'),
+                style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), padding: const EdgeInsets.symmetric(horizontal: 16)),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildInviteCodeSection(Color primaryColor) {
-    final inviteCode = _roomspace?['invite_code'] ?? 'N/A';
-
+  Widget _buildMemberPanel(Color primary) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.share_rounded, color: primaryColor, size: 20),
-              const SizedBox(width: 8),
-              const Text(
-                'Invite Roommates',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Share this code with your roommates so they can join:',
-            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    inviteCode,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: primaryColor,
-                      letterSpacing: 2,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _copyInviteCode,
-                icon: const Icon(Icons.copy, size: 18),
-                label: const Text('Copy'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMembersList(Color primaryColor) {
-    if (_members.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Center(
-          child: Column(
-            children: [
-              Icon(Icons.people_outline, size: 48, color: Colors.grey[400]),
-              const SizedBox(height: 12),
-              Text('No members yet', style: TextStyle(color: Colors.grey[600])),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFEEEEF2))),
       child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: _members.length,
-        separatorBuilder: (_, __) =>
-            Divider(height: 1, indent: 70, color: Colors.grey[100]),
+        separatorBuilder: (_, __) => Divider(height: 1, color: const Color(0xFFF0F0F3), indent: 64),
         itemBuilder: (context, index) {
           final member = _members[index];
-          final memberUid = member['user_id']; // Use user_id instead of firebase_uid
-          final memberRole = member['role']; // Get the role directly from member data
-          final isCreator = memberRole == 'creator'; // Use role instead of comparing IDs
-          final isCurrentUser = memberUid == _currentUserUid;
           final user = member['user'];
-          final memberName = user?['name'] ?? user?['email'] ?? 'Unknown';
-          final displayName = isCurrentUser ? '$memberName (You)' : memberName;
-          final memberInitial = memberName.isNotEmpty
-              ? memberName[0].toUpperCase()
-              : '?';
+          final name = user?['name'] ?? user?['email'] ?? 'Unknown';
+          final isMe = member['user_id'] == _currentUserUid;
+          final isCreator = member['role'] == 'creator';
 
-          return Container(
-            decoration: isCurrentUser
-                ? BoxDecoration(
-                    color: primaryColor.withValues(alpha: 0.05),
-                    border: Border(
-                      left: BorderSide(color: primaryColor, width: 3),
-                    ),
-                  )
-                : null,
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-              leading: CircleAvatar(
-                backgroundColor: isCurrentUser
-                    ? primaryColor
-                    : primaryColor.withValues(alpha: 0.1),
-                child: Text(
-                  memberInitial,
-                  style: TextStyle(
-                    color: isCurrentUser ? Colors.white : primaryColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              title: Text(
-                displayName,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: isCurrentUser ? primaryColor : null,
-                ),
-              ),
-              subtitle: Text(
-                'Joined ${_formatDate(member['joined_at'])}',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-              ),
-              trailing: isCreator
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'Creator',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    )
-                  : _isCreator && !isCurrentUser
-                  ? IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
-                      color: Colors.red[400],
-                      onPressed: () => _removeMember(
-                        user?['firebase_uid'] ?? memberUid, // Use firebase_uid from user object
-                        memberName,
-                      ),
-                      tooltip: 'Remove member',
-                    )
-                  : null,
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: CircleAvatar(
+              radius: 18,
+              backgroundColor: isMe ? primary : primary.withValues(alpha: 0.1),
+              child: Text(name[0].toUpperCase(), style: TextStyle(color: isMe ? Colors.white : primary, fontWeight: FontWeight.w700, fontSize: 13)),
             ),
+            title: Text(isMe ? '$name (You)' : name, style: TextStyle(fontSize: 14, fontWeight: isMe ? FontWeight.w700 : FontWeight.w500, color: const Color(0xFF1A1A2E))),
+            subtitle: Text('Joined ${_formatDate(member['joined_at'])}', style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+            trailing: isCreator 
+              ? Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)), child: Text('Host', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.blue.shade700)))
+              : _isCreator && !isMe
+                ? IconButton(icon: Icon(Icons.remove_circle_outline_rounded, size: 20, color: Colors.grey.shade400), onPressed: () => _removeMember(user?['firebase_uid'] ?? member['user_id'], name))
+                : null,
           );
         },
       ),
     );
   }
 
-  String _formatDate(String? dateStr) {
-    if (dateStr == null) return 'Unknown';
-    try {
-      final date = DateTime.parse(dateStr);
-      final now = DateTime.now();
-      final diff = now.difference(date);
+  Widget _buildSectionTitle(String title) {
+    return Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.grey.shade400, letterSpacing: 0.8));
+  }
 
-      if (diff.inDays == 0) return 'Today';
-      if (diff.inDays == 1) return 'Yesterday';
-      if (diff.inDays < 7) return '${diff.inDays} days ago';
-      return '${date.day}/${date.month}/${date.year}';
-    } catch (_) {
-      return 'Unknown';
-    }
+  String _formatDate(String? s) {
+    if (s == null) return 'N/A';
+    try {
+      final d = DateTime.parse(s);
+      final n = DateTime.now();
+      if (n.difference(d).inDays == 0) return 'Today';
+      if (n.difference(d).inDays == 1) return 'Yesterday';
+      return '${d.day}/${d.month}/${d.year}';
+    } catch (_) { return 'Recently'; }
   }
 }
