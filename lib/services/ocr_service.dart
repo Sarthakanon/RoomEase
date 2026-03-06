@@ -91,96 +91,41 @@ class OcrService {
 
   /// Request storage/photos permission and return status
   Future<PermissionResult> requestStoragePermission() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return PermissionResult.granted;
+
     if (Platform.isAndroid) {
-      // For Android 13+ (API 33+), we need READ_MEDIA_IMAGES
-      // For older versions, we need READ_EXTERNAL_STORAGE
-      
-      // Check photos permission first (Android 13+)
+      // First try 'photos' (Android 13+)
       var photosStatus = await Permission.photos.status;
-      debugPrint('Photos permission status: $photosStatus');
-      
-      if (photosStatus.isGranted) {
-        return PermissionResult.granted;
-      }
-      
-      // Check storage permission (older Android)
+      if (photosStatus.isGranted || photosStatus.isLimited) return PermissionResult.granted;
+
+      // Then try 'storage' (Android < 13)
       var storageStatus = await Permission.storage.status;
-      debugPrint('Storage permission status: $storageStatus');
-      
-      if (storageStatus.isGranted) {
-        return PermissionResult.granted;
-      }
-      
-      // Check if already permanently denied
-      if (photosStatus.isPermanentlyDenied || storageStatus.isPermanentlyDenied) {
-        return PermissionResult.permanentlyDenied;
-      }
-      
-      // Store rationale status before request
-      final photosShouldShowBefore = await Permission.photos.shouldShowRequestRationale;
-      final storageShouldShowBefore = await Permission.storage.shouldShowRequestRationale;
-      debugPrint('Photos shouldShowRationale before: $photosShouldShowBefore');
-      debugPrint('Storage shouldShowRationale before: $storageShouldShowBefore');
-      
-      // Try requesting photos permission first (Android 13+)
+      if (storageStatus.isGranted) return PermissionResult.granted;
+
+      // If we are here, we need to request. 
+      // Try photos request first.
       photosStatus = await Permission.photos.request();
-      debugPrint('Photos permission after request: $photosStatus');
-      
-      if (photosStatus.isGranted) {
-        return PermissionResult.granted;
-      }
-      
-      // Try storage permission for older Android
+      if (photosStatus.isGranted || photosStatus.isLimited) return PermissionResult.granted;
+
+      // If photos denied, try storage request (for older devices).
+      // On Android 13, this will likely return denied immediately without a prompt.
       storageStatus = await Permission.storage.request();
-      debugPrint('Storage permission after request: $storageStatus');
-      
-      if (storageStatus.isGranted) {
-        return PermissionResult.granted;
-      }
-      
-      // Check if permanently denied
+      if (storageStatus.isGranted) return PermissionResult.granted;
+
+      // Determine if it's a permanent denial
       if (photosStatus.isPermanentlyDenied || storageStatus.isPermanentlyDenied) {
-        return PermissionResult.permanentlyDenied;
-      }
-      
-      // Check shouldShowRequestRationale AFTER request to determine if permanently denied
-      final photosShouldShowAfter = await Permission.photos.shouldShowRequestRationale;
-      final storageShouldShowAfter = await Permission.storage.shouldShowRequestRationale;
-      debugPrint('Photos shouldShowRationale after: $photosShouldShowAfter');
-      debugPrint('Storage shouldShowRationale after: $storageShouldShowAfter');
-      
-      // If rationale was true before but false after, user selected "Don't ask again"
-      if ((photosShouldShowBefore && !photosShouldShowAfter) ||
-          (storageShouldShowBefore && !storageShouldShowAfter)) {
-        return PermissionResult.permanentlyDenied;
-      }
-      
-      // If both are false after denial, likely permanently denied
-      if (!photosShouldShowAfter && !storageShouldShowAfter &&
-          (photosStatus.isDenied || storageStatus.isDenied)) {
         return PermissionResult.permanentlyDenied;
       }
       
       return PermissionResult.denied;
     } else {
-      // iOS
+      // iOS handling (Permission.photos)
       var status = await Permission.photos.status;
-      
-      if (status.isGranted) {
-        return PermissionResult.granted;
-      }
-      
-      if (status.isPermanentlyDenied) {
-        return PermissionResult.permanentlyDenied;
-      }
+      if (status.isGranted || status.isLimited) return PermissionResult.granted;
       
       status = await Permission.photos.request();
-      
-      if (status.isGranted) {
-        return PermissionResult.granted;
-      } else if (status.isPermanentlyDenied) {
-        return PermissionResult.permanentlyDenied;
-      }
+      if (status.isGranted || status.isLimited) return PermissionResult.granted;
+      if (status.isPermanentlyDenied) return PermissionResult.permanentlyDenied;
       
       return PermissionResult.denied;
     }
@@ -193,21 +138,12 @@ class OcrService {
 
   /// Pick image from camera and scan for text
   Future<OcrScanResult?> scanFromCamera() async {
-    // Check and request camera permission first
-    var status = await Permission.camera.status;
-    debugPrint('Camera permission initial status: $status');
-    
-    if (!status.isGranted) {
-      // Request permission - this should show the system dialog
-      status = await Permission.camera.request();
-      debugPrint('Camera permission after request: $status');
-      
-      if (!status.isGranted) {
-        throw PermissionDeniedException(
-          'Camera permission is required. Please enable it in Settings.',
-          isPermanent: status.isPermanentlyDenied,
-        );
-      }
+    final result = await requestCameraPermission();
+    if (result != PermissionResult.granted) {
+      throw PermissionDeniedException(
+        'Camera permission is required. Please enable it in Settings.',
+        isPermanent: result == PermissionResult.permanentlyDenied,
+      );
     }
 
     try {
@@ -227,23 +163,12 @@ class OcrService {
 
   /// Pick image from gallery and scan for text
   Future<OcrScanResult?> scanFromGallery() async {
-    // Check and request storage permission first (for Android < 13)
-    if (Platform.isAndroid) {
-      var status = await Permission.storage.status;
-      debugPrint('Storage permission initial status: $status');
-      
-      if (!status.isGranted) {
-        // Request permission - this should show the system dialog
-        status = await Permission.storage.request();
-        debugPrint('Storage permission after request: $status');
-        
-        if (!status.isGranted) {
-          throw PermissionDeniedException(
-            'Storage permission is required. Please enable it in Settings.',
-            isPermanent: status.isPermanentlyDenied,
-          );
-        }
-      }
+    final result = await requestStoragePermission();
+    if (result != PermissionResult.granted) {
+      throw PermissionDeniedException(
+        'Gallery permission is required. Please enable it in Settings.',
+        isPermanent: result == PermissionResult.permanentlyDenied,
+      );
     }
 
     try {
