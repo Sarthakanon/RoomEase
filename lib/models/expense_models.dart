@@ -1,6 +1,18 @@
 import 'package:flutter/material.dart';
 
 // Enhanced ExpenseData model for API integration
+class RoommateItem {
+  final String id;
+  final String name;
+  final String? email;
+
+  RoommateItem({
+    required this.id,
+    required this.name,
+    this.email,
+  });
+}
+
 class ExpenseData {
   final String title;
   final double amount;

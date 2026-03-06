@@ -14,20 +14,13 @@ class MonthSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).primaryColor.withOpacity(0.1),
-            Theme.of(context).primaryColor.withOpacity(0.05),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFFF7F7FB),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).primaryColor.withOpacity(0.3),
+          color: const Color(0xFFEEEEF2),
           width: 1,
         ),
       ),
@@ -35,9 +28,12 @@ class MonthSelector extends StatelessWidget {
         children: [
           // Previous month button
           IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             icon: Icon(
-              Icons.chevron_left,
+              Icons.chevron_left_rounded,
               color: Theme.of(context).primaryColor,
+              size: 20,
             ),
             onPressed: () => _changeMonth(-1),
             tooltip: 'Previous month',
@@ -48,25 +44,24 @@ class MonthSelector extends StatelessWidget {
             child: InkWell(
               onTap: () => _showDatePicker(context),
               borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       DateFormat('MMMM yyyy').format(selectedMonth),
-                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).primaryColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF1A1A2E),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Icon(
-                      Icons.calendar_today,
-                      size: 16,
-                      color: Theme.of(context).primaryColor.withOpacity(0.7),
+                      Icons.calendar_today_rounded,
+                      size: 13,
+                      color: Theme.of(context).primaryColor,
                     ),
                   ],
                 ),
@@ -76,11 +71,14 @@ class MonthSelector extends StatelessWidget {
           
           // Next month button
           IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             icon: Icon(
-              Icons.chevron_right,
+              Icons.chevron_right_rounded,
               color: _canGoForward() 
                 ? Theme.of(context).primaryColor 
-                : Theme.of(context).disabledColor,
+                : Colors.grey.shade300,
+              size: 20,
             ),
             onPressed: _canGoForward() ? () => _changeMonth(1) : null,
             tooltip: 'Next month',

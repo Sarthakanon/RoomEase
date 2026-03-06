@@ -9,6 +9,7 @@ import 'package:room_ease/features/expenses/presentation/expense_details_screen.
 import 'package:room_ease/features/home/widgets/add_expense_dialog.dart';
 import 'package:room_ease/features/home/widgets/personal_expense_dialog.dart';
 
+/// Screen displaying a paginated list of expenses (shared or personal).
 class ExpenseListScreen extends StatefulWidget {
   final String? roomspaceId;
   final bool isPersonalExpenses;
@@ -37,17 +38,14 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   int _currentPage = 0;
   static const int _pageSize = 20;
   
-  // Filter and search
   String _searchQuery = '';
   String? _selectedCategory;
-  DateTimeRange? _dateRange;
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    // Delay loading to ensure provider is available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadExpenses(reset: true);
     });
@@ -63,9 +61,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   void _onScroll() {
     if (_scrollController.position.pixels >= 
         _scrollController.position.maxScrollExtent - 200) {
-      if (!_isLoadingMore && _hasMoreData) {
-        _loadMoreExpenses();
-      }
+      if (!_isLoadingMore && _hasMoreData) _loadMoreExpenses();
     }
   }
 
@@ -81,28 +77,19 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
     try {
       List<ExpenseData> expenses;
-      
-      // Get active roomspace from provider if not specified
-      String? effectiveRoomspaceId = widget.roomspaceId;
-      if (!widget.isPersonalExpenses && effectiveRoomspaceId == null) {
-        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-        effectiveRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+      String? effectiveId = widget.roomspaceId;
+      if (!widget.isPersonalExpenses && effectiveId == null) {
+        effectiveId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
       }
       
       if (widget.isPersonalExpenses) {
-         // Using the generic fetch for now, ensuring logic handles personal flag
-         // Assuming ExpenseService has a method for personal expenses or handles it internally
-         // If specific personal expense endpoint exists:
-         // expenses = await _expenseService.getPersonalExpenses(...);
-         
-         // Fallback to user expenses for this example if specific method missing
          expenses = await _expenseService.getUserExpenses(
           limit: _pageSize,
           offset: _currentPage * _pageSize,
         );
-      } else if (effectiveRoomspaceId != null) {
+      } else if (effectiveId != null) {
         final response = await _expenseService.getRoomspaceExpenses(
-          effectiveRoomspaceId,
+          effectiveId,
           limit: _pageSize,
           offset: _currentPage * _pageSize,
         );
@@ -114,7 +101,6 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
         );
       }
 
-      // Manual Filtering if API doesn't support it directly
       if (_searchQuery.isNotEmpty) {
         expenses = expenses.where((e) => e.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
       }
@@ -122,16 +108,10 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
         expenses = expenses.where((e) => e.category == _selectedCategory).toList();
       }
 
-      // Check for more data based on page size
-      final hasMore = expenses.length >= _pageSize;
-
       setState(() {
-        if (reset) {
-          _expenses = expenses;
-        } else {
-          _expenses.addAll(expenses);
-        }
-        _hasMoreData = hasMore;
+        if (reset) _expenses = expenses;
+        else _expenses.addAll(expenses);
+        _hasMoreData = expenses.length >= _pageSize;
         _isLoading = false;
         _isLoadingMore = false;
       });
@@ -147,17 +127,11 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   Future<void> _loadMoreExpenses() async {
     if (_isLoadingMore || !_hasMoreData) return;
-    
     setState(() {
       _isLoadingMore = true;
       _currentPage++;
     });
-    
     await _loadExpenses();
-  }
-
-  Future<void> _refreshExpenses() async {
-    await _loadExpenses(reset: true);
   }
 
   void _showFilterDialog() {
@@ -171,398 +145,148 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Determine Theme Color based on context (Shared vs Personal)
+    final width = MediaQuery.of(context).size.width;
+    final isTablet = width > 600;
+    final horizontalPadding = isTablet ? width * 0.15 : 16.0;
+    
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final themeColor = widget.isPersonalExpenses ? Colors.orange : primaryColor;
+    final themeColor = widget.isPersonalExpenses ? Colors.orange.shade700 : primaryColor;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50], // Light background for the body
-      body: Column(
-        children: [
-          // 1. Custom Header
-          _buildHeader(themeColor),
-
-          // 2. List Content
-          Expanded(
-            child: _buildBody(themeColor),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        title: Text(
+          widget.isPersonalExpenses ? 'Personal Expenses' : 'Shared Expenses',
+          style: const TextStyle(color: Color(0xFF1A1A2E), fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A2E), size: 18),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.filter_list_rounded, color: Colors.grey.shade600, size: 20),
+            onPressed: _showFilterDialog,
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8),
+                child: _buildSearchBar(),
+              ),
+              Container(color: const Color(0xFFF0F0F0), height: 1),
+            ],
+          ),
+        ),
       ),
+      body: _isLoading
+          ? const Padding(padding: EdgeInsets.all(20), child: ExpenseListSkeleton(itemCount: 8))
+          : _hasError
+              ? _buildErrorState(themeColor)
+              : _buildList(themeColor, horizontalPadding),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddExpenseDialog,
         backgroundColor: themeColor,
-        child: const Icon(Icons.add, color: Colors.white),
+        elevation: 2,
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
       ),
     );
   }
 
-  Widget _buildHeader(Color themeColor) {
-    // Get roomspace name from provider
-    String roomspaceName = '';
-    if (!widget.isPersonalExpenses) {
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-      final activeRoomspace = roomspaceProvider.activeRoomspace;
-      if (activeRoomspace != null) {
-        roomspaceName = activeRoomspace.name;
-      }
-    }
-    
+  Widget _buildSearchBar() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 60,
-        bottom: 25,
-      ),
+      height: 40,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [themeColor, themeColor.withValues(alpha: 0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
-        ),
+        color: const Color(0xFFF7F7FB),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top Row: Back Button + Title + Actions
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  padding: const EdgeInsets.only(left: 6),
-                ),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.isPersonalExpenses ? 'Personal Expenses' : 'Shared Expenses',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (roomspaceName.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        roomspaceName,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontSize: 13,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: _showFilterDialog,
-                    icon: const Icon(Icons.filter_list, color: Colors.white),
-                  ),
-                  IconButton(
-                    onPressed: _refreshExpenses,
-                    icon: const Icon(Icons.refresh, color: Colors.white),
-                  ),
-                ],
-              )
-            ],
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Search Bar embedded in Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-            ),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white),
-              cursorColor: Colors.white,
-              decoration: InputDecoration(
-                icon: const Icon(Icons.search, color: Colors.white70),
-                hintText: 'Search expenses...',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-                border: InputBorder.none,
-              ),
-              onChanged: (value) {
-                // Debounce could be added here
-                setState(() {
-                  _searchQuery = value;
-                });
-                // In a real app, you might trigger a new API call here
-                // For now, we filter locally or reload
-              },
-            ),
-          ),
-        ],
+      child: TextField(
+        controller: _searchController,
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Search expenses...',
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+          prefixIcon: Icon(Icons.search_rounded, size: 18, color: Colors.grey.shade400),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        ),
+        onChanged: (val) => setState(() => _searchQuery = val),
       ),
     );
   }
 
-  Widget _buildBody(Color themeColor) {
-    if (_isLoading) {
-      return const SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 80),
-        child: ExpenseListSkeleton(itemCount: 8),
-      );
-    }
-
-    if (_hasError) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load expenses',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _errorMessage,
-              style: TextStyle(color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _refreshExpenses,
-              style: ElevatedButton.styleFrom(backgroundColor: themeColor, foregroundColor: Colors.white),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_expenses.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              widget.isPersonalExpenses ? Icons.account_balance_wallet_outlined : Icons.people_outline,
-              size: 64,
-              color: Colors.grey[300],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No expenses found',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w600
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Tap + to add a new expense',
-              style: TextStyle(color: Colors.grey[400]),
-            ),
-          ],
-        ),
-      );
-    }
+  Widget _buildList(Color themeColor, double horizontalPadding) {
+    if (_expenses.isEmpty) return _buildEmptyState();
 
     return RefreshIndicator(
-      onRefresh: _refreshExpenses,
-      color: themeColor,
+      onRefresh: () => _loadExpenses(reset: true),
       child: ListView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 80), // Extra bottom padding for FAB
+        padding: EdgeInsets.fromLTRB(horizontalPadding, 16, horizontalPadding, 80),
         itemCount: _expenses.length + (_isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == _expenses.length) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: CircularProgressIndicator(color: themeColor),
-              ),
-            );
+            return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator(strokeWidth: 2)));
           }
-
           final expense = _expenses[index];
-          return _buildExpenseCard(expense, themeColor);
+          return _ExpenseTile(
+            expense: expense,
+            themeColor: themeColor,
+            isPersonal: widget.isPersonalExpenses,
+          );
         },
       ),
     );
   }
 
-  Widget _buildExpenseCard(ExpenseData expense, Color themeColor) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey.shade200),
+          const SizedBox(height: 16),
+          Text('No expenses found', style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ExpenseDetailsScreen(expense: expense),
-              ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                // Icon Box
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: themeColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    _getCategoryIcon(expense.category),
-                    color: themeColor,
-                    size: 24,
-                  ),
-                ),
-                
-                const SizedBox(width: 16),
-                
-                // Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        expense.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              expense.category,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          if (!widget.isPersonalExpenses && expense.payerName != null) ...[
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                '• by ${expense.payerName}',
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 12,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ]
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // Amount & Date
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Rs. ${expense.amount.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: themeColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (expense.createdAt != null)
-                      Text(
-                        _formatDate(expense.createdAt!),
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 11,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+    );
+  }
+
+  Widget _buildErrorState(Color themeColor) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            const Text('Couldn\'t load items', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            const SizedBox(height: 8),
+            Text(_errorMessage, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+            const SizedBox(height: 24),
+            ElevatedButton(onPressed: () => _loadExpenses(reset: true), child: const Text('Retry')),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildFilterSheet() {
+    final themeColor = widget.isPersonalExpenses ? Colors.orange.shade700 : Theme.of(context).primaryColor;
+
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle bar
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          
+          Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -571,94 +295,50 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Filter Expenses',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const Text('Filter By Category', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                     TextButton(
                       onPressed: () {
-                        setState(() {
-                          _selectedCategory = null;
-                          _dateRange = null;
-                          _searchQuery = '';
-                          _searchController.clear();
-                        });
+                        setState(() => _selectedCategory = null);
                         Navigator.pop(context);
-                        _refreshExpenses();
+                        _loadExpenses(reset: true);
                       },
-                      child: const Text('Clear All'),
+                      child: const Text('Reset', style: TextStyle(fontSize: 13)),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                
-                // Category filter
-                const Text(
-                  'Category',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: [
-                    'Food',
-                    'Groceries',
-                    'Utilities',
-                    'Rent',
-                    'Entertainment',
-                    'Transport',
-                    'Other'
-                  ].map((category) {
-                    final isSelected = _selectedCategory == category;
-                    final themeColor = widget.isPersonalExpenses ? Colors.orange : Theme.of(context).primaryColor;
-                    
-                    return FilterChip(
-                      label: Text(category),
+                  children: ['Food', 'Groceries', 'Utilities', 'Rent', 'Entertainment', 'Transport', 'Other'].map((cat) {
+                    final isSelected = _selectedCategory == cat;
+                    return ChoiceChip(
+                      label: Text(cat, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.grey.shade700)),
                       selected: isSelected,
-                      selectedColor: themeColor.withValues(alpha: 0.2),
-                      checkmarkColor: themeColor,
-                      labelStyle: TextStyle(
-                        color: isSelected ? themeColor : Colors.grey[700],
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      onSelected: (selected) {
-                        setState(() {
-                          _selectedCategory = selected ? category : null;
-                        });
-                      },
+                        selectedColor: themeColor,
+                        backgroundColor: const Color(0xFFF7F7FB),
+                        onSelected: (val) => setState(() => _selectedCategory = val ? cat : null),
                     );
                   }).toList(),
                 ),
-                
                 const SizedBox(height: 24),
-                
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(context);
-                      _refreshExpenses();
+                      _loadExpenses(reset: true);
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.isPersonalExpenses ? Colors.orange : Theme.of(context).primaryColor,
+                      backgroundColor: themeColor,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text('Apply Filters'),
+                    child: const Text('Apply Filters', style: TextStyle(fontWeight: FontWeight.w600)),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
               ],
             ),
           ),
@@ -667,82 +347,27 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     );
   }
 
-  IconData _getCategoryIcon(String category) {
-    switch (category.toLowerCase()) {
-      case 'groceries': return Icons.shopping_basket_rounded;
-      case 'utilities': return Icons.bolt_rounded;
-      case 'rent': return Icons.home_rounded;
-      case 'food': return Icons.restaurant_rounded;
-      case 'transport':
-      case 'transportation': return Icons.directions_car_rounded;
-      case 'entertainment': return Icons.movie_creation_rounded;
-      default: return Icons.receipt_long_rounded;
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays == 0) return 'Today';
-    if (difference.inDays == 1) return 'Yesterday';
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
   void _showAddExpenseDialog() {
-    final themeColor = widget.isPersonalExpenses ? Colors.orange : Theme.of(context).colorScheme.primary;
-    _showExpenseOptions(context, themeColor);
-  }
-
-  void _showExpenseOptions(BuildContext context, Color themeColor) {
+    final themeColor = widget.isPersonalExpenses ? Colors.orange.shade700 : Theme.of(context).colorScheme.primary;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'Add Expense',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
+            Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+            const Padding(padding: EdgeInsets.all(16), child: Text('Add New Expense', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
+            ListTile(
+              leading: Icon(Icons.people_outlined, color: themeColor),
+              title: const Text('Shared Expense', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              onTap: () { Navigator.pop(context); _showSharedExpenseDialog(); },
             ),
             ListTile(
-              leading: Icon(Icons.people, color: themeColor),
-              title: const Text('Add Shared Expense'),
-              subtitle: const Text('Split with roommates'),
-              onTap: () {
-                Navigator.pop(context);
-                _showSharedExpenseDialog();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.account_balance_wallet, color: themeColor),
-              title: const Text('Add Personal Expense'),
-              subtitle: const Text('Track personal spending'),
-              onTap: () {
-                Navigator.pop(context);
-                _showPersonalExpenseDialog();
-              },
+              leading: Icon(Icons.account_balance_wallet_outlined, color: themeColor),
+              title: const Text('Personal Expense', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              onTap: () { Navigator.pop(context); _showPersonalExpenseDialog(); },
             ),
             const SizedBox(height: 16),
           ],
@@ -751,108 +376,106 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     );
   }
 
+  // --- (Helper methods for Shared/Personal Dialogs remain similar to original but with cleaned error handling) ---
   Future<void> _showSharedExpenseDialog() async {
-     try {
-      // Get active roomspace from provider
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-      final activeRoomspace = roomspaceProvider.activeRoomspace;
+    final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final active = provider.activeRoomspace;
+    if (active == null) return;
+    
+    try {
+      final res = await _apiService.getRoomspaces();
+      final data = (res['data'] as List).firstWhere((r) => r['id'].toString() == active.id);
+      final roommates = (data['members'] as List).map((m) => RoommateItem(
+        id: m['user_id'] ?? '',
+        name: m['user']?['name'] ?? m['user']?['email'] ?? 'Unknown',
+        email: m['user']?['email'],
+      )).toList();
       
-      if (activeRoomspace == null) {
-        if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No active roomspace. Please select a roomspace first.'), backgroundColor: Colors.orange),
-          );
-        }
-        return;
-      }
-
-      final roomspaceId = activeRoomspace.id;
-      
-      // Fetch members for the active roomspace
-      final roomspacesResponse = await _apiService.getRoomspaces();
-      final roomspaces = roomspacesResponse['data'] as List<dynamic>? ?? [];
-      
-      // Find the active roomspace in the response
-      final roomspaceData = roomspaces.firstWhere(
-        (r) => r['id']?.toString() == roomspaceId,
-        orElse: () => null,
-      );
-      
-      if (roomspaceData == null) {
-        if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Roomspace not found'), backgroundColor: Colors.orange),
-          );
-        }
-        return;
-      }
-      
-      final members = roomspaceData['members'] as List<dynamic>? ?? [];
-      
-      final roommates = members.map((m) {
-        final user = m['user'];
-        return RoommateItem(
-          id: m['user_id'] ?? '',
-          name: user?['name'] ?? user?['email'] ?? 'Unknown',
-          email: user?['email'],
-        );
-      }).toList();
-
-      if (mounted) {
-        AddExpenseDialog.show(
-          context,
-          roommates: roommates,
-          roomspaceId: roomspaceId,
-          onSubmit: (expense) async {
-            try {
-              final request = ExpenseCreateRequest.fromExpenseData(expense, roomspaceId);
-              await _apiService.createExpense(request.toJson());
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Added: ${expense.title}'), backgroundColor: Colors.green),
-                );
-                _refreshExpenses();
-              }
-            } catch (e) {
-               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                );
-               }
-            }
-          },
-        );
-      }
-    } catch (e) {
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
+      if (!mounted) return;
+      AddExpenseDialog.show(context, roommates: roommates, roomspaceId: active.id, onSubmit: (ex) async {
+        await _apiService.createExpense(ExpenseCreateRequest.fromExpenseData(ex, active.id).toJson());
+        _loadExpenses(reset: true);
+      });
+    } catch (_) {}
   }
 
   void _showPersonalExpenseDialog() {
-    PersonalExpenseDialog.show(
-      context,
-      onSubmit: (expense) async {
-        try {
-          final request = PersonalExpenseCreateRequest.fromExpenseData(expense);
-          await _apiService.createPersonalExpense(request.toJson());
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Added: ${expense.title}'), backgroundColor: Colors.green),
-            );
-            _refreshExpenses();
-          }
-        } catch (e) {
-          if (mounted) {
-             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-            );
-          }
-        }
-      },
+    PersonalExpenseDialog.show(context, onSubmit: (ex) async {
+      await _apiService.createPersonalExpense(PersonalExpenseCreateRequest.fromExpenseData(ex).toJson());
+      _loadExpenses(reset: true);
+    });
+  }
+}
+
+class _ExpenseTile extends StatelessWidget {
+  final ExpenseData expense;
+  final Color themeColor;
+  final bool isPersonal;
+
+  const _ExpenseTile({required this.expense, required this.themeColor, required this.isPersonal});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: InkWell(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailsScreen(expense: expense))),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                child: Icon(_getIcon(expense.category), color: themeColor, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(expense.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Color(0xFF1A1A2E)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(expense.category + (isPersonal ? '' : ' • ${expense.payerName ?? 'Self'}'), 
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('Rs. ${expense.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: themeColor)),
+                  if (expense.createdAt != null)
+                    Text(_formatDate(expense.createdAt!), style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  IconData _getIcon(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'groceries': return Icons.shopping_basket_outlined;
+      case 'utilities': return Icons.bolt_rounded;
+      case 'rent': return Icons.home_outlined;
+      case 'food': return Icons.restaurant_rounded;
+      default: return Icons.receipt_long_outlined;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    if (now.difference(date).inDays == 0) return 'Today';
+    if (now.difference(date).inDays == 1) return 'Yesterday';
+    return '${date.day}/${date.month}';
   }
 }
