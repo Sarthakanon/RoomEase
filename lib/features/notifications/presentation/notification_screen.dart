@@ -6,6 +6,7 @@ import '../../../models/expense_models.dart';
 import '../../home/widgets/add_expense_dialog.dart';
 import '../../home/widgets/personal_expense_dialog.dart';
 
+/// Notification screen — unified view for join requests, payment detections, and system alerts.
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
 
@@ -63,7 +64,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
             content: Text(
               accept ? '$name has been added!' : 'Request rejected',
             ),
-            backgroundColor: accept ? Colors.green : Colors.orange,
           ),
         );
         _loadData();
@@ -71,7 +71,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     }
@@ -81,13 +81,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     try {
       await _apiService.markNotificationAsRead(notificationId);
       _loadData();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
+    } catch (_) {}
   }
 
   Future<void> _markAllAsRead() async {
@@ -113,17 +107,25 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF8F9FA),
+        backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
           'Notifications',
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Color(0xFF1A1A2E),
+            fontWeight: FontWeight.w700,
+            fontSize: 17,
+          ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A2E), size: 20),
           onPressed: () => Navigator.pop(context),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: const Color(0xFFF0F0F0), height: 1),
         ),
         actions: [
           if (_notifications.any((n) => n['is_read'] != true))
@@ -131,7 +133,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               onPressed: _markAllAsRead,
               child: Text(
                 'Mark all read',
-                style: TextStyle(color: primaryColor),
+                style: TextStyle(color: primaryColor, fontWeight: FontWeight.w600, fontSize: 13),
               ),
             ),
         ],
@@ -146,36 +148,27 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Widget _buildContent(Color primaryColor) {
-    if (_joinRequests.isEmpty && _notifications.isEmpty && _paymentNotifications.isEmpty) {
+    final activePaymentNotifs = _paymentNotifications.where((p) => !p.isProcessed).toList();
+    
+    if (_joinRequests.isEmpty && _notifications.isEmpty && activePaymentNotifs.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Logo
-            Container(
-              height: 80,
-              width: 80,
-              margin: const EdgeInsets.only(bottom: 16),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.asset(
-                  'png/main_logo.png',
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Icon(Icons.notifications_none, size: 64, color: Colors.grey[400]);
-                  },
-                ),
+            Icon(Icons.notifications_none_rounded, size: 48, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            const Text(
+              'All caught up',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1A1A2E),
               ),
             ),
+            const SizedBox(height: 4),
             Text(
-              'No notifications',
-              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'You\'ll see notifications here when they arrive',
-              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-              textAlign: TextAlign.center,
+              'No new notifications to show.',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
           ],
         ),
@@ -186,50 +179,41 @@ class _NotificationScreenState extends State<NotificationScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         if (_joinRequests.isNotEmpty) ...[
-          Text(
-            'Join Requests',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(height: 12),
+          _buildSectionHeader('Join Requests'),
           ..._joinRequests.map(
             (req) => _buildJoinRequestCard(req, primaryColor),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
         ],
-        if (_paymentNotifications.isNotEmpty) ...[
-          Text(
-            'Payment Notifications',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(height: 12),
-          ..._paymentNotifications.where((p) => !p.isProcessed).map(
+        if (activePaymentNotifs.isNotEmpty) ...[
+          _buildSectionHeader('Payment Detections'),
+          ...activePaymentNotifs.map(
             (payment) => _buildPaymentNotificationCard(payment, primaryColor),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
         ],
         if (_notifications.isNotEmpty) ...[
-          Text(
-            'Recent',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
-            ),
-          ),
-          const SizedBox(height: 12),
+          _buildSectionHeader('Recent'),
           ..._notifications.map(
             (notif) => _buildNotificationCard(notif, primaryColor),
           ),
         ],
+        const SizedBox(height: 100),
       ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 0, 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF1A1A2E),
+        ),
+      ),
     );
   }
 
@@ -243,15 +227,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,12 +236,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
           Row(
             children: [
               CircleAvatar(
-                backgroundColor: Colors.orange.withValues(alpha: 0.1),
+                radius: 18,
+                backgroundColor: Colors.orange.shade50,
                 child: Text(
                   initial,
-                  style: const TextStyle(
-                    color: Colors.orange,
-                    fontWeight: FontWeight.bold,
+                  style: TextStyle(
+                    color: Colors.orange.shade800,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
                   ),
                 ),
               ),
@@ -276,13 +255,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     Text(
                       name,
                       style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: Color(0xFF1A1A2E),
                       ),
                     ),
                     Text(
-                      'wants to join your roomspace',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      'Request to join roomspace',
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                     ),
                   ],
                 ),
@@ -294,31 +274,26 @@ class _NotificationScreenState extends State<NotificationScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () =>
-                      _processJoinRequest(request['id'].toString(), false, name),
+                  onPressed: () => _processJoinRequest(request['id'].toString(), false, name),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    foregroundColor: const Color(0xFFC62828),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Reject'),
+                  child: const Text('Reject', style: TextStyle(fontSize: 13)),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () =>
-                      _processJoinRequest(request['id'].toString(), true, name),
+                  onPressed: () => _processJoinRequest(request['id'].toString(), true, name),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: const Color(0xFF2E7D32),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Accept'),
+                  child: const Text('Accept', style: TextStyle(fontSize: 13)),
                 ),
               ),
             ],
@@ -335,77 +310,53 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
     switch (notification['type']) {
       case 'JOIN_ACCEPTED':
-        icon = Icons.check_circle;
-        iconColor = Colors.green;
+      case 'PAYMENT_CONFIRMED':
+        icon = Icons.check_circle_outline_rounded;
+        iconColor = const Color(0xFF2E7D32);
         break;
       case 'JOIN_REJECTED':
-        icon = Icons.cancel;
-        iconColor = Colors.red;
+      case 'MEMBER_REMOVED':
+      case 'PAYMENT_REJECTED':
+        icon = Icons.error_outline_rounded;
+        iconColor = const Color(0xFFC62828);
         break;
       case 'EXPENSE_ADDED':
-        icon = Icons.receipt_long;
+        icon = Icons.receipt_long_outlined;
         iconColor = primaryColor;
         break;
-      case 'MEMBER_REMOVED':
-        icon = Icons.person_remove;
-        iconColor = Colors.red;
-        break;
-      case 'YOU_REMOVED_USER':
-        icon = Icons.person_off;
-        iconColor = Colors.orange;
-        break;
       case 'PAYMENT_REMINDER':
-        icon = Icons.notifications_active;
-        iconColor = Colors.orange;
+      case 'YOU_REMOVED_USER':
+        icon = Icons.notifications_active_outlined;
+        iconColor = Colors.orange.shade700;
         break;
       case 'PAYMENT_CLAIM':
-        icon = Icons.payment;
-        iconColor = Colors.blue;
-        break;
-      case 'PAYMENT_CONFIRMED':
-        icon = Icons.check_circle;
-        iconColor = Colors.green;
-        break;
-      case 'PAYMENT_REJECTED':
-        icon = Icons.cancel;
-        iconColor = Colors.red;
+        icon = Icons.payment_outlined;
+        iconColor = Colors.blue.shade700;
         break;
       default:
-        icon = Icons.notifications;
-        iconColor = Colors.grey;
+        icon = Icons.notifications_none_rounded;
+        iconColor = Colors.grey.shade600;
     }
 
     return GestureDetector(
-      onTap: isRead ? null : () {
-        final notificationId = notification['id'];
-        if (notificationId is int) {
-          _markAsRead(notificationId);
-        } else if (notificationId is String) {
-          final parsedId = int.tryParse(notificationId);
-          if (parsedId != null) {
-            _markAsRead(parsedId);
-          }
-        }
-      },
+      onTap: isRead ? null : () => _markAsRead(notification['id'] is int ? notification['id'] : int.tryParse(notification['id'].toString()) ?? 0),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isRead ? Colors.white : primaryColor.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
-          border: isRead
-              ? null
-              : Border.all(color: primaryColor.withValues(alpha: 0.2)),
+          border: Border.all(color: isRead ? const Color(0xFFEEEEF2) : primaryColor.withValues(alpha: 0.1)),
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: iconColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, color: iconColor, size: 20),
+              child: Icon(icon, color: iconColor, size: 18),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -415,26 +366,24 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   Text(
                     notification['title'] ?? '',
                     style: TextStyle(
-                      fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
-                      fontSize: 14,
+                      fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
+                      fontSize: 13,
+                      color: const Color(0xFF1A1A2E),
                     ),
                   ),
                   if (notification['message'] != null)
                     Text(
                       notification['message'],
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
                     ),
                 ],
               ),
             ),
             if (!isRead)
               Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  shape: BoxShape.circle,
-                ),
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(color: primaryColor, shape: BoxShape.circle),
               ),
           ],
         ),
@@ -443,7 +392,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Widget _buildPaymentNotificationCard(PaymentNotification payment, Color primaryColor) {
-    final amount = payment.amount?.toStringAsFixed(2) ?? 'Unknown';
+    final amount = payment.amount?.toStringAsFixed(0) ?? '?';
     final merchant = payment.merchant ?? 'Unknown merchant';
     final timeAgo = _getTimeAgo(payment.timestamp);
 
@@ -452,15 +401,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.blue.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,16 +410,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.payment,
-                  color: Colors.green,
-                  size: 20,
-                ),
+                child: Icon(Icons.payment_rounded, color: Colors.blue.shade700, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -485,23 +423,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Payment Detected - Rs. $amount',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                      'Rs. $amount detected',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Color(0xFF1A1A2E)),
                     ),
                     Text(
-                      'Payment to $merchant via ${payment.appName}',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                    ),
-                    Text(
-                      timeAgo,
-                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      'to $merchant',
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                     ),
                   ],
                 ),
               ),
+              Text(timeAgo, style: TextStyle(color: Colors.grey.shade400, fontSize: 10)),
             ],
           ),
           const SizedBox(height: 16),
@@ -511,13 +443,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 child: OutlinedButton(
                   onPressed: () => _dismissPaymentNotification(payment),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey[600],
-                    side: BorderSide(color: Colors.grey[400]!),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Dismiss'),
+                  child: const Text('Dismiss', style: TextStyle(fontSize: 13)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -525,13 +454,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 child: ElevatedButton(
                   onPressed: () => _addPaymentAsExpense(payment),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: Colors.blue.shade700,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Add as Expense'),
+                  child: const Text('Add Expense', style: TextStyle(fontSize: 13)),
                 ),
               ),
             ],
@@ -545,21 +473,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
 
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
-    }
+    if (difference.inMinutes < 1) return 'now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m';
+    if (difference.inHours < 24) return '${difference.inHours}h';
+    if (difference.inDays < 7) return '${difference.inDays}d';
+    return '${timestamp.day}/${timestamp.month}';
   }
 
   void _dismissPaymentNotification(PaymentNotification payment) {
-    // Mark as processed to hide from the list
     setState(() {
       _paymentNotifications = _paymentNotifications.map((p) {
         if (p.id == payment.id) {
@@ -578,18 +499,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return p;
       }).toList();
     });
-
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Payment notification dismissed'),
-        backgroundColor: Colors.grey,
-      ),
+      const SnackBar(content: Text('Notification dismissed')),
     );
   }
 
   void _addPaymentAsExpense(PaymentNotification payment) async {
     try {
-      // Get roommates for the expense dialog
       final roomspacesResponse = await _apiService.getRoomspaces();
       final roomspaces = roomspacesResponse['data'] as List<dynamic>? ?? [];
       
@@ -602,24 +518,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
         roommates = members.map((m) {
           final user = m['user'];
           return RoommateItem(
-            id: m['user_id'] ?? '',  // Changed from 'firebase_uid' to 'user_id'
+            id: m['user_id'] ?? '',
             name: user?['name'] ?? user?['email'] ?? 'Unknown',
             email: user?['email'],
           );
         }).toList();
       }
 
-      // Show expense type selection dialog
       _showExpenseOptionsForPayment(payment, roommates, roomspaceId);
-      
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -638,74 +547,47 @@ class _NotificationScreenState extends State<NotificationScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
             Container(
-              width: 40,
+              width: 36,
               height: 4,
               margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
             ),
-            
-            // Header
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Text(
-                    'Add Expense',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                  const Text('Select Expense Type', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E))),
+                  const SizedBox(height: 16),
                   Container(
+                    width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                      color: const Color(0xFFF7F7FB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFEEEEF2)),
                     ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.payment, color: Colors.blue, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Payment: Rs. ${payment.amount?.toStringAsFixed(2) ?? 'Unknown'} to ${payment.merchant ?? 'Unknown'}',
-                            style: TextStyle(
-                              color: Colors.blue[800],
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Payment: Rs. ${payment.amount?.toStringAsFixed(0)} to ${payment.merchant}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ],
               ),
             ),
-            
-            // Options
             ListTile(
-              leading: Icon(Icons.people, color: primaryColor),
-              title: const Text('Add Shared Expense'),
-              subtitle: const Text('Split with roommates'),
+              leading: Icon(Icons.people_outlined, color: primaryColor),
+              title: const Text('Add Shared Expense', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               enabled: roommates.isNotEmpty && roomspaceId != null,
-              onTap: roommates.isNotEmpty && roomspaceId != null ? () {
+              onTap: () {
                 Navigator.pop(context);
                 _showSharedExpenseDialogForPayment(payment, roommates, roomspaceId!);
-              } : null,
+              },
             ),
             ListTile(
-              leading: Icon(Icons.account_balance_wallet, color: primaryColor),
-              title: const Text('Add Personal Expense'),
-              subtitle: const Text('Track personal spending'),
+              leading: Icon(Icons.account_balance_wallet_outlined, color: primaryColor),
+              title: const Text('Add Personal Expense', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(context);
                 _showPersonalExpenseDialogForPayment(payment);
@@ -726,36 +608,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
       paymentNotification: payment,
       onSubmit: (expense) async {
         try {
-          // Create expense request
-          final request = ExpenseCreateRequest.fromExpenseData(
-            expense,
-            roomspaceId,
-          );
-
-          // Submit to API
+          final request = ExpenseCreateRequest.fromExpenseData(expense, roomspaceId);
           await _apiService.createExpense(request.toJson());
-
-          // Mark payment as processed
           _dismissPaymentNotification(payment);
-          
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Added payment expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
-                ),
-                backgroundColor: Colors.green,
-              ),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shared expense added')));
           }
         } catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to add expense: ${e.toString()}'),
-                backgroundColor: Colors.red,
-              ),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
           }
         }
       },
@@ -768,33 +629,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
       paymentNotification: payment,
       onSubmit: (expense) async {
         try {
-          // Create personal expense request
           final request = PersonalExpenseCreateRequest.fromExpenseData(expense);
-
-          // Submit to API
           await _apiService.createPersonalExpense(request.toJson());
-
-          // Mark payment as processed
           _dismissPaymentNotification(payment);
-
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Added personal expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
-                ),
-                backgroundColor: Colors.green,
-              ),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Personal expense added')));
           }
         } catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to add personal expense: ${e.toString()}'),
-                backgroundColor: Colors.red,
-              ),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
           }
         }
       },
