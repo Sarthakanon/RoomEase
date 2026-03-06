@@ -56,6 +56,10 @@ dependencies:
   
   # Charts
   fl_chart: ^0.69.0
+  pdf: ^3.11.3
+  printing: ^5.14.2
+  flutter_downloader: ^1.12.0
+  open_file: ^3.5.9
 
 
 
