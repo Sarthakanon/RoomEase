@@ -11,7 +11,10 @@ import 'personal_expenses_screen.dart';
 import 'personal_expense_details_screen.dart';
 import 'payment_confirmation_screen.dart';
 import 'who_owes_who_screen.dart';
+import 'report_preview_screen.dart';
+import 'report_options_screen.dart';
 
+/// Main expense screen — acts as a router for different expense-related views.
 class ExpenseScreen extends StatefulWidget {
   const ExpenseScreen({super.key});
 
@@ -101,7 +104,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         
         final response = await _apiService.getRoomspaceExpenses(
           _currentRoomspaceId!,
-          limit: 50, // Show more for monthly view
+          limit: 3, // Only show 3 on dashboard, full list available via 'View All'
           offset: 0,
           month: _selectedMonth, // Pass selected month
         );
@@ -123,7 +126,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Future<void> _loadRecentPersonalExpenses() async {
     try {
       final response = await _apiService.getPersonalExpenses(
-        limit: 50, // Show more for monthly view
+        limit: 3, // Only show 3 on dashboard, full list available via 'View All'
         offset: 0,
         month: _selectedMonth, // Pass selected month
       );
@@ -189,7 +192,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
     return MobileScaffold(
       currentIndex: 2,
-      showAppBar: false, // Disable AppBar for expense screen
+      showAppBar: false,
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: primaryColor))
           : _hasError
@@ -208,23 +211,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           children: [
-            // 1. Header Section
+            // ── Header Section ──
             _buildHeader(primaryColor),
 
-            // 2. Month Selector
+            // ── Month Selector ──
             MonthSelector(
               selectedMonth: _selectedMonth,
               onMonthChanged: _onMonthChanged,
             ),
 
-            // 3. Body Content
+            // ── Body Content ──
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Shared Expenses - Only show in roomspace mode
+                  // Shared Expenses
                   if (!isPersonalSpace) ...[
+                    const SizedBox(height: 12),
                     _buildSectionHeader(
                       title: "Shared Expenses", 
                       onTap: () => Navigator.push(
@@ -235,19 +239,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                           ),
                         ),
                       ),
-                      color: primaryColor,
+                      primaryColor: primaryColor,
                     ),
-                    const SizedBox(height: 12),
                     _buildSharedList(primaryColor),
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 24),
                     
-                    // Who Owes Who Section
-                    _buildWhoOwesWhoSection(primaryColor),
-                    const SizedBox(height: 30),
-                    
-                    // Payment Confirmations Section
-                    _buildPaymentConfirmationsSection(primaryColor),
-                    const SizedBox(height: 30),
+                    // Settle Up Actions (Who Owes Who + Pending Payments)
+                    _buildSettleUpSection(primaryColor),
+                    const SizedBox(height: 24),
                   ],
 
                   // Personal Expenses
@@ -259,12 +258,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         builder: (context) => const PersonalExpensesScreen(),
                       ),
                     ),
-                    color: Colors.orange,
+                    primaryColor: Colors.orange.shade700,
                   ),
-                  const SizedBox(height: 12),
                   _buildPersonalList(),
                   
-                  const SizedBox(height: 80), // Bottom padding for nav bar
+                  const SizedBox(height: 100), // Extra space for bottom nav
                 ],
               ),
             ),
@@ -277,83 +275,66 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Widget _buildHeader(Color primaryColor) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 60,
-        bottom: 30,
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 56, 16, 20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [primaryColor, primaryColor.withValues(alpha: 0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
-        ),
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title and Global Selector Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Expenses',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+              const Expanded(
+                child: Text(
+                  'Expenses',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A2E),
+                  ),
                 ),
               ),
               GlobalRoomspaceSelector(
-                onRoomspaceChanged: () {
-                  // Reload expense data
-                  _loadInitialData();
-                },
+                onRoomspaceChanged: _loadInitialData,
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Recent Activity Total',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Rs. ${_totalRecentSpending.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          const SizedBox(height: 16),
+          _buildSpendingSummaryPanel(primaryColor),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpendingSummaryPanel(Color primaryColor) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F7FB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Activity Total',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade500,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Rs. ${_totalRecentSpending.toStringAsFixed(2)}',
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF1A1A2E),
+            ),
           ),
         ],
       ),
@@ -363,64 +344,78 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Widget _buildSectionHeader({
     required String title, 
     required VoidCallback onTap,
-    required Color color
+    required Color primaryColor
   }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Flexible(
-          child: Text(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
             title,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        TextButton(
-          onPressed: onTap,
-          child: Text(
-            'View All',
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w600,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
             ),
           ),
-        ),
-      ],
+          TextButton(
+            onPressed: onTap,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'View All',
+              style: TextStyle(
+                color: primaryColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildSharedList(Color primaryColor) {
     if (_recentSharedExpenses.isEmpty) {
-      return _buildEmptyState("No shared expenses yet", Icons.people_outline);
+      return _buildEmptyState("No shared expenses yet", Icons.people_outline_rounded);
     }
 
     return Column(
-      children: _recentSharedExpenses.take(3).map((expense) {
-        return _buildExpenseTile(
+      children: _recentSharedExpenses.map((expense) {
+        return _ExpenseTile(
           title: expense.title,
           subtitle: expense.category,
-          amount: expense.amount,
-          date: expense.createdAt,
-          icon: Icons.receipt_long,
-          themeColor: primaryColor,
+          amount: 'Rs. ${expense.amount.toStringAsFixed(0)}',
+          amountColor: primaryColor,
+          date: _formatDate(expense.createdAt),
+          icon: Icons.receipt_long_outlined,
+          onTap: () {
+            // No details view for shared yet, or could navigate to a summary
+          },
         );
       }).toList(),
     );
   }
 
-  // FIXED METHOD BELOW
   Widget _buildPersonalList() {
     if (_recentPersonalExpenses.isEmpty) {
       return _buildEmptyState("No personal expenses yet", Icons.account_balance_wallet_outlined);
     }
 
     return Column(
-      children: _recentPersonalExpenses.take(3).map((expense) {
-        return GestureDetector(
+      children: _recentPersonalExpenses.map((expense) {
+        return _ExpenseTile(
+          title: expense.title,
+          subtitle: expense.category,
+          amount: 'Rs. ${expense.amount.toStringAsFixed(0)}',
+          amountColor: Colors.orange.shade700,
+          date: _formatDate(expense.createdAt),
+          icon: Icons.account_balance_wallet_outlined,
           onTap: () {
             Navigator.push(
               context,
@@ -429,110 +424,97 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ),
             );
           },
-          child: _buildExpenseTile(
-            title: expense.title,
-            subtitle: expense.category,
-            amount: expense.amount,
-            date: expense.createdAt, // Changed from date to createdAt
-            icon: Icons.account_balance_wallet,
-            themeColor: Colors.orange,
-          ),
         );
       }).toList(),
     );
   }
 
-  Widget _buildExpenseTile({
-    required String title,
-    required String subtitle,
-    required double amount,
-    required DateTime? date,
-    required IconData icon,
-    required Color themeColor,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: themeColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: themeColor, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                ),
-              ],
+  Widget _buildSettleUpSection(Color primaryColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Text(
+            "Management",
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                "Rs. ${amount.toStringAsFixed(2)}",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: themeColor,
+        ),
+        _ManagementActionCard(
+          title: 'Balance Overview',
+          subtitle: 'See who owes who and settle up',
+          icon: Icons.people_rounded,
+          color: Colors.indigo,
+          onTap: () {
+            final roomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+            if (roomspaceId != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => WhoOwesWhoScreen(roomspaceId: roomspaceId),
                 ),
-              ),
-              if (date != null)
-                Text(
-                  _formatDate(date),
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              );
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        _ManagementActionCard(
+          title: 'Confirm Payments',
+          subtitle: _pendingPaymentsCount > 0 
+              ? '$_pendingPaymentsCount pending confirmation${_pendingPaymentsCount > 1 ? 's' : ''}'
+              : 'Review and verify payments',
+          icon: Icons.payment_rounded,
+          color: Colors.blue.shade600,
+          badgeCount: _pendingPaymentsCount,
+          onTap: () {
+            final roomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+            if (roomspaceId != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PaymentConfirmationScreen(roomspaceId: roomspaceId),
                 ),
-            ],
-          ),
-        ],
-      ),
+              ).then((_) => _loadPendingPaymentsCount());
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        _ManagementActionCard(
+          title: 'Generate Report',
+          subtitle: 'Export expenses as professional PDF',
+          icon: Icons.picture_as_pdf_rounded,
+          color: Colors.red.shade700,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ReportOptionsScreen()),
+            );
+          },
+        ),
+      ],
     );
   }
 
   Widget _buildEmptyState(String message, IconData icon) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
+        color: const Color(0xFFF7F7FB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
       ),
       child: Column(
         children: [
-          Icon(icon, color: Colors.grey[400], size: 32),
+          Icon(icon, color: Colors.grey.shade400, size: 28),
           const SizedBox(height: 8),
           Text(
             message,
-            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
         ],
       ),
@@ -546,34 +528,26 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+            Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey.shade300),
             const SizedBox(height: 16),
-            Text(
-              'Failed to load expenses',
+            const Text(
+              'Couldn\'t load expenses',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1A1A2E),
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _errorMessage,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _loadInitialData,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-              child: const Text('Retry'),
+              child: const Text('Try Again'),
             ),
           ],
         ),
@@ -581,13 +555,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  String _formatDate(DateTime date) {
+  String _formatDate(DateTime? date) {
+    if (date == null) return '';
     final now = DateTime.now();
     final difference = now.difference(date);
     
     if (difference.inDays == 0) return 'Today';
     if (difference.inDays == 1) return 'Yesterday';
-    if (difference.inDays < 7) return '${difference.inDays} days ago';
+    if (difference.inDays < 7) return '${difference.inDays}d ago';
     
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -595,220 +570,178 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     ];
     return '${months[date.month - 1]} ${date.day}';
   }
+}
 
-  Widget _buildPaymentConfirmationsSection(Color primaryColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          title: "Payment Confirmations",
-          onTap: () {
-            final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-            final activeRoomspace = roomspaceProvider.activeRoomspace;
-            if (activeRoomspace != null) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => PaymentConfirmationScreen(
-                    roomspaceId: activeRoomspace.id,
-                  ),
+/// Simplified expense tile reused across the screen
+class _ExpenseTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String amount;
+  final Color amountColor;
+  final String date;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _ExpenseTile({
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+    required this.amountColor,
+    required this.date,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7F7FB),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-              ).then((_) => _loadPendingPaymentsCount());
-            }
-          },
-          color: Colors.blue,
-        ),
-        const SizedBox(height: 12),
-        _buildPaymentConfirmationsPreview(),
-      ],
-    );
-  }
-
-  Widget _buildWhoOwesWhoSection(Color primaryColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(
-          title: "Who Owes Who",
-          onTap: () {
-            final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-            final activeRoomspace = roomspaceProvider.activeRoomspace;
-            if (activeRoomspace != null) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => WhoOwesWhoScreen(
-                    roomspaceId: activeRoomspace.id,
-                  ),
+                child: Icon(icon, size: 18, color: Colors.grey.shade600),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    ),
+                  ],
                 ),
-              );
-            }
-          },
-          color: Colors.purple,
-        ),
-        const SizedBox(height: 12),
-        _buildWhoOwesWhoPreview(),
-      ],
-    );
-  }
-
-  Widget _buildWhoOwesWhoPreview() {
-    return InkWell(
-      onTap: () {
-        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-        final activeRoomspace = roomspaceProvider.activeRoomspace;
-        if (activeRoomspace != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => WhoOwesWhoScreen(
-                roomspaceId: activeRoomspace.id,
               ),
-            ),
-          );
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.purple[50]!, Colors.purple[100]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.purple[200]!),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.purple,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.people, color: Colors.white, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    'Balance Overview',
+                    amount,
                     style: TextStyle(
-                      color: Colors.purple[900],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: amountColor,
                     ),
                   ),
-                  const SizedBox(height: 4),
                   Text(
-                    'See who owes who and settle up',
-                    style: TextStyle(
-                      color: Colors.purple[700],
-                      fontSize: 13,
-                    ),
+                    date,
+                    style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
                   ),
                 ],
               ),
-            ),
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.purple[700]),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildPaymentConfirmationsPreview() {
-    if (_pendingPaymentsCount == 0) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey[200]!),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.check_circle_outline, color: Colors.grey[400]),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'No pending payment confirmations',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
+/// Action card for Management section (Who Owes Who / Confirm Payments)
+class _ManagementActionCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final int? badgeCount;
+  final VoidCallback onTap;
+
+  const _ManagementActionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    this.badgeCount,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(icon, size: 24, color: color),
+                    if (badgeCount != null && badgeCount! > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: Text(
+                            '$badgeCount',
+                            style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return InkWell(
-      onTap: () {
-        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-        final activeRoomspace = roomspaceProvider.activeRoomspace;
-        if (activeRoomspace != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PaymentConfirmationScreen(
-                roomspaceId: activeRoomspace.id,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ).then((_) => _loadPendingPaymentsCount());
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.blue[50]!, Colors.blue[100]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+              Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey.shade400),
+            ],
           ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.blue[200]!),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.blue,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.payment, color: Colors.white, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$_pendingPaymentsCount Pending Payment${_pendingPaymentsCount > 1 ? 's' : ''}',
-                    style: TextStyle(
-                      color: Colors.blue[900],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Tap to review and confirm',
-                    style: TextStyle(
-                      color: Colors.blue[700],
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.blue[700]),
-          ],
         ),
       ),
     );
