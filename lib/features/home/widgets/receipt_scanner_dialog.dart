@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 import '../../../services/ocr_service.dart';
 
+/// Premium, responsive dialog for scanning receipts via OCR.
 class ReceiptScannerDialog extends StatefulWidget {
   final Function(OcrScanResult) onScanComplete;
-
-  const ReceiptScannerDialog({
-    super.key,
-    required this.onScanComplete,
-  });
+  const ReceiptScannerDialog({super.key, required this.onScanComplete});
 
   static Future<OcrScanResult?> show(BuildContext context) async {
+    final width = MediaQuery.of(context).size.width;
+    final isTablet = width > 600;
+
     return showModalBottomSheet<OcrScanResult>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => ReceiptScannerDialog(
-        onScanComplete: (result) {
-          Navigator.pop(context, result);
-        },
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.symmetric(horizontal: isTablet ? width * 0.2 : 0),
+        child: ReceiptScannerDialog(onScanComplete: (res) => Navigator.pop(context, res)),
       ),
     );
   }
@@ -29,339 +29,118 @@ class _ReceiptScannerDialogState extends State<ReceiptScannerDialog> {
   final OcrService _ocrService = OcrService();
   bool _isScanning = false;
   String? _error;
-  bool _showSettingsButton = false;
+  bool _showSettings = false;
 
-  Future<void> _scanFromCamera() async {
-    setState(() {
-      _isScanning = true;
-      _error = null;
-      _showSettingsButton = false;
-    });
-
+  Future<void> _scan(Future<OcrScanResult?> Function() method) async {
+    setState(() { _isScanning = true; _error = null; _showSettings = false; });
     try {
-      final result = await _ocrService.scanFromCamera();
-      if (result != null) {
-        if (result.hasData) {
-          widget.onScanComplete(result);
-        } else {
-          _showResultDialog(result);
-        }
+      final res = await method();
+      if (res != null) {
+        if (res.hasData) widget.onScanComplete(res);
+        else _showResult(res);
       }
     } on PermissionDeniedException catch (e) {
-      setState(() {
-        _error = e.message;
-        _showSettingsButton = e.isPermanent;
-      });
+      setState(() { _error = e.message; _showSettings = e.isPermanent; });
     } catch (e) {
-      setState(() {
-        _error = 'Failed to scan: ${e.toString()}';
-        _showSettingsButton = false;
-      });
+      setState(() => _error = 'Failed to scan: ${e.toString()}');
     } finally {
-      setState(() {
-        _isScanning = false;
-      });
+      if (mounted) setState(() => _isScanning = false);
     }
   }
 
-  Future<void> _scanFromGallery() async {
-    setState(() {
-      _isScanning = true;
-      _error = null;
-      _showSettingsButton = false;
-    });
-
-    try {
-      final result = await _ocrService.scanFromGallery();
-      if (result != null) {
-        if (result.hasData) {
-          widget.onScanComplete(result);
-        } else {
-          _showResultDialog(result);
-        }
-      }
-    } on PermissionDeniedException catch (e) {
-      setState(() {
-        _error = e.message;
-        _showSettingsButton = e.isPermanent;
-      });
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to scan: ${e.toString()}';
-        _showSettingsButton = false;
-      });
-    } finally {
-      setState(() {
-        _isScanning = false;
-      });
-    }
+  void _showResult(OcrScanResult res) {
+    showDialog(context: context, builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Scan Result', style: TextStyle(fontWeight: FontWeight.w800)),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (res.amount != null) ...[Text('Amount: Rs. ${res.amount!.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: 12)],
+        if (res.merchant != null) ...[Text('Merchant: ${res.merchant}'), const SizedBox(height: 12)],
+        const Divider(),
+        const Text('Detected Text:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.grey)),
+        const SizedBox(height: 8),
+        Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFF7F7FB), borderRadius: BorderRadius.circular(12)), child: Text(res.rawText.isEmpty ? 'No text found' : res.rawText, style: const TextStyle(fontSize: 11, color: Colors.black87))),
+      ])),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+        if (res.hasData) ElevatedButton(onPressed: () { Navigator.pop(context); widget.onScanComplete(res); }, style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text('Use This')),
+      ],
+    ));
   }
 
-  Future<void> _openSettings() async {
-    await _ocrService.openSettings();
-  }
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
 
-  void _showResultDialog(OcrScanResult result) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Scan Result'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (result.amount != null) ...[
-                Text('Amount: Rs. ${result.amount!.toStringAsFixed(2)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-              ],
-              if (result.merchant != null) ...[
-                Text('Merchant: ${result.merchant}'),
-                const SizedBox(height: 8),
-              ],
-              if (result.date != null) ...[
-                Text('Date: ${result.date}'),
-                const SizedBox(height: 8),
-              ],
-              if (result.allAmounts.isNotEmpty) ...[
-                const Text('All amounts found:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                ...result.allAmounts.take(5).map((a) => Text('  • $a')),
-                const SizedBox(height: 8),
-              ],
-              const Divider(),
-              const Text('Raw Text:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  result.rawText.isEmpty ? 'No text found' : result.rawText,
-                  style: const TextStyle(fontSize: 11),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          if (result.hasData)
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                widget.onScanComplete(result);
-              },
-              child: const Text('Use This'),
-            ),
+    return Container(
+      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildHandle(),
+          _buildHeader(primary),
+          if (_isScanning) _buildLoading(primary) else _buildOptions(primary),
+          const SizedBox(height: 32),
+          if (_error != null) _buildError(),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
         ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.document_scanner,
-                    size: 48,
-                    color: primaryColor,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Scan Receipt',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Take a photo or select an image of your receipt to automatically extract expense details',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Error message
-            if (_error != null)
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _error!,
-                            style: const TextStyle(color: Colors.red, fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_showSettingsButton) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _openSettings,
-                          icon: const Icon(Icons.settings, size: 18),
-                          label: const Text('Open Settings'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-            const SizedBox(height: 16),
-
-            // Scanning indicator
-            if (_isScanning)
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    CircularProgressIndicator(color: primaryColor),
-                    const SizedBox(height: 16),
-                    const Text('Scanning receipt...'),
-                  ],
-                ),
-              )
-            else
-              // Options
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildOptionCard(
-                        icon: Icons.camera_alt,
-                        title: 'Camera',
-                        subtitle: 'Take a photo',
-                        color: primaryColor,
-                        onTap: _scanFromCamera,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildOptionCard(
-                        icon: Icons.photo_library,
-                        title: 'Gallery',
-                        subtitle: 'Choose image',
-                        color: Colors.green,
-                        onTap: _scanFromGallery,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            const SizedBox(height: 24),
-            SizedBox(height: MediaQuery.of(context).padding.bottom),
-          ],
-        ),
-      ),
-    );
+  Widget _buildHandle() {
+    return Container(margin: const EdgeInsets.only(top: 12), width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFFEEEEF2), borderRadius: BorderRadius.circular(2)));
   }
 
-  Widget _buildOptionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
+  Widget _buildHeader(Color primary) {
+    return Padding(padding: const EdgeInsets.all(24), child: Column(children: [
+      Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), shape: BoxShape.circle), child: Icon(Icons.document_scanner_rounded, size: 40, color: primary)),
+      const SizedBox(height: 20),
+      const Text('Scan Receipt', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
+      const SizedBox(height: 8),
+      Text('Automatically extract expense details from a photo', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+    ]));
+  }
+
+  Widget _buildLoading(Color primary) {
+    return Padding(padding: const EdgeInsets.all(32), child: Column(children: [CircularProgressIndicator(color: primary, strokeWidth: 3), const SizedBox(height: 16), Text('Analyzing receipt...', style: TextStyle(fontSize: 13, color: Colors.grey.shade600, fontWeight: FontWeight.w600))]));
+  }
+
+  Widget _buildOptions(Color primary) {
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Row(children: [
+      Expanded(child: _OptionBtn(icon: Icons.camera_alt_rounded, title: 'Camera', color: primary, onTap: () => _scan(_ocrService.scanFromCamera))),
+      const SizedBox(width: 12),
+      Expanded(child: _OptionBtn(icon: Icons.photo_library_rounded, title: 'Gallery', color: const Color(0xFF10B981), onTap: () => _scan(_ocrService.scanFromGallery))),
+    ]));
+  }
+
+  Widget _buildError() {
+    return Container(margin: const EdgeInsets.symmetric(horizontal: 24), padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.05), border: Border.all(color: Colors.red.withValues(alpha: 0.1)), borderRadius: BorderRadius.circular(16)), child: Column(children: [
+      Row(children: [const Icon(Icons.error_outline_rounded, color: Colors.red, size: 20), const SizedBox(width: 8), Expanded(child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w600)))]),
+      if (_showSettings) Padding(padding: const EdgeInsets.only(top: 12), child: SizedBox(width: double.infinity, height: 40, child: ElevatedButton(onPressed: _ocrService.openSettings, style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 0), child: const Text('Open Settings')))),
+    ]));
+  }
+}
+
+class _OptionBtn extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Color color;
+  final VoidCallback onTap;
+  const _OptionBtn({required this.icon, required this.title, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: Colors.white, size: 28),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Colors.grey[800],
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withValues(alpha: 0.1))),
+        child: Column(children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 12),
+          Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.grey.shade800)),
+        ]),
       ),
     );
   }

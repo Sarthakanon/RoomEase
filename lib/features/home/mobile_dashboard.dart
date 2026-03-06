@@ -16,6 +16,7 @@ import 'widgets/add_expense_dialog.dart';
 import 'widgets/personal_expense_dialog.dart';
 import 'widgets/receipt_scanner_dialog.dart';
 
+/// Home dashboard — shows balance summary, quick actions, and recent expenses.
 class MobileDashboard extends StatefulWidget {
   const MobileDashboard({super.key});
 
@@ -23,22 +24,24 @@ class MobileDashboard extends StatefulWidget {
   State<MobileDashboard> createState() => _MobileDashboardState();
 }
 
-class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingObserver {
+class _MobileDashboardState extends State<MobileDashboard>
+    with WidgetsBindingObserver {
   final ApiService _apiService = ApiService();
   final BalanceService _balanceService = BalanceService();
+
   bool _hasRoomspace = false;
   bool _isLoading = true;
   List<RoommateItem> _roommates = [];
   int _unreadNotificationCount = 0;
   String? _currentRoomspaceId;
-  
-  // Recent expenses state
+
+  // Recent expense data
   List<ExpenseData> _recentExpenses = [];
   List<PersonalExpenseData> _recentPersonalExpenses = [];
   bool _isLoadingExpenses = true;
   String? _expensesError;
-  
-  // Balance state
+
+  // Balance data
   double _youAreOwed = 0.0;
   double _youOwe = 0.0;
   bool _isLoadingBalance = false;
@@ -51,64 +54,49 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
     _loadUnreadCount();
     _loadBalance();
     _initializePaymentNotifications();
-    
-    // Listen to roomspace provider changes
+
+    // Listen for roomspace changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final roomspaceProvider =
+          Provider.of<RoomspaceProvider>(context, listen: false);
       roomspaceProvider.addListener(_onRoomspaceChanged);
     });
   }
-  
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // Remove listener when widget is disposed
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final roomspaceProvider =
+        Provider.of<RoomspaceProvider>(context, listen: false);
     roomspaceProvider.removeListener(_onRoomspaceChanged);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Refresh when the app comes back from background
     if (state == AppLifecycleState.resumed) {
-      // Refresh data when app comes back to foreground
       _loadBalance();
       _loadRecentExpenses();
       _loadUnreadCount();
     }
   }
-  
-  /// Called when the active roomspace changes
+
+  /// Called automatically when the active roomspace changes
   void _onRoomspaceChanged() {
-    // Refresh data when roomspace changes
     _loadRecentExpenses();
     _loadBalance();
   }
 
   Future<void> _initializePaymentNotifications() async {
     try {
-      debugPrint('🚀 Starting payment notification initialization...');
       final paymentService = PaymentNotificationService.instance;
-      debugPrint('📱 Got payment service instance');
-      
       await paymentService.initialize();
-      debugPrint('✅ Payment service initialized');
-      
-      // Initialize background service
       await paymentService.initializeBackgroundService();
-      debugPrint('🔧 Background service initialized');
-      
-      // Start background monitoring if enabled
       await paymentService.startBackgroundMonitoring();
-      debugPrint('👂 Background monitoring started');
-      
-      // Set callback for when user wants to add expense from payment notification
       paymentService.onExpenseRequested = _showExpenseDialogFromPayment;
-      debugPrint('🎯 Expense callback set');
-      
-      debugPrint('🎉 Payment notification initialization complete!');
     } catch (e) {
-      debugPrint('💥 Error initializing payment notifications: $e');
+      debugPrint('Error initializing payment notifications: $e');
     }
   }
 
@@ -118,60 +106,47 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
         _isLoadingExpenses = true;
         _expensesError = null;
       });
-      
-      // Get active roomspace from provider
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+
+      final roomspaceProvider =
+          Provider.of<RoomspaceProvider>(context, listen: false);
       final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
       final isPersonalSpace = roomspaceProvider.isPersonalSpace;
-      
-      print('📊 Loading recent expenses for roomspace: $activeRoomspaceId (Personal Space: $isPersonalSpace)');
-      
-      // Load both shared and personal expenses concurrently
+
       final futures = <Future>[];
-      
-      // Load shared expenses ONLY if NOT in personal space
+
+      // Only load shared expenses when inside a real roomspace
       if (!isPersonalSpace && activeRoomspaceId != null) {
-        futures.add(_apiService.getRecentExpenses(roomspaceId: activeRoomspaceId, limit: 3));
+        futures.add(_apiService.getRecentExpenses(
+            roomspaceId: activeRoomspaceId, limit: 3));
       }
-      
+
       // Always load personal expenses
       futures.add(_apiService.getPersonalExpenses(limit: 3, offset: 0));
-      
+
       final results = await Future.wait(futures);
-      
+
       List<ExpenseData> sharedExpenses = [];
       List<PersonalExpenseData> personalExpenses = [];
-      
-      int resultIndex = 0;
-      
-      // Process shared expenses if we loaded them
+
+      int idx = 0;
+
       if (!isPersonalSpace && activeRoomspaceId != null) {
-        final sharedResponse = results[resultIndex++];
-        print('📊 Shared expenses response: $sharedResponse');
-        if (sharedResponse.containsKey('data')) {
-          final data = sharedResponse['data'];
-          if (data != null && data is List) {
-            sharedExpenses = data
-                .map((expense) => ExpenseData.fromJson(expense))
-                .toList();
-            print('✅ Loaded ${sharedExpenses.length} shared expenses');
-          }
-        }
-      }
-      
-      // Process personal expenses
-      final personalResponse = results[resultIndex];
-      print('📊 Personal expenses response: $personalResponse');
-      if (personalResponse.containsKey('data')) {
-        final data = personalResponse['data'];
-        if (data != null && data is List) {
-          personalExpenses = data
-              .map((expense) => PersonalExpenseData.fromJson(expense))
+        final sharedResponse = results[idx++];
+        if (sharedResponse.containsKey('data') && sharedResponse['data'] is List) {
+          sharedExpenses = (sharedResponse['data'] as List)
+              .map((e) => ExpenseData.fromJson(e))
               .toList();
-          print('✅ Loaded ${personalExpenses.length} personal expenses');
         }
       }
-      
+
+      final personalResponse = results[idx];
+      if (personalResponse.containsKey('data') &&
+          personalResponse['data'] is List) {
+        personalExpenses = (personalResponse['data'] as List)
+            .map((e) => PersonalExpenseData.fromJson(e))
+            .toList();
+      }
+
       if (mounted) {
         setState(() {
           _recentExpenses = sharedExpenses;
@@ -179,9 +154,7 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
           _isLoadingExpenses = false;
         });
       }
-    } catch (e, stackTrace) {
-      print('❌ Error loading recent expenses: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
       if (mounted) {
         setState(() {
           _expensesError = 'Failed to load recent expenses';
@@ -193,7 +166,7 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
 
   Future<void> _refreshRecentExpenses() async {
     await _loadRecentExpenses();
-    await _loadBalance(); // Refresh balance when expenses change
+    await _loadBalance();
   }
 
   Future<void> _loadUnreadCount() async {
@@ -205,60 +178,77 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
 
       final notifications = results[0]['data'] as List<dynamic>? ?? [];
       final joinRequests = results[1]['data'] as List<dynamic>? ?? [];
-
-      final unreadNotifications = notifications
-          .where((n) => n['is_read'] != true)
-          .length;
+      final unread = notifications.where((n) => n['is_read'] != true).length;
 
       if (mounted) {
         setState(() {
-          _unreadNotificationCount = unreadNotifications + joinRequests.length;
+          _unreadNotificationCount = unread + joinRequests.length;
         });
       }
-    } catch (e) {
-      // Silently fail - notification count is not critical
+    } catch (_) {
+      // Notification count is non-critical; silently ignore errors
     }
   }
 
   Future<void> _checkRoomspace() async {
     try {
-      // Load roomspaces through the provider
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final roomspaceProvider =
+          Provider.of<RoomspaceProvider>(context, listen: false);
       await roomspaceProvider.loadRoomspaces();
-      
-      // Get the active roomspace
+
       final activeRoomspace = roomspaceProvider.activeRoomspace;
-      
+      final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+
+      // Load roommates if in a roomspace
+      if (activeRoomspaceId != null && activeRoomspace != null) {
+        try {
+          final response = await _apiService.getRoomspaceMembers(activeRoomspaceId);
+          if (response['success'] == true && response['data'] != null) {
+            final members = response['data'] as List;
+            _roommates = members
+                .map((m) => RoommateItem(
+                      id: m['user_id'] ?? '',
+                      name: m['user_name'] ?? m['name'] ?? 'Unknown',
+                    ))
+                .toList();
+            _currentRoomspaceId = activeRoomspaceId;
+          }
+        } catch (e) {
+          debugPrint('Error loading roommates: $e');
+          _roommates = [];
+          _currentRoomspaceId = null;
+        }
+      } else {
+        _roommates = [];
+        _currentRoomspaceId = null;
+      }
+
       if (mounted) {
         setState(() {
           _hasRoomspace = activeRoomspace != null;
           _isLoading = false;
         });
       }
-      
-      // Load recent expenses after checking roomspace
+
       await _loadRecentExpenses();
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
 
   Future<void> _loadBalance() async {
-    setState(() {
-      _isLoadingBalance = true;
-    });
+    setState(() => _isLoadingBalance = true);
 
     try {
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final roomspaceProvider =
+          Provider.of<RoomspaceProvider>(context, listen: false);
       final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
       final isPersonalSpace = roomspaceProvider.isPersonalSpace;
       final currentUser = FirebaseAuth.instance.currentUser;
 
-      // Hide balance in personal space or if no roomspace
+      // No balance to show in personal space
       if (isPersonalSpace || activeRoomspaceId == null || currentUser == null) {
         setState(() {
           _youAreOwed = 0.0;
@@ -268,7 +258,6 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
         return;
       }
 
-      // Fetch balance from API
       final balance = await _balanceService.getUserBalance(
         activeRoomspaceId,
         currentUser.uid,
@@ -293,7 +282,6 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
         });
       }
     } catch (e) {
-      print('Error loading balance: $e');
       if (mounted) {
         setState(() {
           _youAreOwed = 0.0;
@@ -304,11 +292,20 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
     }
   }
 
+  // ──────────────────────────────────────────
+  // ADD EXPENSE HELPERS
+  // ──────────────────────────────────────────
+
   void _showAddExpenseDialog() {
     final primaryColor = Theme.of(context).colorScheme.primary;
     _showExpenseOptions(context, primaryColor);
   }
-  void _showExpenseOptions(BuildContext context, Color primaryColor, {PaymentNotification? paymentNotification}) {
+
+  void _showExpenseOptions(
+    BuildContext context,
+    Color primaryColor, {
+    PaymentNotification? paymentNotification,
+  }) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -320,50 +317,50 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
+            // Bottom sheet handle bar
             Container(
-              width: 40,
+              width: 36,
               height: 4,
               margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            
-            // Header
+
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Add Expense',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
-                  // Show payment notification info if available
+
+                  // Show payment notification info if auto-filled
                   if (paymentNotification != null) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.1),
+                        color: Colors.indigo.shade50,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                        border: Border.all(color: Colors.indigo.shade100),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.payment, color: Colors.blue, size: 20),
+                          Icon(Icons.payment_rounded,
+                              color: Colors.indigo.shade600, size: 18),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Payment: Rs. ${paymentNotification.amount?.toStringAsFixed(2) ?? 'Unknown'} to ${paymentNotification.merchant ?? 'Unknown'}',
+                              'Rs. ${paymentNotification.amount?.toStringAsFixed(2) ?? '?'} · ${paymentNotification.merchant ?? 'Unknown'}',
                               style: TextStyle(
-                                color: Colors.blue[800],
-                                fontSize: 14,
+                                color: Colors.indigo.shade700,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -375,26 +372,53 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
                 ],
               ),
             ),
-            
-            // Options
+
+            const Divider(height: 1),
+
+            // Option 1 — Shared Expense
             ListTile(
-              leading: Icon(Icons.people, color: primaryColor),
-              title: const Text('Add Shared Expense'),
-              subtitle: const Text('Split with roommates'),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.people_outlined,
+                    color: Colors.grey.shade700, size: 20),
+              ),
+              title: const Text('Shared Expense',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: const Text('Split with roommates',
+                  style: TextStyle(fontSize: 12)),
               onTap: () {
                 Navigator.pop(context);
-                _showSharedExpenseDialog(paymentNotification: paymentNotification);
+                _showSharedExpenseDialog(
+                    paymentNotification: paymentNotification);
               },
             ),
+
+            // Option 2 — Personal Expense
             ListTile(
-              leading: Icon(Icons.account_balance_wallet, color: primaryColor),
-              title: const Text('Add Personal Expense'),
-              subtitle: const Text('Track personal spending'),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.account_balance_wallet_outlined,
+                    color: Colors.grey.shade700, size: 20),
+              ),
+              title: const Text('Personal Expense',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: const Text('Track personal spending',
+                  style: TextStyle(fontSize: 12)),
               onTap: () {
                 Navigator.pop(context);
-                _showPersonalExpenseDialog(paymentNotification: paymentNotification);
+                _showPersonalExpenseDialog(
+                    paymentNotification: paymentNotification);
               },
             ),
+
             const SizedBox(height: 16),
           ],
         ),
@@ -407,16 +431,9 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Join a roomspace first to add shared expenses'),
-          backgroundColor: Colors.orange,
         ),
       );
       return;
-    }
-
-    // Debug: Print roommates info
-    print('DEBUG: Showing expense dialog with ${_roommates.length} roommates');
-    for (var roommate in _roommates) {
-      print('DEBUG: Roommate - ID: ${roommate.id}, Name: ${roommate.name}');
     }
 
     AddExpenseDialog.show(
@@ -434,32 +451,22 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
       paymentNotification: paymentNotification,
       onSubmit: (expense) async {
         try {
-          // Create personal expense request
           final request = PersonalExpenseCreateRequest.fromExpenseData(expense);
-
-          // Submit to API
           await _apiService.createPersonalExpense(request.toJson());
-
-          // Refresh recent expenses to show the new personal expense
           await _refreshRecentExpenses();
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Added personal expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
-                ),
-                backgroundColor: Colors.green,
+                    'Added: ${expense.title} · Rs. ${expense.amount.toStringAsFixed(2)}'),
               ),
             );
           }
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to add personal expense: ${e.toString()}'),
-                backgroundColor: Colors.red,
-              ),
+              SnackBar(content: Text('Failed to add expense: $e')),
             );
           }
         }
@@ -467,20 +474,28 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
     );
   }
 
-  /// Scan receipt and show expense type selection with scanned data
   Future<void> _scanReceiptAndShowOptions() async {
     final result = await ReceiptScannerDialog.show(context);
-    
     if (result != null && mounted) {
-      // Show dialog to choose expense type with scanned data
       _showScannedExpenseTypeDialog(result);
     }
   }
 
-  /// Show expense type selection dialog with scanned receipt data
   void _showScannedExpenseTypeDialog(OcrScanResult scanResult) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    
+
+    // Build a payment notification from scan data so dialogs can auto-fill
+    final notification = PaymentNotification(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      source: 'receipt_scan',
+      appName: 'Receipt Scanner',
+      rawText: scanResult.rawText,
+      amount: scanResult.amount,
+      merchant: scanResult.merchant,
+      timestamp: DateTime.now(),
+      type: PaymentType.debit,
+    );
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -492,97 +507,111 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
             Container(
-              width: 40,
+              width: 36,
               height: 4,
               margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            
-            // Header with scanned info
+
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 24),
+                      Icon(Icons.check_circle_outline_rounded,
+                          color: Colors.green.shade600, size: 18),
                       const SizedBox(width: 8),
                       Text(
                         'Receipt Scanned',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-                    ),
-                    child: Column(
-                      children: [
-                        if (scanResult.amount != null)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Rs. ${scanResult.amount!.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green[800],
-                                ),
-                              ),
-                            ],
-                          ),
-                        if (scanResult.merchant != null) ...[
-                          const SizedBox(height: 4),
+                  if (scanResult.amount != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7F7FB),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFEEEEF2)),
+                      ),
+                      child: Row(
+                        children: [
                           Text(
-                            scanResult.merchant!,
-                            style: TextStyle(
-                              color: Colors.green[700],
-                              fontSize: 14,
-                            ),
+                            'Rs. ${scanResult.amount!.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w700),
                           ),
+                          if (scanResult.merchant != null) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              '· ${scanResult.merchant}',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade600),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
-            
-            // Options
+
+            const Divider(height: 1),
+
             ListTile(
-              leading: Icon(Icons.people, color: primaryColor),
-              title: const Text('Add as Shared Expense'),
-              subtitle: const Text('Split with roommates'),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.people_outlined,
+                    color: Colors.grey.shade700, size: 20),
+              ),
+              title: const Text('Add as Shared Expense',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: const Text('Split with roommates',
+                  style: TextStyle(fontSize: 12)),
               onTap: () {
                 Navigator.pop(context);
-                _showSharedExpenseDialogWithScan(scanResult);
+                _showSharedExpenseDialog(paymentNotification: notification);
               },
             ),
+
             ListTile(
-              leading: Icon(Icons.account_balance_wallet, color: primaryColor),
-              title: const Text('Add as Personal Expense'),
-              subtitle: const Text('Track personal spending'),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.account_balance_wallet_outlined,
+                    color: Colors.grey.shade700, size: 20),
+              ),
+              title: const Text('Add as Personal Expense',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              subtitle: const Text('Track personal spending',
+                  style: TextStyle(fontSize: 12)),
               onTap: () {
                 Navigator.pop(context);
-                _showPersonalExpenseDialogWithScan(scanResult);
+                _showPersonalExpenseDialog(paymentNotification: notification);
               },
             ),
+
             const SizedBox(height: 16),
           ],
         ),
@@ -590,578 +619,98 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
     );
   }
 
-  /// Show shared expense dialog with scanned data pre-filled
-  void _showSharedExpenseDialogWithScan(OcrScanResult scanResult) {
-    if (_roommates.isEmpty || _currentRoomspaceId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Join a roomspace first to add shared expenses'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    // Create a payment notification from scan result to use auto-fill
-    final notification = PaymentNotification(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      source: 'receipt_scan',
-      appName: 'Receipt Scanner',
-      rawText: scanResult.rawText,
-      amount: scanResult.amount,
-      merchant: scanResult.merchant,
-      timestamp: DateTime.now(),
-      type: PaymentType.debit,
-    );
-
-    AddExpenseDialog.show(
-      context,
-      roommates: _roommates,
-      roomspaceId: _currentRoomspaceId!,
-      paymentNotification: notification,
-      onSubmit: _handleExpenseSubmission,
-    );
-  }
-
-  /// Show personal expense dialog with scanned data pre-filled
-  void _showPersonalExpenseDialogWithScan(OcrScanResult scanResult) {
-    // Create a payment notification from scan result to use auto-fill
-    final notification = PaymentNotification(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      source: 'receipt_scan',
-      appName: 'Receipt Scanner',
-      rawText: scanResult.rawText,
-      amount: scanResult.amount,
-      merchant: scanResult.merchant,
-      timestamp: DateTime.now(),
-      type: PaymentType.debit,
-    );
-
-    PersonalExpenseDialog.show(
-      context,
-      paymentNotification: notification,
-      onSubmit: (expense) async {
-        try {
-          final request = PersonalExpenseCreateRequest.fromExpenseData(expense);
-          await _apiService.createPersonalExpense(request.toJson());
-          await _refreshRecentExpenses();
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Added personal expense: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
-                ),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to add personal expense: ${e.toString()}'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
-      },
-    );
-  }
-
   void _showExpenseDialogFromPayment(PaymentNotification notification) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    _showExpenseOptions(context, primaryColor, paymentNotification: notification);
+    _showExpenseOptions(context, primaryColor,
+        paymentNotification: notification);
   }
 
   Future<void> _handleExpenseSubmission(ExpenseData expense) async {
     try {
-      // Create expense request
       final request = ExpenseCreateRequest.fromExpenseData(
-        expense,
-        _currentRoomspaceId!,
-      );
-
-      // Submit to API
+          expense, _currentRoomspaceId!);
       await _apiService.createExpense(request.toJson());
-
-      // Refresh recent expenses to show the new expense
       await _refreshRecentExpenses();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Added: ${expense.title} - Rs. ${expense.amount.toStringAsFixed(2)}',
-            ),
-            backgroundColor: Colors.green,
-          ),
+              content: Text(
+                  'Added: ${expense.title} · Rs. ${expense.amount.toStringAsFixed(2)}')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to add expense: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Failed to add expense: $e')),
         );
       }
     }
   }
 
+  // ──────────────────────────────────────────
+  // BUILD
+  // ──────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    // 1. Get current user
     final user = FirebaseAuth.instance.currentUser;
-    // 2. Use theme colors
-    final Color primaryColor = Theme.of(context).colorScheme.primary;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return MobileScaffold(
       currentIndex: 0,
-      showAppBar: false, // Disable AppBar for home screen
+      showAppBar: false,
       body: SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ---------------------------------------------
-            // HEADER SECTION
-            // ---------------------------------------------
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 60,
-                bottom: 25,
-              ),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [primaryColor, primaryColor.withValues(alpha: 0.7)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(30),
-                  bottomRight: Radius.circular(30),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // User greeting - flexible to shrink if needed
-                      Flexible(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Hi, ',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
-                                fontSize: 14,
-                              ),
-                            ),
-                            Flexible(
-                              child: Text(
-                                user?.displayName ?? 'User',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Right side controls - shrink if needed
-                      Flexible(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Global Roomspace Selector
-                            Flexible(
-                              child: GlobalRoomspaceSelector(
-                                onRoomspaceChanged: () {
-                                  // Reload dashboard data
-                                  _checkRoomspace();
-                                  _loadRecentExpenses();
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            // Notification Icon
-                            GestureDetector(
-                              onTap: () async {
-                                await Navigator.pushNamed(context, '/notifications');
-                                _loadUnreadCount();
-                              },
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.notifications_outlined,
-                                      color: Colors.white,
-                                      size: 22,
-                                    ),
-                                  ),
-                                  if (_unreadNotificationCount > 0)
-                                    Positioned(
-                                      right: 0,
-                                      top: 0,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: const BoxDecoration(
-                                          color: Colors.red,
-                                          shape: BoxShape.circle,
-                                        ),
-                                        constraints: const BoxConstraints(
-                                          minWidth: 16,
-                                          minHeight: 16,
-                                        ),
-                                        child: Text(
-                                          _unreadNotificationCount > 9
-                                              ? '9+'
-                                              : '$_unreadNotificationCount',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Balance section - responsive font sizes
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final screenWidth = constraints.maxWidth;
-                      final balanceFontSize = screenWidth < 320 ? 24.0 : 32.0;
-                      final labelFontSize = screenWidth < 320 ? 11.0 : 13.0;
-                      
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'You are owed',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                    fontSize: labelFontSize,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                _isLoadingBalance
-                                  ? SizedBox(
-                                      height: balanceFontSize,
-                                      child: const CircularProgressIndicator(
-                                        color: Colors.greenAccent,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : Text(
-                                      'Rs. ${_youAreOwed.round()}',
-                                      style: TextStyle(
-                                        color: Colors.greenAccent,
-                                        fontSize: balanceFontSize,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 60,
-                            color: Colors.white.withValues(alpha: 0.3),
-                          ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  'You owe',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                    fontSize: labelFontSize,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                _isLoadingBalance
-                                  ? SizedBox(
-                                      height: balanceFontSize,
-                                      child: const CircularProgressIndicator(
-                                        color: Colors.redAccent,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : Text(
-                                      'Rs. ${_youOwe.round()}',
-                                      style: TextStyle(
-                                        color: Colors.redAccent,
-                                        fontSize: balanceFontSize,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ),
+            // ── Header ──
+            _buildHeader(user, primaryColor),
+
+            // ── Quick actions ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: _buildQuickActions(primaryColor),
             ),
 
-            // FIXED: Action Buttons - Responsive
-            Padding(
-              padding: EdgeInsets.all(MediaQuery.of(context).size.width < 360 ? 16 : 20),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: _scanReceiptAndShowOptions,
-                          child: Container(
-                            height: 100,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withValues(alpha: 0.1),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.document_scanner_rounded,
-                                  color: primaryColor,
-                                  size: 30,
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  "Scan Receipt",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _showAddExpenseDialog(),
-                          child: Container(
-                            height: 100,
-                            decoration: BoxDecoration(
-                              color: primaryColor,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: primaryColor.withValues(alpha: 0.4),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add, color: Colors.white, size: 30),
-                                SizedBox(height: 8),
-                                Text(
-                                  "Add Expense",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 15),
-                  // View Analytics Button
-                  InkWell(
-                    onTap: () {
-                      Navigator.pushNamed(context, '/analytics');
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            primaryColor.withValues(alpha: 0.1),
-                            primaryColor.withValues(alpha: 0.05),
-                          ],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.3),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.analytics_rounded,
-                            color: primaryColor,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            "View Analytics",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: primaryColor,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.arrow_forward_rounded,
-                            color: primaryColor,
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (!_hasRoomspace && !_isLoading) ...[
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.pushNamed(context, '/create-roomspace');
-                            },
-                            icon: Icon(
-                              Icons.add_home_rounded,
-                              color: primaryColor,
-                            ),
-                            label: Text(
-                              "Create Room",
-                              style: TextStyle(color: primaryColor),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              side: BorderSide(color: primaryColor),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.pushNamed(context, '/join-roomspace');
-                            },
-                            icon: Icon(
-                              Icons.login_rounded,
-                              color: primaryColor,
-                            ),
-                            label: Text(
-                              "Join Room",
-                              style: TextStyle(color: primaryColor),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              side: BorderSide(color: primaryColor),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
+            // ── No roomspace prompt ──
+            if (!_hasRoomspace && !_isLoading)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: _buildNoRoomspaceCard(primaryColor),
               ),
-            ),
 
-            // Recent Activity Header
+            // ── Recent Activity ──
             Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: MediaQuery.of(context).size.width < 360 ? 16 : 20,
-              ),
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    "Recent Activity",
+                  const Text(
+                    'Recent Activity',
                     style: TextStyle(
-                      fontSize: MediaQuery.of(context).size.width < 360 ? 16 : 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1A1A2E),
                     ),
                   ),
                   TextButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/expenses');
-                    },
+                    onPressed: () =>
+                        Navigator.pushNamed(context, '/expenses'),
                     child: Text(
                       'View All',
                       style: TextStyle(
-                        color: primaryColor,
-                        fontWeight: FontWeight.w600,
-                      ),
+                          color: primaryColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 10),
 
-            // ---------------------------------------------
-            // RECENT ACTIVITY LIST
-            // ---------------------------------------------
             Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: MediaQuery.of(context).size.width < 360 ? 16 : 20,
-              ),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: _buildRecentActivityList(primaryColor),
             ),
           ],
@@ -1170,197 +719,525 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
     );
   }
 
+  // ──────────────────────────────────────────
+  // HEADER
+  // ──────────────────────────────────────────
+  Widget _buildHeader(User? user, Color primaryColor) {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
+    final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 56, 16, 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: greeting + controls
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Hello, ${user?.displayName?.split(' ').first ?? 'there'} 👋',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A1A2E),
+                      ),
+                    ),
+                    Text(
+                      _greeting(),
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
+              ),
+              // Roomspace switcher
+              GlobalRoomspaceSelector(
+                onRoomspaceChanged: () {
+                  _checkRoomspace();
+                  _loadRecentExpenses();
+                },
+              ),
+              const SizedBox(width: 4),
+              // Notification bell
+              _buildNotificationButton(primaryColor),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Balance row — only in roomspace mode
+          if (!isPersonalSpace) _buildBalanceRow(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationButton(Color primaryColor) {
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.pushNamed(context, '/notifications');
+        _loadUnreadCount();
+      },
+      child: Stack(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.notifications_outlined,
+                size: 20, color: Colors.grey.shade600),
+          ),
+          if (_unreadNotificationCount > 0)
+            Positioned(
+              right: 0,
+              top: 0,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFD32F2F),
+                  shape: BoxShape.circle,
+                ),
+                constraints:
+                    const BoxConstraints(minWidth: 14, minHeight: 14),
+                child: Text(
+                  _unreadNotificationCount > 9
+                      ? '9+'
+                      : '$_unreadNotificationCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBalanceRow() {
+    return Row(
+      children: [
+        Expanded(child: _buildBalanceTile('You are owed', _youAreOwed, true)),
+        const SizedBox(width: 10),
+        Expanded(child: _buildBalanceTile('You owe', _youOwe, false)),
+      ],
+    );
+  }
+
+  Widget _buildBalanceTile(String label, double amount, bool isPositive) {
+    final valueColor = isPositive
+        ? const Color(0xFF2E7D32) // dark green
+        : const Color(0xFFC62828); // dark red
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F7FB),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style:
+                  TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+          const SizedBox(height: 4),
+          _isLoadingBalance
+              ? SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: valueColor,
+                  ),
+                )
+              : Text(
+                  'Rs. ${amount.round()}',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: valueColor,
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  // ──────────────────────────────────────────
+  // QUICK ACTIONS
+  // ──────────────────────────────────────────
+  Widget _buildQuickActions(Color primaryColor) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            // Scan Receipt
+            Expanded(
+              child: _QuickActionCard(
+                icon: Icons.document_scanner_outlined,
+                label: 'Scan Receipt',
+                onTap: _scanReceiptAndShowOptions,
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Add Expense — primary colored
+            Expanded(
+              child: _QuickActionCard(
+                icon: Icons.add_rounded,
+                label: 'Add Expense',
+                isPrimary: true,
+                onTap: _showAddExpenseDialog,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // View Analytics row
+        InkWell(
+          onTap: () => Navigator.pushNamed(context, '/analytics'),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFEEEEF2)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.analytics_rounded,
+                    color: primaryColor, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'View Analytics',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: primaryColor,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_forward_rounded,
+                    color: primaryColor, size: 16),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ──────────────────────────────────────────
+  // NO ROOMSPACE CARD
+  // ──────────────────────────────────────────
+  Widget _buildNoRoomspaceCard(Color primaryColor) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.indigo.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.indigo.shade100),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.home_work_outlined, color: Colors.indigo.shade400),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Create or join a room to split expenses with roommates.',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ──────────────────────────────────────────
+  // RECENT ACTIVITY LIST
+  // ──────────────────────────────────────────
   Widget _buildRecentActivityList(Color primaryColor) {
     if (_isLoadingExpenses) {
       return const Column(
         children: [
-          SizedBox(height: 20),
+          SizedBox(height: 8),
           ExpenseListSkeleton(itemCount: 3),
-          SizedBox(height: 20),
+          SizedBox(height: 100),
         ],
       );
     }
 
     if (_expensesError != null) {
-      return Column(
-        children: [
-          const SizedBox(height: 20),
-          Icon(
-            Icons.error_outline,
-            color: Colors.red[300],
-            size: 48,
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.wifi_off_rounded,
+                  size: 36, color: Colors.grey.shade300),
+              const SizedBox(height: 10),
+              Text(_expensesError!,
+                  style: TextStyle(color: Colors.grey.shade500)),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _refreshRecentExpenses,
+                child: const Text('Retry'),
+              ),
+              const SizedBox(height: 100),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            _expensesError!,
-            style: TextStyle(color: Colors.red[600]),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 10),
-          TextButton(
-            onPressed: _refreshRecentExpenses,
-            child: Text(
-              'Retry',
-              style: TextStyle(color: primaryColor),
-            ),
-          ),
-          const SizedBox(height: 100),
-        ],
+        ),
       );
     }
 
-    // Combine and sort both shared and personal expenses by date
-    final combinedExpenses = <Map<String, dynamic>>[];
-    
-    // Add shared expenses
-    for (final expense in _recentExpenses) {
-      combinedExpenses.add({
-        'type': 'shared',
-        'data': expense,
-        'date': expense.createdAt ?? DateTime.now(),
-      });
+    // Merge shared + personal, sort by date
+    final combined = <Map<String, dynamic>>[];
+    for (final e in _recentExpenses) {
+      combined.add({'type': 'shared', 'data': e, 'date': e.createdAt ?? DateTime.now()});
     }
-    
-    // Add personal expenses
-    for (final expense in _recentPersonalExpenses) {
-      combinedExpenses.add({
-        'type': 'personal',
-        'data': expense,
-        'date': expense.createdAt ?? DateTime.now(),
-      });
+    for (final e in _recentPersonalExpenses) {
+      combined.add({'type': 'personal', 'data': e, 'date': e.createdAt ?? DateTime.now()});
     }
-    
-    // Sort by date (most recent first)
-    combinedExpenses.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
-    
-    // Take only the most recent 5 expenses
-    final recentExpenses = combinedExpenses.take(5).toList();
+    combined.sort((a, b) =>
+        (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    final recent = combined.take(5).toList();
 
-    if (recentExpenses.isEmpty) {
-      return Column(
-        children: [
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey[200]!),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.receipt_long_outlined,
-                  color: Colors.grey[400],
-                  size: 48,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'No expenses yet',
-                  style: TextStyle(
-                    color: Colors.grey[700],
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Add your first expense to start tracking costs',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: _showAddExpenseDialog,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add Expense'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 1,
-                  ),
-                ),
-              ],
-            ),
+    if (recent.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 100),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF7F7FB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFEEEEF2)),
           ),
-          const SizedBox(height: 100), // Extra space for bottom nav
-        ],
+          child: Column(
+            children: [
+              Icon(Icons.receipt_long_outlined,
+                  size: 40, color: Colors.grey.shade300),
+              const SizedBox(height: 12),
+              const Text(
+                'No expenses yet',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A1A2E)),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'No expenses yet. Add your first expense to start tracking costs.',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.grey.shade500),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       );
     }
 
     return Column(
       children: [
-        ...recentExpenses.map((expenseMap) {
-          final type = expenseMap['type'] as String;
-          final data = expenseMap['data'];
-          
-          if (type == 'shared') {
-            return _buildExpenseTile(data as ExpenseData, primaryColor);
+        ...recent.map((map) {
+          if (map['type'] == 'shared') {
+            return _buildSharedTile(map['data'] as ExpenseData);
           } else {
-            return _buildPersonalExpenseTile(data as PersonalExpenseData, primaryColor);
+            return _buildPersonalTile(map['data'] as PersonalExpenseData);
           }
         }),
-        const SizedBox(height: 100), // Extra space for bottom nav
+        const SizedBox(height: 100),
       ],
     );
   }
 
-  Widget _buildExpenseTile(ExpenseData expense, Color primaryColor) {
+  // ──────────────────────────────────────────
+  // EXPENSE TILES
+  // ──────────────────────────────────────────
+  Widget _buildSharedTile(ExpenseData expense) {
     final currentUser = FirebaseAuth.instance.currentUser;
-    final isPaidByCurrentUser = expense.paidBy == currentUser?.uid;
-    final formattedDate = _formatExpenseDate(expense.createdAt);
+    final isPaidByMe = expense.paidBy == currentUser?.uid;
 
+    return _ExpenseTile(
+      title: expense.title,
+      subtitle: isPaidByMe ? 'You paid' : '${expense.payerName ?? 'Someone'} paid',
+      amount: 'Rs. ${expense.amount.toStringAsFixed(0)}',
+      amountColor: isPaidByMe ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+      date: _formatDate(expense.createdAt),
+      icon: Icons.receipt_long_outlined,
+    );
+  }
+
+  Widget _buildPersonalTile(PersonalExpenseData expense) {
+    return _ExpenseTile(
+      title: expense.title,
+      subtitle: expense.category,
+      amount: 'Rs. ${expense.amount.toStringAsFixed(0)}',
+      amountColor: const Color(0xFF1A1A2E),
+      date: _formatDate(expense.createdAt),
+      icon: Icons.account_balance_wallet_outlined,
+    );
+  }
+
+  // ──────────────────────────────────────────
+  // HELPERS
+  // ──────────────────────────────────────────
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '';
+    final diff = DateTime.now().difference(date);
+    if (diff.inDays == 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[date.month - 1]} ${date.day}';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SHARED PRIVATE WIDGETS
+// ══════════════════════════════════════════════════════════════════
+
+/// A card button for Scan Receipt / Add Expense
+class _QuickActionCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isPrimary;
+
+  const _QuickActionCard({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isPrimary = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final bg = isPrimary ? primaryColor : Colors.white;
+    final fg = isPrimary ? Colors.white : const Color(0xFF1A1A2E);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 88,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
+          border: isPrimary
+              ? null
+              : Border.all(color: const Color(0xFFEEEEF2)),
+          boxShadow: isPrimary
+              ? [
+                  BoxShadow(
+                    color: primaryColor.withValues(alpha: 0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  )
+                ]
+              : null,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: fg, size: 26),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: fg,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A single expense list tile
+class _ExpenseTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String amount;
+  final Color amountColor;
+  final String date;
+  final IconData icon;
+
+  const _ExpenseTile({
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+    required this.amountColor,
+    required this.date,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
-              color: primaryColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+              color: const Color(0xFFF7F7FB),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(Icons.receipt_long, color: primaryColor),
+            child: Icon(icon, size: 18, color: Colors.grey.shade600),
           ),
-          const SizedBox(width: 15),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  expense.title,
+                  title,
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                      fontWeight: FontWeight.w600, fontSize: 13),
                 ),
                 Text(
-                  isPaidByCurrentUser 
-                      ? "You paid" 
-                      : "${expense.payerName ?? 'Someone'} paid",
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  subtitle,
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade500),
                 ),
               ],
             ),
@@ -1369,18 +1246,17 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                "Rs. ${expense.amount.toStringAsFixed(2)}",
+                amount,
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: isPaidByCurrentUser 
-                      ? const Color(0xFF10B981) 
-                      : Colors.redAccent,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: amountColor,
                 ),
               ),
               Text(
-                formattedDate,
-                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                date,
+                style: TextStyle(
+                    fontSize: 10, color: Colors.grey.shade400),
               ),
             ],
           ),
@@ -1388,95 +1264,4 @@ class _MobileDashboardState extends State<MobileDashboard> with WidgetsBindingOb
       ),
     );
   }
-
-  Widget _buildPersonalExpenseTile(PersonalExpenseData expense, Color primaryColor) {
-    final formattedDate = _formatExpenseDate(expense.createdAt);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.account_balance_wallet, color: Colors.orange),
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  expense.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                Text(
-                  "Personal expense",
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                "Rs. ${expense.amount.toStringAsFixed(2)}",
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: Colors.orange,
-                ),
-              ),
-              Text(
-                formattedDate,
-                style: TextStyle(color: Colors.grey[400], fontSize: 12),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatExpenseDate(DateTime? date) {
-    if (date == null) return 'Unknown';
-    
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays == 0) {
-      return 'Today';
-    } else if (difference.inDays == 1) {
-      return 'Yesterday';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
-    } else {
-      // Format as "Oct 24"
-      const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-      ];
-      return '${months[date.month - 1]} ${date.day}';
-    }
-  }
-
 }
