@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../models/payment_confirmation_models.dart';
 
+/// Premium, minimalist card for displaying payment confirmations.
 class PaymentConfirmationCard extends StatelessWidget {
   final PaymentConfirmation payment;
   final String currentUserId;
@@ -22,12 +23,12 @@ class PaymentConfirmationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final statusColor = _getStatusColor();
+    final typeColor = isPayer ? Colors.redAccent : const Color(0xFF10B981);
+
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFF0F0F3))),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
@@ -36,176 +37,38 @@ class PaymentConfirmationCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Row
               Row(
                 children: [
-                  _buildStatusIcon(),
+                  Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)), child: Icon(_getStatusIcon(), color: statusColor, size: 20)),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _getTitle(),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _getSubtitle(),
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _buildStatusBadge(),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(isPayer ? 'Sent to ${payment.toUserName}' : 'From ${payment.fromUserName}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF1A1A2E))),
+                    const SizedBox(height: 2),
+                    Text(_getSubtitle(), style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w500)),
+                  ])),
+                  _buildStatusBadge(statusColor),
                 ],
               ),
-              
+              const SizedBox(height: 16),
+              Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12), decoration: BoxDecoration(color: const Color(0xFFF7F7FB), borderRadius: BorderRadius.circular(12)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text(payment.paymentTypeText, style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600, fontSize: 12)),
+                Text('Rs. ${payment.amount.toStringAsFixed(0)}', style: TextStyle(color: typeColor, fontWeight: FontWeight.w900, fontSize: 16)),
+              ])),
+              if (payment.notes?.isNotEmpty == true) ...[const SizedBox(height: 12), Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: const Color(0xFFFAFBFD), borderRadius: BorderRadius.circular(8)), child: Row(children: [Icon(Icons.notes_rounded, size: 14, color: Colors.grey.shade400), const SizedBox(width: 8), Expanded(child: Text(payment.notes!, style: TextStyle(color: Colors.grey.shade700, fontSize: 12, height: 1.4)))]))],
               const SizedBox(height: 12),
-              
-              // Amount Row
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _getAmountBackgroundColor(),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      payment.paymentTypeText,
-                      style: TextStyle(
-                        color: _getAmountColor(),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      'Rs. ${payment.amount.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        color: _getAmountColor(),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Notes (if any)
-              if (payment.notes != null && payment.notes!.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.note, size: 16, color: Colors.grey[600]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          payment.notes!,
-                          style: TextStyle(
-                            color: Colors.grey[700],
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              
-              // Date
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
-                  const SizedBox(width: 6),
-                  Text(
-                    _formatDate(payment.paymentDate),
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
-                  ),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text(_formatDate(payment.paymentDate), style: TextStyle(color: Colors.grey.shade400, fontSize: 10, fontWeight: FontWeight.w500)),
+                if (payment.isPending && isRecipient) ...[
+                  Row(children: [
+                    _ActionLink(label: 'Reject', color: Colors.redAccent, onTap: onReject),
+                    const SizedBox(width: 16),
+                    _ActionLink(label: 'Confirm', color: const Color(0xFF10B981), onTap: onConfirm),
+                  ]),
                 ],
-              ),
-              
-              // Action Buttons (only for pending payments where user is recipient)
-              if (payment.isPending && isRecipient) ...[
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onReject,
-                        icon: const Icon(Icons.close, size: 18),
-                        label: const Text('Reject'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: onConfirm,
-                        icon: const Icon(Icons.check, size: 18),
-                        label: const Text('Confirm'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              
-              // Rejection reason (if rejected)
+              ]),
               if (payment.isRejected && payment.rejectionReason != null) ...[
                 const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 16, color: Colors.red[700]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Reason: ${payment.rejectionReason}',
-                          style: TextStyle(
-                            color: Colors.red[700],
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.withValues(alpha: 0.1))), child: Text('Reason: ${payment.rejectionReason}', style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w600))),
               ],
             ],
           ),
@@ -214,110 +77,48 @@ class PaymentConfirmationCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusIcon() {
-    IconData icon;
-    Color color;
-    
-    if (payment.isPending) {
-      icon = Icons.schedule;
-      color = Colors.orange;
-    } else if (payment.isConfirmed) {
-      icon = Icons.check_circle;
-      color = Colors.green;
-    } else {
-      icon = Icons.cancel;
-      color = Colors.red;
-    }
-    
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, color: color, size: 24),
-    );
+  Widget _buildStatusBadge(Color color) {
+    return Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)), child: Text(payment.statusText.toUpperCase(), style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 9, letterSpacing: 0.5)));
   }
 
-  Widget _buildStatusBadge() {
-    Color color;
-    
-    if (payment.isPending) {
-      color = Colors.orange;
-    } else if (payment.isConfirmed) {
-      color = Colors.green;
-    } else {
-      color = Colors.red;
-    }
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        payment.statusText,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
-      ),
-    );
+  Color _getStatusColor() {
+    if (payment.isPending) return Colors.orange;
+    if (payment.isConfirmed) return const Color(0xFF10B981);
+    return Colors.redAccent;
   }
 
-  String _getTitle() {
-    if (isPayer) {
-      return 'Payment to ${payment.toUserName}';
-    } else {
-      return 'Payment from ${payment.fromUserName}';
-    }
+  IconData _getStatusIcon() {
+    if (payment.isPending) return Icons.schedule_rounded;
+    if (payment.isConfirmed) return Icons.check_circle_rounded;
+    return Icons.cancel_rounded;
   }
 
   String _getSubtitle() {
-    if (payment.isPending) {
-      if (isRecipient) {
-        return 'Confirm if you received this payment';
-      } else {
-        return 'Waiting for confirmation';
-      }
-    } else if (payment.isConfirmed) {
-      return 'Confirmed on ${_formatDate(payment.confirmedAt!)}';
-    } else {
-      return 'Payment rejected';
-    }
-  }
-
-  Color _getAmountColor() {
-    if (isPayer) {
-      return Colors.red[700]!;
-    } else {
-      return Colors.green[700]!;
-    }
-  }
-
-  Color _getAmountBackgroundColor() {
-    if (isPayer) {
-      return Colors.red[50]!;
-    } else {
-      return Colors.green[50]!;
-    }
+    if (payment.isPending) return isRecipient ? 'Please verify receipt' : 'Waiting for verification';
+    if (payment.isConfirmed) return 'Verified on ${_formatDate(payment.confirmedAt!)}';
+    return 'Verification rejected';
   }
 
   String _formatDate(DateTime date) {
     final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays == 0) return 'Today';
-    if (difference.inDays == 1) return 'Yesterday';
-    if (difference.inDays < 7) return '${difference.inDays} days ago';
-    
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    if (now.day == date.day && now.month == date.month && now.year == date.year) return 'Today';
+    return '${date.day} ${_getMonth(date.month)}';
+  }
+
+  String _getMonth(int m) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[m - 1];
+  }
+}
+
+class _ActionLink extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+  const _ActionLink({required this.label, required this.color, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(onTap: onTap, child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.2)));
   }
 }
