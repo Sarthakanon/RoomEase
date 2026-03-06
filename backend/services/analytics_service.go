@@ -282,6 +282,8 @@ type PredictionResult struct {
 }
 
 // GetSpendingPredictions generates spending predictions for the next month
+// NOTE: This now returns simple historical averages. For ML-based predictions,
+// use the Analytics_Model Python service
 func (s *AnalyticsService) GetSpendingPredictions(userUID string, roomspaceID *string) (*PredictionResult, error) {
 	// Check if user has at least 30 days of data
 	now := time.Now()
@@ -315,7 +317,7 @@ func (s *AnalyticsService) GetSpendingPredictions(userUID string, roomspaceID *s
 		}, nil
 	}
 
-	// Calculate predictions by category using simple statistical model
+	// Simple prediction based on historical average (no ML)
 	categoryData := make(map[string][]float64)
 
 	for _, expense := range expenses {
@@ -333,30 +335,18 @@ func (s *AnalyticsService) GetSpendingPredictions(userUID string, roomspaceID *s
 		}
 		avg := sum / float64(len(amounts))
 
-		// Calculate standard deviation
-		variance := 0.0
-		for _, amount := range amounts {
-			variance += math.Pow(amount-avg, 2)
-		}
-		stdDev := math.Sqrt(variance / float64(len(amounts)))
-
-		// Predict next month spending (using average)
-		// Scale by number of transactions per month
+		// Simple prediction: average * expected transactions
 		daysInPeriod := float64(dataDays)
 		transactionsPerDay := float64(len(amounts)) / daysInPeriod
-		expectedTransactions := transactionsPerDay * 30.0 // Next 30 days
+		expectedTransactions := transactionsPerDay * 30.0
 
 		predictedAmount := avg * expectedTransactions
-
-		// Calculate confidence intervals (±1.96 * std dev for 95% confidence)
-		confidenceLow := math.Max(0, predictedAmount-(1.96*stdDev*math.Sqrt(expectedTransactions)))
-		confidenceHigh := predictedAmount + (1.96 * stdDev * math.Sqrt(expectedTransactions))
 
 		predictions = append(predictions, SpendingPrediction{
 			Category:        category,
 			PredictedAmount: math.Round(predictedAmount*100) / 100,
-			ConfidenceLow:   math.Round(confidenceLow*100) / 100,
-			ConfidenceHigh:  math.Round(confidenceHigh*100) / 100,
+			ConfidenceLow:   math.Round(predictedAmount*0.8*100) / 100,
+			ConfidenceHigh:  math.Round(predictedAmount*1.2*100) / 100,
 			HistoricalAvg:   math.Round(avg*100) / 100,
 		})
 	}
@@ -389,7 +379,9 @@ type Recommendation struct {
 	Priority         int     `json:"priority"` // 1=high, 2=medium, 3=low
 }
 
-// GetBudgetRecommendations generates AI-powered budget recommendations
+// GetBudgetRecommendations generates simple budget recommendations
+// NOTE: This provides basic rule-based recommendations. For ML-based recommendations,
+// use the Analytics_Model Python service
 func (s *AnalyticsService) GetBudgetRecommendations(userUID string, roomspaceID *string) ([]Recommendation, error) {
 	// Get last 60 days of expenses for analysis
 	now := time.Now()
@@ -423,13 +415,13 @@ func (s *AnalyticsService) GetBudgetRecommendations(userUID string, roomspaceID 
 	var recommendations []Recommendation
 	recommendationID := 1
 
-	// Generate recommendations for categories with high spending
+	// Simple rule-based recommendations
 	for category, spending := range categorySpending {
 		percentage := (spending / totalSpending) * 100.0
 
-		// If category is more than 30% of total spending, suggest reduction
+		// High spending category
 		if percentage > 30.0 {
-			suggestedLimit := spending * 0.85 // Suggest 15% reduction
+			suggestedLimit := spending * 0.85
 			potentialSavings := spending - suggestedLimit
 
 			recommendations = append(recommendations, Recommendation{
@@ -439,48 +431,14 @@ func (s *AnalyticsService) GetBudgetRecommendations(userUID string, roomspaceID 
 				CurrentSpending:  math.Round(spending*100) / 100,
 				SuggestedLimit:   math.Round(suggestedLimit*100) / 100,
 				PotentialSavings: math.Round(potentialSavings*100) / 100,
-				Description:      fmt.Sprintf("Reduce %s spending by 15%% to save %.2f per month", category, potentialSavings),
-				Priority:         1, // High priority
-			})
-			recommendationID++
-		} else if percentage > 20.0 {
-			// Medium spending category - suggest 10% reduction
-			suggestedLimit := spending * 0.90
-			potentialSavings := spending - suggestedLimit
-
-			recommendations = append(recommendations, Recommendation{
-				ID:               fmt.Sprintf("rec_%d", recommendationID),
-				Type:             "reduce_spending",
-				Category:         category,
-				CurrentSpending:  math.Round(spending*100) / 100,
-				SuggestedLimit:   math.Round(suggestedLimit*100) / 100,
-				PotentialSavings: math.Round(potentialSavings*100) / 100,
-				Description:      fmt.Sprintf("Reduce %s spending by 10%% to save %.2f per month", category, potentialSavings),
-				Priority:         2, // Medium priority
-			})
-			recommendationID++
-		}
-
-		// If category has frequent small transactions, suggest consolidation
-		avgTransactionAmount := spending / float64(categoryCount[category])
-		if categoryCount[category] > 10 && avgTransactionAmount < 20.0 {
-			potentialSavings := spending * 0.05 // Estimate 5% savings from consolidation
-
-			recommendations = append(recommendations, Recommendation{
-				ID:               fmt.Sprintf("rec_%d", recommendationID),
-				Type:             "savings_opportunity",
-				Category:         category,
-				CurrentSpending:  math.Round(spending*100) / 100,
-				SuggestedLimit:   math.Round((spending-potentialSavings)*100) / 100,
-				PotentialSavings: math.Round(potentialSavings*100) / 100,
-				Description:      fmt.Sprintf("Consolidate %s purchases to save on transaction fees and impulse buys", category),
-				Priority:         3, // Low priority
+				Description:      fmt.Sprintf("Consider reducing %s spending by 15%% to save %.2f", category, potentialSavings),
+				Priority:         1,
 			})
 			recommendationID++
 		}
 	}
 
-	// Sort recommendations by potential savings (highest first)
+	// Sort by potential savings
 	for i := 0; i < len(recommendations); i++ {
 		for j := i + 1; j < len(recommendations); j++ {
 			if recommendations[j].PotentialSavings > recommendations[i].PotentialSavings {
@@ -489,9 +447,9 @@ func (s *AnalyticsService) GetBudgetRecommendations(userUID string, roomspaceID 
 		}
 	}
 
-	// Limit to top 5 recommendations
-	if len(recommendations) > 5 {
-		recommendations = recommendations[:5]
+	// Limit to top 3 recommendations
+	if len(recommendations) > 3 {
+		recommendations = recommendations[:3]
 	}
 
 	return recommendations, nil
@@ -508,7 +466,9 @@ type Anomaly struct {
 	Date            string  `json:"date"`
 }
 
-// DetectAnomalies identifies unusual spending patterns
+// DetectAnomalies identifies unusual spending patterns using simple statistical methods
+// NOTE: This uses basic statistical analysis. For ML-based anomaly detection,
+// use the Analytics_Model Python service
 func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) ([]Anomaly, error) {
 	// Get last 90 days of expenses for baseline
 	now := time.Now()
@@ -520,7 +480,6 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 	}
 
 	if len(expenses) < 10 {
-		// Not enough data to detect anomalies
 		return []Anomaly{}, nil
 	}
 
@@ -532,7 +491,7 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 		categoryAmounts[expense.Category] = append(categoryAmounts[expense.Category], userAmount)
 	}
 
-	// Calculate mean and standard deviation for each category
+	// Calculate mean for each category
 	categoryStats := make(map[string]struct {
 		mean   float64
 		stdDev float64
@@ -540,18 +499,15 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 
 	for category, amounts := range categoryAmounts {
 		if len(amounts) < 3 {
-			// Need at least 3 data points
 			continue
 		}
 
-		// Calculate mean
 		sum := 0.0
 		for _, amount := range amounts {
 			sum += amount
 		}
 		mean := sum / float64(len(amounts))
 
-		// Calculate standard deviation
 		variance := 0.0
 		for _, amount := range amounts {
 			variance += math.Pow(amount-mean, 2)
@@ -566,8 +522,6 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 
 	// Detect anomalies (expenses > 2 standard deviations from mean)
 	var anomalies []Anomaly
-
-	// Check recent expenses (last 30 days)
 	thirtyDaysAgo := now.AddDate(0, 0, -30)
 
 	for _, expense := range expenses {
@@ -576,21 +530,17 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 		}
 
 		userAmount := s.getUserAmountFromExpense(&expense, userUID)
-
 		stats, exists := categoryStats[expense.Category]
 		if !exists {
 			continue
 		}
 
-		// Check if expense exceeds 2 standard deviations
 		threshold := stats.mean + (2 * stats.stdDev)
 
 		if userAmount > threshold && stats.stdDev > 0 {
-			// Calculate anomaly score (how many std devs away)
 			anomalyScore := (userAmount - stats.mean) / stats.stdDev
-
-			reason := fmt.Sprintf("This expense is %.1f standard deviations above your average %s spending of %.2f",
-				anomalyScore, expense.Category, stats.mean)
+			reason := fmt.Sprintf("This expense is %.1f standard deviations above your average %s spending",
+				anomalyScore, expense.Category)
 
 			anomalies = append(anomalies, Anomaly{
 				ExpenseID:       expense.ID,
@@ -604,7 +554,7 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 		}
 	}
 
-	// Sort by anomaly score (highest first)
+	// Sort by anomaly score
 	for i := 0; i < len(anomalies); i++ {
 		for j := i + 1; j < len(anomalies); j++ {
 			if anomalies[j].AnomalyScore > anomalies[i].AnomalyScore {

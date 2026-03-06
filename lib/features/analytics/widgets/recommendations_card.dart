@@ -2,20 +2,11 @@ import 'package:flutter/material.dart';
 import '../../../models/analytics_models.dart';
 import '../../../services/analytics_service.dart';
 import 'skeleton_loader.dart';
+import 'analytics_shared.dart';
 
-/// AI-powered recommendations card widget
-/// 
-/// Displays budget recommendations with:
-/// - AI-powered insights label
-/// - Savings potential
-/// - Feedback buttons (helpful/not helpful)
 class RecommendationsCard extends StatefulWidget {
   final String? roomspaceId;
-  
-  const RecommendationsCard({
-    super.key,
-    this.roomspaceId,
-  });
+  const RecommendationsCard({super.key, this.roomspaceId});
 
   @override
   State<RecommendationsCard> createState() => _RecommendationsCardState();
@@ -23,512 +14,190 @@ class RecommendationsCard extends StatefulWidget {
 
 class _RecommendationsCardState extends State<RecommendationsCard> {
   final AnalyticsService _analyticsService = AnalyticsService();
-  
   bool _isLoading = true;
   String? _error;
   RecommendationsResponse? _recommendations;
-  final Map<String, String> _feedbackGiven = {}; // recommendationId -> feedbackType
-  
+
   @override
   void initState() {
     super.initState();
     _loadRecommendations();
   }
-  
+
   Future<void> _loadRecommendations() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    
+    if (!mounted) return;
+    setState(() => _isLoading = true);
     try {
-      final recommendations = await _analyticsService.getRecommendations(
-        roomspaceId: widget.roomspaceId,
-      );
-      
-      setState(() {
-        _recommendations = recommendations;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-  
-  Future<void> _submitFeedback(String recommendationId, String feedbackType) async {
-    try {
-      await _analyticsService.submitFeedback(
-        recommendationId: recommendationId,
-        feedbackType: feedbackType,
-      );
-      
-      setState(() {
-        _feedbackGiven[recommendationId] = feedbackType;
-      });
-      
+      final recs = await _analyticsService.getRecommendations(roomspaceId: widget.roomspaceId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Thank you for your feedback!'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        setState(() {
+          _recommendations = recs;
+          _isLoading = false;
+        });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to submit feedback'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
       }
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Header with AI badge
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.purple.shade400,
-                        Colors.blue.shade400,
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.auto_awesome_rounded,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'AI-Powered',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Recommendations',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
+            const Text('Smart Suggestions',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF1A1A2E), letterSpacing: -0.5)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(color: Colors.indigo.shade50.withOpacity(0.5), borderRadius: BorderRadius.circular(12)),
+              child: const Text('AI POWERED',
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.indigo, letterSpacing: 0.8)),
             ),
-            const SizedBox(height: 16),
-            
-            // Content
-            _buildContent(),
           ],
         ),
-      ),
+        const SizedBox(height: 16),
+        _buildContent(),
+      ],
     );
   }
-  
+
   Widget _buildContent() {
-    if (_isLoading) {
-      return Column(
-        children: [
-          const ListItemSkeletonLoader(),
-          const ListItemSkeletonLoader(),
-        ],
-      );
-    }
-    
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            children: [
-              Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: Colors.grey[400],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Failed to load recommendations',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Check your connection and try again',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[500],
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _loadRecommendations,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Retry'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                ),
-              ),
-            ],
-          ),
+    if (_isLoading) return const ListItemSkeletonLoader();
+    if (_error != null || _recommendations == null || _recommendations!.recommendations.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFFEEEEF2)),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.auto_awesome_outlined, color: Colors.indigo.withOpacity(0.1), size: 48),
+            const SizedBox(height: 16),
+            const Text('No new insights', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E))),
+            const SizedBox(height: 4),
+            Text('We\'ll alert you when AI finds saving opportunities.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4)),
+          ],
         ),
       );
     }
-    
-    if (_recommendations == null || _recommendations!.recommendations.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            children: [
-              Icon(
-                Icons.lightbulb_outline_rounded,
-                size: 48,
-                color: Colors.grey[400],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'No recommendations available',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Keep tracking expenses to get insights',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[500],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    
+
     return Column(
-      children: _recommendations!.recommendations.map((recommendation) {
-        return _buildRecommendationItem(recommendation);
-      }).toList(),
+      children: _recommendations!.recommendations.map(_buildItem).toList(),
     );
   }
-  
-  Widget _buildRecommendationItem(Recommendation recommendation) {
-    final hasFeedback = _feedbackGiven.containsKey(recommendation.id);
-    final feedbackType = _feedbackGiven[recommendation.id];
-    
+
+  Widget _buildItem(Recommendation rec) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _getPriorityColor(recommendation.priority).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _getPriorityColor(recommendation.priority).withValues(alpha: 0.3),
-        ),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Priority badge and type
           Row(
+            children: [
+              _buildPriorityBadge(rec.priority),
+              const Expanded(child: SizedBox()),
+              Text('Save Rs. ${rec.potentialSavings.toInt()}',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.indigo)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _getPriorityColor(recommendation.priority),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _getPriorityLabel(recommendation.priority),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: const Color(0xFFEFF1FF), borderRadius: BorderRadius.circular(14)),
+                child: Icon(_getCategoryIcon(rec.category), color: Colors.indigo, size: 22),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 16),
               Expanded(
-                child: Text(
-                  _getTypeLabel(recommendation.type),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          // Category
-          Row(
-            children: [
-              Icon(
-                _getCategoryIcon(recommendation.category),
-                size: 20,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _getCategoryDisplayName(recommendation.category),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          
-          // Description
-          Text(
-            recommendation.description,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 12),
-          
-          // Savings potential
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.savings_rounded,
-                  color: Colors.green,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Potential Savings: ',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[700],
-                  ),
-                ),
-                Text(
-                  'Rs. ${recommendation.potentialSavings.toStringAsFixed(2)}/mr',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.green,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          
-          // Spending info
-          Row(
-            children: [
-              Expanded(
-                child: _buildInfoChip(
-                  'Current',
-                  'Rs. ${recommendation.currentSpending.toStringAsFixed(0)}',
-                  Colors.orange,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildInfoChip(
-                  'Suggested',
-                  'Rs. ${recommendation.suggestedLimit.toStringAsFixed(0)}',
-                  Colors.blue,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          // Feedback buttons
-          if (!hasFeedback)
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Was this helpful?',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(rec.description,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E), height: 1.5)),
+                    const SizedBox(height: 14),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildSpendingTag('Now', 'Rs. ${rec.currentSpending.toInt()}', Colors.red.shade400),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.keyboard_double_arrow_right_rounded, size: 16, color: Colors.grey),
+                          const SizedBox(width: 8),
+                          _buildSpendingTag('Target', 'Rs. ${rec.suggestedLimit.toInt()}', Colors.green.shade600),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-                IconButton(
-                  onPressed: () => _submitFeedback(recommendation.id, 'helpful'),
-                  icon: const Icon(Icons.thumb_up_outlined, size: 18),
-                  color: Colors.green,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Helpful',
-                ),
-                const SizedBox(width: 12),
-                IconButton(
-                  onPressed: () => _submitFeedback(recommendation.id, 'not_helpful'),
-                  icon: const Icon(Icons.thumb_down_outlined, size: 18),
-                  color: Colors.red,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Not helpful',
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Icon(
-                  feedbackType == 'helpful' 
-                      ? Icons.thumb_up_rounded 
-                      : Icons.thumb_down_rounded,
-                  size: 16,
-                  color: feedbackType == 'helpful' ? Colors.green : Colors.red,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Thank you for your feedback!',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
-  
-  Widget _buildInfoChip(String label, String value, Color color) {
+
+  Widget _buildPriorityBadge(int priority) {
+    Color color = Colors.blueGrey;
+    String label = 'LOW';
+    if (priority == 1) {
+      color = const Color(0xFFEF4444);
+      label = 'CRITICAL';
+    } else if (priority == 2) {
+      color = const Color(0xFFF59E0B);
+      label = 'MODERATE';
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+      child: Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: color, letterSpacing: 0.5)),
+    );
+  }
+
+  Widget _buildSpendingTag(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
+          Text('$label: ', style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+          Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: color)),
         ],
       ),
     );
   }
-  
-  Color _getPriorityColor(int priority) {
-    switch (priority) {
-      case 1:
-        return Colors.red;
-      case 2:
-        return Colors.orange;
-      case 3:
-        return Colors.blue;
-      default:
-        return Colors.grey;
-    }
-  }
-  
-  String _getPriorityLabel(int priority) {
-    switch (priority) {
-      case 1:
-        return 'HIGH';
-      case 2:
-        return 'MEDIUM';
-      case 3:
-        return 'LOW';
-      default:
-        return 'NORMAL';
-    }
-  }
-  
-  String _getTypeLabel(String type) {
-    switch (type) {
-      case 'budget_limit':
-        return 'Budget Limit';
-      case 'reduce_spending':
-        return 'Reduce Spending';
-      case 'savings_opportunity':
-        return 'Savings Opportunity';
-      default:
-        return type;
-    }
-  }
-  
-  String _getCategoryDisplayName(String category) {
-    if (category.isEmpty) return 'General';
-    
-    return category
-        .split('_')
-        .map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1))
-        .join(' ');
-  }
-  
-  IconData _getCategoryIcon(String category) {
-    final categoryLower = category.toLowerCase();
-    
-    if (categoryLower.contains('food') || categoryLower.contains('grocery')) {
-      return Icons.restaurant_rounded;
-    } else if (categoryLower.contains('transport') || categoryLower.contains('travel')) {
-      return Icons.directions_car_rounded;
-    } else if (categoryLower.contains('utility') || categoryLower.contains('bill')) {
-      return Icons.receipt_long_rounded;
-    } else if (categoryLower.contains('entertainment')) {
-      return Icons.movie_rounded;
-    } else if (categoryLower.contains('health') || categoryLower.contains('medical')) {
-      return Icons.local_hospital_rounded;
-    } else if (categoryLower.contains('shopping')) {
-      return Icons.shopping_bag_rounded;
-    } else if (categoryLower.contains('education')) {
-      return Icons.school_rounded;
-    } else {
-      return Icons.category_rounded;
-    }
+
+  IconData _getCategoryIcon(String cat) {
+    final c = cat.toLowerCase();
+    if (c.contains('food')) return Icons.restaurant;
+    if (c.contains('bill')) return Icons.receipt_long_rounded;
+    if (c.contains('travel')) return Icons.commute_rounded;
+    return Icons.lightbulb_outline_rounded;
   }
 }

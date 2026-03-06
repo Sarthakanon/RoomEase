@@ -2,20 +2,11 @@ import 'package:flutter/material.dart';
 import '../../../models/analytics_models.dart';
 import '../../../services/analytics_service.dart';
 import 'skeleton_loader.dart';
+import 'analytics_shared.dart';
 
-/// Spending predictions card widget
-/// 
-/// Displays predicted spending per category with:
-/// - Confidence intervals
-/// - Historical comparison
-/// - Insufficient data state handling
 class PredictionsCard extends StatefulWidget {
   final String? roomspaceId;
-  
-  const PredictionsCard({
-    super.key,
-    this.roomspaceId,
-  });
+  const PredictionsCard({super.key, this.roomspaceId});
 
   @override
   State<PredictionsCard> createState() => _PredictionsCardState();
@@ -23,516 +14,153 @@ class PredictionsCard extends StatefulWidget {
 
 class _PredictionsCardState extends State<PredictionsCard> {
   final AnalyticsService _analyticsService = AnalyticsService();
-  
   bool _isLoading = true;
   String? _error;
   PredictionResult? _predictions;
-  
+
   @override
   void initState() {
     super.initState();
     _loadPredictions();
   }
-  
+
   Future<void> _loadPredictions() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    
+    if (!mounted) return;
+    setState(() => _isLoading = true);
     try {
-      final predictions = await _analyticsService.getPredictions(
-        roomspaceId: widget.roomspaceId,
-      );
-      
-      setState(() {
-        _predictions = predictions;
-        _isLoading = false;
-      });
+      final res = await _analyticsService.getPredictions(roomspaceId: widget.roomspaceId);
+      if (mounted) {
+        setState(() {
+          _predictions = res;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Icon(
-                  Icons.insights_rounded,
-                  color: Theme.of(context).colorScheme.primary,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Next Month Predictions',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Content
-            _buildContent(),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildContent() {
-    if (_isLoading) {
-      return Column(
-        children: [
-          const ListItemSkeletonLoader(),
-          const ListItemSkeletonLoader(),
-        ],
-      );
-    }
-    
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            children: [
-              Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: Colors.grey[400],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Failed to load predictions',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Check your connection and try again',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[500],
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _loadPredictions,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Retry'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    
-    if (_predictions == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Text(
-            'No predictions available',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey[600],
-            ),
-          ),
-        ),
-      );
-    }
-    
-    // Handle insufficient data case
-    if (_predictions!.insufficientData) {
-      return _buildInsufficientDataState();
-    }
-    
-    if (_predictions!.predictions.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            children: [
-              Icon(
-                Icons.insights_outlined,
-                size: 48,
-                color: Colors.grey[400],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'No predictions available',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Info banner
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.info_outline_rounded,
-                color: Colors.blue,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Based on ${_predictions!.dataDays} days of spending history',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.blue[700],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        const Text('Future Projections',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF1A1A2E), letterSpacing: -0.5)),
         const SizedBox(height: 16),
-        
-        // Predictions list
-        ..._predictions!.predictions.map((prediction) {
-          return _buildPredictionItem(prediction);
-        }),
+        _buildContent(),
       ],
     );
   }
-  
-  Widget _buildInsufficientDataState() {
-    final daysNeeded = 30 - _predictions!.dataDays;
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.orange.withValues(alpha: 0.3),
+
+  Widget _buildContent() {
+    if (_isLoading) return const ChartSkeletonLoader();
+    if (_error != null || _predictions == null) return const SizedBox();
+
+    if (_predictions!.insufficientData) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFFEEEEF2)),
         ),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.hourglass_empty_rounded,
-            size: 48,
-            color: Colors.orange,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Not Enough Data',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Colors.orange[700],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _predictions!.message ?? 
-            'We need at least 30 days of expense data to generate accurate predictions.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey[700],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.orange,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '${_predictions!.dataDays} / 30 days',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+        child: Column(
+          children: [
+            const Icon(Icons.auto_graph_rounded, color: Colors.indigo, size: 36),
+            const SizedBox(height: 12),
+            const Text('Evolving Insights',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
+            const SizedBox(height: 8),
+            Text(_predictions!.message ?? 'AI is learning your spending habits. Keep tracking for precise forecasting.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12, height: 1.5)),
+            const SizedBox(height: 20),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: (_predictions!.dataDays / 30).clamp(0.0, 1.0),
+                backgroundColor: Colors.indigo.withOpacity(0.05),
+                color: Colors.indigo,
+                minHeight: 8,
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$daysNeeded more day${daysNeeded != 1 ? 's' : ''} needed',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
+            const SizedBox(height: 8),
+            Text('${_predictions!.dataDays}/30 days collected', 
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.indigo.withOpacity(0.5))),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _predictions!.predictions.length,
+      itemBuilder: (context, index) => _buildPredictionItem(_predictions!.predictions[index]),
     );
   }
-  
-  Widget _buildPredictionItem(SpendingPrediction prediction) {
-    final changePercent = prediction.historicalAvg > 0
-        ? ((prediction.predictedAmount - prediction.historicalAvg) / 
-           prediction.historicalAvg * 100)
-        : 0.0;
-    
-    final isIncrease = changePercent > 0;
-    final changeColor = isIncrease ? Colors.red : Colors.green;
+
+  Widget _buildPredictionItem(SpendingPrediction pred) {
+    final change = ((pred.predictedAmount - pred.historicalAvg) / (pred.historicalAvg > 0 ? pred.historicalAvg : 1)) * 100;
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          // Category header
-          Row(
-            children: [
-              Icon(
-                _getCategoryIcon(prediction.category),
-                color: Theme.of(context).colorScheme.primary,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _getCategoryDisplayName(prediction.category),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              if (changePercent.abs() > 0.1)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: changeColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isIncrease 
-                            ? Icons.trending_up_rounded 
-                            : Icons.trending_down_rounded,
-                        size: 14,
-                        color: changeColor,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${changePercent.abs().toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: changeColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          // Predicted amount
-          Row(
-            children: [
-              Text(
-                'Predicted:',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Rs. ${prediction.predictedAmount.toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          
-          // Confidence interval
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-            ),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: const Color(0xFFF8F9FF), borderRadius: BorderRadius.circular(12)),
+            child: Icon(_getIcon(pred.category), color: Colors.indigo, size: 20),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Confidence Range',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Low',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                          Text(
-                            'Rs. ${prediction.confidenceLow.toStringAsFixed(0)}',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      width: 1,
-                      height: 30,
-                      color: Colors.grey[300],
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Expected',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                          Text(
-                            'Rs. ${prediction.predictedAmount.toStringAsFixed(0)}',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      width: 1,
-                      height: 30,
-                      color: Colors.grey[300],
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            'High',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                          Text(
-                            'Rs. ${prediction.confidenceHigh.toStringAsFixed(0)}',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                Text(pred.category.toUpperCase().replaceAll('_', ' '), 
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.grey.shade400, letterSpacing: 1.2)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Rs. ${pred.predictedAmount.toInt()}', 
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          
-          // Historical comparison
-          Row(
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'Historical Avg:',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Rs. ${prediction.historicalAvg.toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              Text(change >= 0 ? '+${change.toStringAsFixed(1)}%' : '${change.toStringAsFixed(1)}%',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: change >= 0 ? Colors.redAccent : Colors.greenAccent.shade700)),
+              const Text('vs Last Month', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: Colors.grey)),
             ],
           ),
         ],
       ),
     );
   }
-  
-  String _getCategoryDisplayName(String category) {
-    if (category.isEmpty) return 'General';
-    
-    return category
-        .split('_')
-        .map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1))
-        .join(' ');
-  }
-  
-  IconData _getCategoryIcon(String category) {
-    final categoryLower = category.toLowerCase();
-    
-    if (categoryLower.contains('food') || categoryLower.contains('grocery')) {
-      return Icons.restaurant_rounded;
-    } else if (categoryLower.contains('transport') || categoryLower.contains('travel')) {
-      return Icons.directions_car_rounded;
-    } else if (categoryLower.contains('utility') || categoryLower.contains('bill')) {
-      return Icons.receipt_long_rounded;
-    } else if (categoryLower.contains('entertainment')) {
-      return Icons.movie_rounded;
-    } else if (categoryLower.contains('health') || categoryLower.contains('medical')) {
-      return Icons.local_hospital_rounded;
-    } else if (categoryLower.contains('shopping')) {
-      return Icons.shopping_bag_rounded;
-    } else if (categoryLower.contains('education')) {
-      return Icons.school_rounded;
-    } else {
-      return Icons.category_rounded;
-    }
+
+  IconData _getIcon(String cat) {
+    final c = cat.toLowerCase();
+    if (c.contains('food')) return Icons.restaurant;
+    if (c.contains('bill')) return Icons.receipt_long;
+    if (c.contains('travel')) return Icons.commute;
+    return Icons.bubble_chart_rounded;
   }
 }
