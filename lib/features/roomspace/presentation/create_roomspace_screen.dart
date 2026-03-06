@@ -3,54 +3,28 @@ import 'package:provider/provider.dart';
 import '../../../services/roomspace_service.dart';
 import '../../../providers/roomspace_provider.dart';
 
-// ==========================================
-// 1. LOGIC SECTION (The "Controller")
-// ==========================================
 class CreateRoomController {
   final _roomspaceService = RoomspaceService();
 
-  // Returns { success: bool, message: String, inviteCode: String? }
   Future<Map<String, dynamic>> createRoom({
     required String name,
     required String address,
     required String description,
   }) async {
     try {
-      // Step 1: Prepare the data
-      // We trim spaces to ensure clean data
-      final cleanName = name.trim();
-      final cleanDesc = description.trim();
-      
-      // Note: Address isn't used in the API call yet based on your previous code,
-      // but we collect it here for future use.
-
-      // Step 2: Call the Service
       final response = await _roomspaceService.createRoomspace(
-        name: cleanName,
-        description: cleanDesc.isEmpty ? null : cleanDesc,
+        name: name.trim(),
+        description: description.trim().isEmpty ? null : description.trim(),
       );
-
-      // Step 3: Extract the Invite Code safely
       final inviteCode = response['data']?['invite_code']?.toString() ?? 'N/A';
-
-      return {
-        'success': true,
-        'message': 'Room created successfully!',
-        'inviteCode': inviteCode,
-      };
-
+      return {'success': true, 'message': 'Room created successfully!', 'inviteCode': inviteCode};
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Error: ${e.toString()}',
-      };
+      return {'success': false, 'message': 'Error: ${e.toString()}'};
     }
   }
 }
 
-// ==========================================
-// 2. UI SECTION (The "View")
-// ==========================================
+/// Create Roomspace screen — form for establishing a new collaborative space.
 class CreateRoomspaceScreen extends StatefulWidget {
   const CreateRoomspaceScreen({super.key});
 
@@ -59,201 +33,100 @@ class CreateRoomspaceScreen extends StatefulWidget {
 }
 
 class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
-  // --- STATE VARIABLES ---
   final _formKey = GlobalKey<FormState>();
   final _roomNameController = TextEditingController();
   final _addressController = TextEditingController();
   final _descriptionController = TextEditingController();
-  
-  // Instance of our Logic Class
   final _controller = CreateRoomController();
-  
   bool _isLoading = false;
   
   @override
   void initState() {
     super.initState();
-    // Check limit on screen load
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkRoomspaceLimit();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkLimit());
   }
   
-  // Check if user has reached the roomspace limit
-  void _checkRoomspaceLimit() {
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-    
-    if (!roomspaceProvider.canJoinMore) {
-      // Show error message if at limit
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Maximum roomspace limit reached (${roomspaceProvider.roomspaceCount}/5)'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 4),
-        ),
-      );
+  void _checkLimit() {
+    final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+    if (!provider.canJoinMore) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Limit reached (5/5)'), backgroundColor: Colors.orange));
     }
   }
 
-  // --- BUTTON ACTION ---
-  Future<void> _handleCreateButton() async {
-    // Check limit before attempting to create
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-    
-    if (!roomspaceProvider.canJoinMore) {
-      _showErrorSnackBar('Maximum roomspace limit reached. You can only create up to 5 roomspaces.');
-      return;
-    }
-    // 1. Check if form is valid (no empty fields)
+  Future<void> _handleCreate() async {
+    if (!Provider.of<RoomspaceProvider>(context, listen: false).canJoinMore) return;
     if (!_formKey.currentState!.validate()) return;
 
-    // 2. Start Loading
     setState(() => _isLoading = true);
-
-    // 3. Call the Controller
     final result = await _controller.createRoom(
       name: _roomNameController.text,
       address: _addressController.text,
       description: _descriptionController.text,
     );
-
-    // 4. Safety Check (Is screen still visible?)
     if (!mounted) return;
-
-    // 5. Stop Loading
     setState(() => _isLoading = false);
 
-    // 6. Handle Success or Failure
-    if (result['success'] == true) {
-      _showSuccessDialog(result['inviteCode']);
-    } else {
-      _showErrorSnackBar(result['message']);
-    }
+    if (result['success'] == true) _showSuccess(result['inviteCode']);
+    else ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
   }
 
-  // --- HELPER: Error Message ---
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
-
-  // --- HELPER: Success Dialog ---
-  void _showSuccessDialog(String inviteCode) {
-    final primaryColor = Theme.of(context).primaryColor;
-
+  void _showSuccess(String code) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Success Icon
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.home_rounded, color: primaryColor, size: 32),
-              ),
-              const SizedBox(height: 16),
-              
-              // Title
-              const Text(
-                'Room Created!',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              
-              // Instruction
-              Text(
-                'Share this code with your roommates to let them join.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 20),
-              
-              // Invite Code Box
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'INVITE CODE',
-                      style: TextStyle(
-                        fontSize: 12, 
-                        fontWeight: FontWeight.bold, 
-                        color: Colors.grey[500]
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      inviteCode,
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: primaryColor,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Go to Dashboard Button
-              ElevatedButton(
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: primaryColor.withValues(alpha: 0.1), shape: BoxShape.circle), child: Icon(Icons.check_rounded, color: primaryColor, size: 28)),
+            const SizedBox(height: 16),
+            const Text('Room Created!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            const Text('Share this code with roommates:', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 20),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(color: const Color(0xFFF7F7FB), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFEEEEF2))),
+              child: Text(code, textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: primaryColor, letterSpacing: 2)),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
                 onPressed: () async {
-                  Navigator.of(context).pop(); // Close dialog
-                  
-                  // Refresh roomspaces in the provider before navigating
-                  final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-                  await roomspaceProvider.refreshRoomspaces();
-                  
-                  if (context.mounted) {
-                    Navigator.pushReplacementNamed(context, '/home'); // Go home
-                  }
+                  await Provider.of<RoomspaceProvider>(context, listen: false).refreshRoomspaces();
+                  if (context.mounted) Navigator.pushReplacementNamed(context, '/home');
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
-                  minimumSize: const Size(double.infinity, 45),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Go to Dashboard', style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(vertical: 12)),
+                child: const Text('Go Home'),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ==========================================
-  // 3. WIDGET BUILDING (The Layout)
-  // ==========================================
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Consumer<RoomspaceProvider>(
-      builder: (context, roomspaceProvider, child) {
+      builder: (context, provider, child) {
+        final isDisabled = !provider.canJoinMore;
         return Scaffold(
+          backgroundColor: Colors.white,
           appBar: AppBar(
-            title: const Text("Create Room", style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.white,
+            elevation: 0,
             centerTitle: true,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+            title: const Text('New Roomspace', style: TextStyle(color: Color(0xFF1A1A2E), fontWeight: FontWeight.w700, fontSize: 17)),
+            leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A2E), size: 18), onPressed: () => Navigator.pop(context)),
+            bottom: PreferredSize(preferredSize: const Size.fromHeight(1), child: Container(color: const Color(0xFFF0F0F0), height: 1)),
           ),
           body: SafeArea(
             child: SingleChildScrollView(
@@ -262,15 +135,15 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
                 key: _formKey,
                 child: Column(
                   children: [
-                    _buildRoomspaceCounter(roomspaceProvider), // Show count
+                    _buildCounter(provider),
+                    const SizedBox(height: 32),
+                    _buildField(controller: _roomNameController, label: 'Room Name', hint: 'e.g. Dream Suite', icon: Icons.home_outlined, isDisabled: isDisabled, validator: (v) => v!.isEmpty ? 'Name required' : null),
                     const SizedBox(height: 16),
-                    if (!roomspaceProvider.canJoinMore)
-                      _buildLimitReachedWarning(), // Show warning if at limit
-                    if (!roomspaceProvider.canJoinMore)
-                      const SizedBox(height: 16),
-                    _buildFormFields(roomspaceProvider),   // Extracted for cleanliness
-                    const SizedBox(height: 40),
-                    _buildSubmitButton(roomspaceProvider), // Extracted for cleanliness
+                    _buildField(controller: _addressController, label: 'Address', hint: 'e.g. 5th Ave, NY', icon: Icons.location_on_outlined, isDisabled: isDisabled, validator: (v) => v!.isEmpty ? 'Address required' : null),
+                    const SizedBox(height: 16),
+                    _buildField(controller: _descriptionController, label: 'Notes (Optional)', hint: 'Room rules, etc.', icon: Icons.notes_rounded, isDisabled: isDisabled, maxLines: 3),
+                    const SizedBox(height: 48),
+                    _buildSubmit(isDisabled, primaryColor),
                   ],
                 ),
               ),
@@ -281,195 +154,56 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
     );
   }
 
-  // --- SMALLER WIDGET PIECES ---
-  
-  Widget _buildRoomspaceCounter(RoomspaceProvider provider) {
+  Widget _buildCounter(RoomspaceProvider provider) {
+    final isLimit = !provider.canJoinMore;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: provider.canJoinMore ? Colors.blue.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: provider.canJoinMore ? Colors.blue.withValues(alpha: 0.3) : Colors.orange.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: isLimit ? Colors.orange.shade50 : const Color(0xFFF7F7FB), borderRadius: BorderRadius.circular(10), border: Border.all(color: isLimit ? Colors.orange.shade200 : const Color(0xFFEEEEF2))),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            provider.canJoinMore ? Icons.info_outline : Icons.warning_amber_rounded,
-            color: provider.canJoinMore ? Colors.blue : Colors.orange,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'You have ${provider.roomspaceCount}/5 roomspaces',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: provider.canJoinMore ? Colors.blue[800] : Colors.orange[800],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildLimitReachedWarning() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.red.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.error_outline,
-            color: Colors.red,
-            size: 24,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Maximum roomspace limit reached',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'You can only create up to 5 roomspaces. Please leave a roomspace before creating a new one.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.red[700],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          Icon(isLimit ? Icons.warning_amber_rounded : Icons.info_outline_rounded, size: 16, color: isLimit ? Colors.orange.shade800 : Colors.grey.shade600),
+          const SizedBox(width: 10),
+          Text('${provider.roomspaceCount}/5 roomspaces used', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isLimit ? Colors.orange.shade800 : Colors.grey.shade600)),
         ],
       ),
     );
   }
 
-  Widget _buildFormFields(RoomspaceProvider provider) {
-    final isDisabled = !provider.canJoinMore;
-    
-    return Column(
-      children: [
-        _buildTextField(
-          controller: _roomNameController,
-          label: "Room Name",
-          hint: "e.g. Downtown Apartment",
-          icon: Icons.home_outlined,
-          validator: (v) => v == null || v.isEmpty ? "Name is required" : null,
-          isDisabled: isDisabled,
-        ),
-        const SizedBox(height: 16),
-        _buildTextField(
-          controller: _addressController,
-          label: "Address",
-          hint: "e.g. 123 Main St",
-          icon: Icons.location_on_outlined,
-          validator: (v) => v == null || v.isEmpty ? "Address is required" : null,
-          isDisabled: isDisabled,
-        ),
-        const SizedBox(height: 16),
-        _buildTextField(
-          controller: _descriptionController,
-          label: "Description (Optional)",
-          hint: "Any rules or notes...",
-          icon: Icons.description_outlined,
-          maxLines: 3,
-          isDisabled: isDisabled,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSubmitButton(RoomspaceProvider provider) {
-    final isDisabled = !provider.canJoinMore;
-    
-    return SizedBox(
-      width: double.infinity,
-      height: 54,
-      child: ElevatedButton(
-        onPressed: (_isLoading || isDisabled) ? null : _handleCreateButton,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isDisabled ? Colors.grey[400] : Theme.of(context).primaryColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          disabledBackgroundColor: Colors.grey[300],
-        ),
-        child: _isLoading
-            ? const CircularProgressIndicator(color: Colors.white)
-            : Text(
-                isDisabled ? 'Limit Reached' : 'Create Room',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: isDisabled ? Colors.grey[600] : Colors.white,
-                ),
-              ),
-      ),
-    );
-  }
-
-  // Reusable Input Widget
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    int maxLines = 1,
-    String? Function(String?)? validator,
-    bool isDisabled = false,
-  }) {
-    final primaryColor = Theme.of(context).primaryColor;
-    
+  Widget _buildField({required TextEditingController controller, required String label, required String hint, required IconData icon, required bool isDisabled, int maxLines = 1, String? Function(String?)? validator}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey[800]),
-        ),
+        Text(label.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.grey.shade500, letterSpacing: 0.5)),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
           maxLines: maxLines,
           validator: validator,
           enabled: !isDisabled,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey[400]),
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
             filled: true,
-            fillColor: isDisabled ? Colors.grey[200] : Colors.grey[100],
-            // Only show icon on first line if multiline
-            prefixIcon: maxLines > 1 
-                ? Padding(padding: const EdgeInsets.only(bottom: 40), child: Icon(icon, color: isDisabled ? Colors.grey[400] : Colors.grey))
-                : Icon(icon, color: isDisabled ? Colors.grey[400] : Colors.grey),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: primaryColor, width: 1.5),
-            ),
+            fillColor: isDisabled ? const Color(0xFFF0F0F0) : const Color(0xFFF7F7FB),
+            prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade400),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSubmit(bool disabled, Color primary) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton(
+        onPressed: (_isLoading || disabled) ? null : _handleCreate,
+        style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+        child: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Text(disabled ? 'Limit Reached' : 'Create Room', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+      ),
     );
   }
 
