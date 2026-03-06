@@ -5,13 +5,17 @@ import 'api_service.dart';
 
 /// Service for handling analytics API calls and caching
 /// 
+/// NOTE: This service communicates with the backend which provides
+/// simplified statistical analysis. For advanced ML-based analytics,
+/// the Analytics_Model Python service should be integrated.
+/// 
 /// Provides methods to fetch:
 /// - Spending summaries
 /// - Spending trends
-/// - Predictions
-/// - Patterns
-/// - Anomalies
-/// - Recommendations
+/// - Simple predictions (historical averages)
+/// - Basic patterns (rule-based)
+/// - Statistical anomalies
+/// - Rule-based recommendations
 /// - Roomspace analytics
 /// 
 /// Implements offline caching for better user experience

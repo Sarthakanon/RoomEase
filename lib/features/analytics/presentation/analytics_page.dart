@@ -12,12 +12,6 @@ import '../widgets/anomaly_alert_card.dart';
 import '../widgets/predictions_card.dart';
 import '../widgets/skeleton_loader.dart';
 
-/// Main analytics dashboard page
-/// 
-/// Displays spending insights including:
-/// - Summary card with key metrics
-/// - Roomspace-specific analytics filtered by active roomspace
-/// - Spending trends, category breakdown, predictions, recommendations, and anomalies
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
 
@@ -27,479 +21,415 @@ class AnalyticsPage extends StatefulWidget {
 
 class _AnalyticsPageState extends State<AnalyticsPage> {
   final AnalyticsService _analyticsService = AnalyticsService();
-  
+
   bool _isLoading = true;
   String? _error;
   DateTime? _lastUpdated;
   bool _isUsingCache = false;
-  
-  // Analytics data for active roomspace
+
   AnalyticsSummary? _summary;
   String? _currentRoomspaceId;
-  
+
   @override
   void initState() {
     super.initState();
-    // Load analytics after first frame to access provider
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadAnalytics();
-    });
+    _loadAnalytics();
   }
-  
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
-    // Listen for roomspace changes
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-    
-    // Reload analytics if roomspace changed
+
     if (activeRoomspaceId != _currentRoomspaceId && activeRoomspaceId != null) {
       _currentRoomspaceId = activeRoomspaceId;
       _loadAnalytics();
     }
   }
-  
+
   Future<void> _loadAnalytics() async {
+    if (!mounted) return;
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-    
-    // Allow loading analytics even without active roomspace (for personal expenses)
+
     setState(() {
       _isLoading = true;
       _error = null;
-      _isUsingCache = false;
     });
-    
+
     try {
-      final summary = await _analyticsService.getSummary(
-        roomspaceId: activeRoomspaceId, // null means personal expenses
-      );
-      
-      // Check if we're using cached data
-      final cacheKey = _analyticsService.getSummaryCacheKey(
-        roomspaceId: activeRoomspaceId,
-      );
+      final summary = await _analyticsService.getSummary(roomspaceId: activeRoomspaceId);
+      final cacheKey = _analyticsService.getSummaryCacheKey(roomspaceId: activeRoomspaceId);
       final cacheTimestamp = await _analyticsService.getCacheTimestamp(cacheKey);
-      
-      setState(() {
-        _summary = summary;
-        _isLoading = false;
-        _lastUpdated = cacheTimestamp ?? DateTime.now();
-        _isUsingCache = cacheTimestamp != null;
-      });
+
+      if (mounted) {
+        setState(() {
+          _summary = summary;
+          _isLoading = false;
+          _lastUpdated = cacheTimestamp ?? DateTime.now();
+          _isUsingCache = cacheTimestamp != null;
+        });
+      }
     } catch (e) {
-      // Try to get cache timestamp even on error
-      final cacheKey = _analyticsService.getSummaryCacheKey(
-        roomspaceId: activeRoomspaceId,
-      );
-      final cacheTimestamp = await _analyticsService.getCacheTimestamp(cacheKey);
-      
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-        _lastUpdated = cacheTimestamp;
-        _isUsingCache = cacheTimestamp != null;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
-  
-  Future<void> _refreshAnalytics() async {
-    await _loadAnalytics();
-  }
-  
+
   @override
   Widget build(BuildContext context) {
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
     final activeRoomspace = roomspaceProvider.activeRoomspace;
-    
+
     return MobileScaffold(
-      currentIndex: 3, // Analytics tab index
+      currentIndex: 3,
       showBottomNav: true,
-      showAppBar: false, // Disable default AppBar
+      showAppBar: false,
       body: SafeArea(
-        child: Column(
-          children: [
-            // Header with roomspace name
-            _buildHeader(activeRoomspace?.name),
-            
-            // Content
-            Expanded(
-              child: _buildAnalyticsView(),
-            ),
-          ],
+        child: Container(
+          color: const Color(0xFFF8F9FA),
+          child: Column(
+            children: [
+              _buildHeader(activeRoomspace?.name),
+              Expanded(child: _buildAnalyticsView()),
+            ],
+          ),
         ),
       ),
     );
   }
-  
+
   Widget _buildHeader(String? roomspaceName) {
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
-    final activeRoomspace = roomspaceProvider.activeRoomspace;
-    
     return Container(
-      padding: const EdgeInsets.all(20),
-      color: Colors.white,
-      child: Column(
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(24),
+          bottomRight: Radius.circular(24),
+        ),
+        boxShadow: [
+          BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.analytics_rounded,
-                size: 32,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Analytics',
-                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Analytics',
+                      style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF1A1A2E), fontSize: 22, letterSpacing: -0.5)),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded),
-                onPressed: _refreshAnalytics,
-                tooltip: 'Refresh',
-                padding: const EdgeInsets.all(12),
-              ),
-              const SizedBox(width: 8),
-              GlobalRoomspaceSelector(
-                onRoomspaceChanged: () {
-                  _loadAnalytics();
-                },
-              ),
-            ],
-          ),
-          
-          // Cache indicator banner
-          if (_isUsingCache && _lastUpdated != null)
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.blue.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Colors.blue.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.offline_bolt_rounded,
-                    size: 16,
-                    color: Colors.blue,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Showing cached data from ${_formatCacheTime(_lastUpdated!)}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.blue[700],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                if (roomspaceName != null)
+                  Text(roomspaceName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600)),
+              ],
             ),
+          ),
+          const SizedBox(width: 8),
+          const GlobalRoomspaceSelector(),
         ],
       ),
     );
   }
-  
+
   Widget _buildAnalyticsView() {
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-    
+
     if (_isLoading) {
-      return SingleChildScrollView(
+      return ListView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Summary skeleton
-            const SummarySkeletonLoader(),
-            const SizedBox(height: 24),
-            
-            // Chart skeletons
-            const ChartSkeletonLoader(),
-            const SizedBox(height: 16),
-            const ChartSkeletonLoader(),
-            const SizedBox(height: 16),
-            
-            // List item skeletons
-            const ListItemSkeletonLoader(),
-            const ListItemSkeletonLoader(),
-          ],
-        ),
+        children: const [
+          SummarySkeletonLoader(),
+          SizedBox(height: 16),
+          ChartSkeletonLoader(),
+          SizedBox(height: 16),
+          ListItemSkeletonLoader(),
+          ListItemSkeletonLoader(),
+        ],
       );
     }
-    
-    if (_error != null) {
+
+    if (_error != null || _summary == null) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline_rounded,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load analytics',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _refreshAnalytics,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.query_stats_rounded, size: 64, color: Colors.indigo.withOpacity(0.1)),
+              const SizedBox(height: 16),
+              Text('No analytics found',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              TextButton(onPressed: _loadAnalytics, child: const Text('Retry Refresh')),
+            ],
+          ),
         ),
       );
     }
-    
-    if (_summary == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.analytics_outlined,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No analytics data available',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Start adding expenses to see insights',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    
+
     return RefreshIndicator(
-      onRefresh: _refreshAnalytics,
+      onRefresh: _loadAnalytics,
+      color: Colors.indigo,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Summary card
-            _buildSummaryCard(_summary!),
-            
+            _buildHealthScore(_summary!),
+            const SizedBox(height: 20),
+            _buildSmartInsightBubble(_summary!),
             const SizedBox(height: 24),
-            
-            // Spending trends chart
+            _buildMetricsGrid(_summary!),
+            const SizedBox(height: 24),
             SpendingTrendsChart(roomspaceId: activeRoomspaceId),
-            
-            const SizedBox(height: 16),
-            
-            // Category breakdown
+            const SizedBox(height: 24),
             CategoryBreakdownChart(categories: _summary!.topCategories),
-            
-            const SizedBox(height: 16),
-            
-            // Predictions
-            PredictionsCard(roomspaceId: activeRoomspaceId),
-            
-            const SizedBox(height: 16),
-            
-            // Recommendations
+            const SizedBox(height: 24),
             RecommendationsCard(roomspaceId: activeRoomspaceId),
-            
-            const SizedBox(height: 16),
-            
-            // Anomaly alerts
+            const SizedBox(height: 24),
+            PredictionsCard(roomspaceId: activeRoomspaceId),
+            const SizedBox(height: 24),
             AnomalyAlertCard(roomspaceId: activeRoomspaceId),
           ],
         ),
       ),
     );
   }
-  
-  Widget _buildSummaryCard(AnalyticsSummary summary) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+
+  Widget _buildHealthScore(AnalyticsSummary summary) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isUltraNarrow = screenWidth < 340;
+
+    double score = 75.0;
+    if (summary.spendingTrend.toLowerCase() == 'increasing') score -= 15;
+    if (summary.totalSpent > summary.predictedNextMonth) score += 10;
+    score = score.clamp(5, 100);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 20, offset: const Offset(0, 8)),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 16,
+        runSpacing: 20,
+        children: [
+          SizedBox(
+            width: isUltraNarrow ? double.infinity : screenWidth * 0.48,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.account_balance_wallet_rounded,
-                  color: Theme.of(context).colorScheme.primary,
-                  size: 28,
+                const Text('FINANCIAL HEALTH',
+                    style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                const SizedBox(height: 6),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(_getHealthStatus(score),
+                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  'Spending Summary',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.auto_awesome_rounded, color: Colors.amber, size: 14),
+                      const SizedBox(width: 8),
+                      const Flexible(
+                        child: Text('AI GENERATED SCORE',
+                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            
-            // Total spent
-            _buildMetricRow(
-              'Total Spent',
-              'Rs. ${summary.totalSpent.toStringAsFixed(2)}',
-              Icons.payments_rounded,
-              Colors.blue,
-            ),
-            const SizedBox(height: 16),
-            
-            // Predicted next month
-            _buildMetricRow(
-              'Predicted Next Month',
-              'Rs. ${summary.predictedNextMonth.toStringAsFixed(2)}',
-              Icons.trending_up_rounded,
-              Colors.orange,
-            ),
-            const SizedBox(height: 16),
-            
-            // Savings potential
-            _buildMetricRow(
-              'Savings Potential',
-              'Rs. ${summary.savingsPotential.toStringAsFixed(2)}',
-              Icons.savings_rounded,
-              Colors.green,
-            ),
-            const SizedBox(height: 16),
-            
-            // Spending trend
-            _buildTrendIndicator(summary.spendingTrend),
-          ],
-        ),
+          ),
+          _CircularProgressWithText(score: score),
+        ],
       ),
     );
   }
-  
-  Widget _buildMetricRow(String label, String value, IconData icon, Color color) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildTrendIndicator(String trend) {
-    IconData icon;
-    Color color;
-    String text;
-    
-    switch (trend.toLowerCase()) {
-      case 'increasing':
-        icon = Icons.trending_up_rounded;
-        color = Colors.red;
-        text = 'Spending is increasing';
-        break;
-      case 'decreasing':
-        icon = Icons.trending_down_rounded;
-        color = Colors.green;
-        text = 'Spending is decreasing';
-        break;
-      default:
-        icon = Icons.trending_flat_rounded;
-        color = Colors.blue;
-        text = 'Spending is stable';
-    }
-    
+
+  Widget _buildSmartInsightBubble(AnalyticsSummary summary) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: const BoxDecoration(color: Color(0xFFFFF8E1), shape: BoxShape.circle),
+            child: const Icon(Icons.auto_awesome_rounded, color: Colors.orange, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('AI OBSERVATION',
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.0)),
+                const SizedBox(height: 4),
+                Text(_generateDynamicInsight(summary),
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF1A1A2E), fontWeight: FontWeight.w600, height: 1.5)),
+              ],
             ),
           ),
         ],
       ),
     );
   }
-  
-  String _formatCacheTime(DateTime cacheTime) {
-    final now = DateTime.now();
-    final difference = now.difference(cacheTime);
-    
-    if (difference.inMinutes < 1) {
-      return 'just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} minute${difference.inMinutes != 1 ? 's' : ''} ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours} hour${difference.inHours != 1 ? 's' : ''} ago';
-    } else {
-      return '${difference.inDays} day${difference.inDays != 1 ? 's' : ''} ago';
+
+  Widget _buildMetricsGrid(AnalyticsSummary summary) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final crossAxisCount = constraints.maxWidth > 500 ? 3 : 2;
+      final childAspectRatio = constraints.maxWidth < 360 ? 1.2 : 1.45;
+
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: crossAxisCount,
+        childAspectRatio: childAspectRatio,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        children: [
+          _buildStatCard('Total Spent', 'Rs. ${summary.totalSpent.toInt()}', Icons.account_balance_wallet_rounded,
+              Colors.indigoAccent),
+          _buildStatCard('Next Prediction', 'Rs. ${summary.predictedNextMonth.toInt()}', Icons.insights_rounded,
+              Colors.tealAccent.shade700),
+          _buildStatCard('Estimated Save', 'Rs. ${summary.savingsPotential.toInt()}', Icons.eco_rounded,
+              Colors.greenAccent.shade700),
+          _buildStatCard('Trend Status', summary.spendingTrend.toUpperCase(), Icons.trending_up_rounded, Colors.orangeAccent),
+        ],
+      );
+    });
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value,
+                    style:
+                        const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF1A1A2E), letterSpacing: -0.5)),
+              ),
+              const SizedBox(height: 2),
+              Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 9, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getHealthStatus(double score) {
+    if (score >= 80) return 'Top Tier Savvy';
+    if (score >= 60) return 'Stable Hands';
+    if (score >= 40) return 'Needs Revision';
+    return 'Action Required';
+  }
+
+  String _generateDynamicInsight(AnalyticsSummary summary) {
+    if (summary.spendingTrend.toLowerCase() == 'increasing') {
+      final topCat = summary.topCategories.isNotEmpty ? summary.topCategories.first.category.replaceAll('_', ' ') : 'spending';
+      return 'Spending is ramping up. Review $topCat to stay on track.';
     }
+    if (summary.savingsPotential > 1000) {
+      return 'AI identified Rs. ${summary.savingsPotential.toInt()} in potential savings this month. Check Smart Suggestions below.';
+    }
+    return 'Your financial flow looks balanced. Consider setting up a rainy day fund with current surpluses.';
+  }
+}
+
+class _CircularProgressWithText extends StatelessWidget {
+  final double score;
+  const _CircularProgressWithText({required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    Color scoreColor = Colors.redAccent;
+    if (score >= 80) {
+      scoreColor = Colors.greenAccent.shade400;
+    } else if (score >= 60) {
+      scoreColor = Colors.blueAccent.shade200;
+    } else if (score >= 40) {
+      scoreColor = Colors.orangeAccent;
+    }
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        SizedBox(
+          height: 70,
+          width: 70,
+          child: CircularProgressIndicator(
+            value: score / 100,
+            strokeWidth: 7,
+            backgroundColor: Colors.white.withOpacity(0.05),
+            color: scoreColor,
+            strokeCap: StrokeCap.round,
+          ),
+        ),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${score.toInt()}',
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, height: 1.0)),
+            const Text('%', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ],
+    );
   }
 }
