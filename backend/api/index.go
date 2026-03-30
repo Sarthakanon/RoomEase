@@ -8,6 +8,7 @@ import (
 	"roomease/backend/services"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {
@@ -43,10 +44,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Initialize services
-	sessionStore := services.NewSessionStore()
-	analyticsService := services.NewAnalyticsService()
+	sessionStore := services.NewInMemorySessionStore()
+	analyticsService := services.NewAnalyticsService(dbService)
 	balanceService := services.NewBalanceService()
-	paymentService := services.NewPaymentConfirmationService()
+	
+	// Get database connection for payment service
+	var db *gorm.DB
+	if config.DB != nil {
+		db = config.DB
+	}
+	paymentService := services.NewPaymentConfirmationService(db, balanceService, dbService)
 
 	// Initialize handlers with proper dependencies
 	authHandler := handlers.NewAuthHandler(sessionStore, dbService)
