@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -84,6 +85,31 @@ func (Settlement) TableName() string {
 // Description returns a human-readable description of the settlement
 func (s *Settlement) Description() string {
 	return "Settlement payment"
+}
+
+// MarshalJSON customizes JSON serialization to include user names
+func (s Settlement) MarshalJSON() ([]byte, error) {
+	type Alias Settlement
+	
+	fromUserName := "Unknown"
+	toUserName := "Unknown"
+	
+	if s.FromUser != nil {
+		fromUserName = s.FromUser.Name
+	}
+	if s.ToUser != nil {
+		toUserName = s.ToUser.Name
+	}
+	
+	return json.Marshal(&struct {
+		*Alias
+		FromUserName string `json:"from_user_name"`
+		ToUserName   string `json:"to_user_name"`
+	}{
+		Alias:        (*Alias)(&s),
+		FromUserName: fromUserName,
+		ToUserName:   toUserName,
+	})
 }
 
 // BalanceSummary represents the overall balance state for a roomspace

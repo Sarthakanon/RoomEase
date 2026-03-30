@@ -88,12 +88,26 @@ func main() {
 	// Initialize payment confirmation service and handler
 	paymentConfirmationService := services.NewPaymentConfirmationService(config.DB, balanceService, dbService)
 	paymentConfirmationHandler := handlers.NewPaymentConfirmationHandler(paymentConfirmationService, dbService)
+	
+	// Initialize admin handler
+	adminHandler := handlers.NewAdminHandler()
 
 	// Health check endpoint (public)
 	router.GET("/health", healthHandler.Check)
 
 	// Public routes
 	router.POST("/api/auth/login", authHandler.Login)
+	
+	// Public admin routes (no auth required for now - add admin auth later)
+	adminRoutes := router.Group("/api/admin")
+	{
+		adminRoutes.GET("/stats", adminHandler.GetSystemStats)
+		adminRoutes.GET("/users", adminHandler.GetAllUsers)
+		adminRoutes.GET("/users/:userId", adminHandler.GetUserDetails)
+		adminRoutes.POST("/users/:userId/ban", adminHandler.BanUser)
+		adminRoutes.POST("/users/:userId/unban", adminHandler.UnbanUser)
+		adminRoutes.GET("/users/:userId/ban-status", adminHandler.CheckUserBanStatus)
+	}
 
 	// Protected routes (require authentication)
 	protected := router.Group("/api")
@@ -172,6 +186,14 @@ func main() {
 		protected.GET("/roomspaces/:id/payments/pending", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.GetPendingConfirmations)
 		protected.GET("/roomspaces/:id/payments/history", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.GetPaymentHistory)
 		protected.GET("/roomspaces/:id/payments/stats", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.GetPaymentStats)
+		
+		// Admin routes (moved to public section above)
+		// protected.GET("/admin/stats", adminHandler.GetSystemStats)
+		// protected.GET("/admin/users", adminHandler.GetAllUsers)
+		// protected.GET("/admin/users/:userId", adminHandler.GetUserDetails)
+		// protected.POST("/admin/users/:userId/ban", adminHandler.BanUser)
+		// protected.POST("/admin/users/:userId/unban", adminHandler.UnbanUser)
+		// protected.GET("/admin/users/:userId/ban-status", adminHandler.CheckUserBanStatus)
 	}
 
 	// Start server

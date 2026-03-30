@@ -56,6 +56,7 @@ type CreateExpenseRequest struct {
 	Description       string                 `json:"description"`
 	Amount            float64                `json:"amount" binding:"required,gt=0"`
 	Category          string                 `json:"category" binding:"required"`
+	PaidBy            string                 `json:"paid_by,omitempty"` // Optional: who paid (defaults to authenticated user)
 	SplitType         ExpenseSplitType       `json:"split_type" binding:"required"`
 	SelectedRoommates []string               `json:"selected_roommates" binding:"required,min=1"`
 	CustomSplits      map[string]float64     `json:"custom_splits,omitempty"`

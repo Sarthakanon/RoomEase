@@ -44,6 +44,9 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 		return
 	}
 
+	// Debug: Log the received paid_by value
+	fmt.Printf("DEBUG: Received expense request - PaidBy: '%s', AuthUser: '%s', Title: '%s'\n", req.PaidBy, userID.(string), req.Title)
+
 	// Validate split type and custom splits
 	if err := h.validateExpenseRequest(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -60,8 +63,21 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 		return
 	}
 
+	// Determine who paid for the expense
+	paidBy := userID.(string) // Default to authenticated user
+	if req.PaidBy != "" {
+		// If PaidBy is specified, verify they are a member of the roomspace
+		if err := h.verifyRoomspaceMembership(req.RoomspaceID, req.PaidBy); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "The specified payer is not a member of this roomspace",
+			})
+			return
+		}
+		paidBy = req.PaidBy
+	}
+
 	// Calculate splits based on split type
-	splits, err := h.calculateSplits(&req, userID.(string))
+	splits, err := h.calculateSplits(&req, paidBy)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -76,10 +92,13 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 		Description: req.Description,
 		Amount:      req.Amount,
 		Category:    req.Category,
-		PaidBy:      userID.(string),
+		PaidBy:      paidBy,
 		SplitType:   req.SplitType,
 		Splits:      splits,
 	}
+
+	// Debug: Log the final paidBy value
+	fmt.Printf("DEBUG: Creating expense with PaidBy: '%s'\n", paidBy)
 
 	// Save expense to database
 	if err := h.dbService.CreateExpense(expense); err != nil {
@@ -562,6 +581,16 @@ func (h *ExpenseHandler) sendExpenseNotifications(expense *models.Expense, creat
 
 // validateExpenseRequest validates the expense creation request
 func (h *ExpenseHandler) validateExpenseRequest(req *models.CreateExpenseRequest) error {
+	// Validate selected roommates
+	if len(req.SelectedRoommates) == 0 {
+		return fmt.Errorf("at least one roommate must be selected")
+	}
+	
+	// Prevent solo expenses (only 1 person selected)
+	if len(req.SelectedRoommates) == 1 {
+		return fmt.Errorf("shared expenses must have at least 2 people. For personal expenses, use the personal expense feature")
+	}
+	
 	// Validate split type
 	switch req.SplitType {
 	case models.SplitTypeEqual:
@@ -598,11 +627,6 @@ func (h *ExpenseHandler) validateExpenseRequest(req *models.CreateExpenseRequest
 		}
 	default:
 		return fmt.Errorf("invalid split type")
-	}
-
-	// Validate selected roommates
-	if len(req.SelectedRoommates) == 0 {
-		return fmt.Errorf("at least one roommate must be selected")
 	}
 
 	return nil
