@@ -1,6 +1,6 @@
-# room_ease
+# RoomEase
 
-A new Flutter project.
+A Flutter-based expense sharing application for roommates.
 
 ## Getting Started
 
