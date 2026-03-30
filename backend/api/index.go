@@ -2,10 +2,10 @@ package handler
 
 import (
 	"net/http"
-	"os"
 	"roomease/backend/config"
 	"roomease/backend/handlers"
 	"roomease/backend/middleware"
+	"roomease/backend/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,8 +17,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	// Initialize Firebase (ignore errors for serverless)
 	config.InitFirebase(cfg.FirebaseCredentialPath)
 
-	// Initialize PostgreSQL (ignore errors for serverless)
-	config.InitPostgreSQL(cfg.PostgresDatabaseURL)
+	// Initialize PostgreSQL
+	var dbService *services.PostgresService
+	if err := config.InitPostgreSQL(cfg.PostgresDatabaseURL); err != nil {
+		// Continue without database for now
+		dbService = nil
+	} else {
+		dbService = services.NewPostgresService()
+	}
 
 	// Set Gin to release mode for production
 	gin.SetMode(gin.ReleaseMode)
@@ -28,23 +34,29 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
-	// Add CORS middleware
-	router.Use(middleware.CORSMiddleware())
+	// Add CORS middleware with allowed origins
+	router.Use(middleware.CORSMiddleware(cfg.AllowedOrigins))
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "service": "RoomEase Backend"})
 	})
 
-	// Initialize handlers
-	authHandler := handlers.NewAuthHandler()
-	userHandler := handlers.NewUserHandler()
-	roomspaceHandler := handlers.NewRoomspaceHandler()
-	expenseHandler := handlers.NewExpenseHandler()
-	notificationHandler := handlers.NewNotificationHandler()
-	analyticsHandler := handlers.NewAnalyticsHandler()
-	balanceHandler := handlers.NewBalanceHandler()
-	paymentHandler := handlers.NewPaymentConfirmationHandler()
+	// Initialize services
+	sessionStore := services.NewSessionStore()
+	analyticsService := services.NewAnalyticsService()
+	balanceService := services.NewBalanceService()
+	paymentService := services.NewPaymentConfirmationService()
+
+	// Initialize handlers with proper dependencies
+	authHandler := handlers.NewAuthHandler(sessionStore, dbService)
+	userHandler := handlers.NewUserHandler(dbService)
+	roomspaceHandler := handlers.NewRoomspaceHandler(dbService)
+	expenseHandler := handlers.NewExpenseHandler(dbService)
+	notificationHandler := handlers.NewNotificationHandler(dbService)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService, dbService)
+	balanceHandler := handlers.NewBalanceHandler(balanceService, dbService)
+	paymentHandler := handlers.NewPaymentConfirmationHandler(paymentService, dbService)
 	adminHandler := handlers.NewAdminHandler()
 
 	// Public routes
@@ -75,11 +87,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		// Roomspace routes
 		protected.GET("/roomspaces", roomspaceHandler.GetRoomspaces)
 		protected.POST("/roomspaces", roomspaceHandler.CreateRoomspace)
-		protected.GET("/roomspaces/:id", middleware.RoomspaceMiddleware(), roomspaceHandler.GetRoomspace)
+		protected.GET("/roomspaces/:id", roomspaceHandler.GetRoomspace)
 		protected.POST("/roomspaces/:id/join", roomspaceHandler.JoinRoomspace)
 		protected.GET("/roomspaces/code/:code", roomspaceHandler.SearchRoomspaceByCode)
 		protected.POST("/roomspaces/code/:code/join", roomspaceHandler.JoinRoomspaceByCode)
-		protected.DELETE("/roomspaces/:id/members", middleware.RoomspaceMiddleware(), roomspaceHandler.RemoveMember)
+		protected.DELETE("/roomspaces/:id/members", roomspaceHandler.RemoveMember)
 
 		// Expense routes
 		protected.POST("/expenses", expenseHandler.CreateExpense)
@@ -87,8 +99,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		protected.GET("/expenses/:id", expenseHandler.GetExpenseByID)
 		protected.PUT("/expenses/:id", expenseHandler.UpdateExpense)
 		protected.DELETE("/expenses/:id", expenseHandler.DeleteExpense)
-		protected.GET("/roomspaces/:id/expenses", middleware.RoomspaceMiddleware(), expenseHandler.GetRoomspaceExpenses)
-		protected.GET("/roomspaces/:id/expenses/recent", middleware.RoomspaceMiddleware(), expenseHandler.GetRecentExpenses)
+		protected.GET("/roomspaces/:id/expenses", expenseHandler.GetRoomspaceExpenses)
+		protected.GET("/roomspaces/:id/expenses/recent", expenseHandler.GetRecentExpenses)
 
 		// Personal expenses
 		protected.POST("/personal-expenses", expenseHandler.CreatePersonalExpense)
@@ -102,24 +114,24 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		protected.GET("/analytics/patterns", analyticsHandler.GetPatterns)
 		protected.GET("/analytics/anomalies", analyticsHandler.GetAnomalies)
 		protected.GET("/analytics/recommendations", analyticsHandler.GetRecommendations)
-		protected.GET("/analytics/roomspace/:id", middleware.RoomspaceMiddleware(), analyticsHandler.GetRoomspaceAnalytics)
+		protected.GET("/analytics/roomspace/:id", analyticsHandler.GetRoomspaceAnalytics)
 		protected.POST("/analytics/feedback", analyticsHandler.SubmitFeedback)
 
 		// Balance routes
-		protected.GET("/roomspaces/:id/balances", middleware.RoomspaceMiddleware(), balanceHandler.GetRoomspaceBalances)
-		protected.GET("/roomspaces/:id/balances/:userId", middleware.RoomspaceMiddleware(), balanceHandler.GetUserBalance)
-		protected.POST("/roomspaces/:id/settlements", middleware.RoomspaceMiddleware(), balanceHandler.CreateSettlement)
-		protected.GET("/roomspaces/:id/settlements", middleware.RoomspaceMiddleware(), balanceHandler.GetSettlementHistory)
-		protected.GET("/roomspaces/:id/settlements/suggestions", middleware.RoomspaceMiddleware(), balanceHandler.GetSettlementSuggestions)
-		protected.POST("/roomspaces/:id/balances/refresh", middleware.RoomspaceMiddleware(), balanceHandler.RefreshBalanceCache)
+		protected.GET("/roomspaces/:id/balances", balanceHandler.GetRoomspaceBalances)
+		protected.GET("/roomspaces/:id/balances/:userId", balanceHandler.GetUserBalance)
+		protected.POST("/roomspaces/:id/settlements", balanceHandler.CreateSettlement)
+		protected.GET("/roomspaces/:id/settlements", balanceHandler.GetSettlementHistory)
+		protected.GET("/roomspaces/:id/settlements/suggestions", balanceHandler.GetSettlementSuggestions)
+		protected.POST("/roomspaces/:id/balances/refresh", balanceHandler.RefreshBalanceCache)
 
 		// Payment confirmation routes
-		protected.POST("/roomspaces/:id/payments/confirm", middleware.RoomspaceMiddleware(), paymentHandler.CreatePaymentConfirmation)
-		protected.PUT("/roomspaces/:id/payments/:paymentId/confirm", middleware.RoomspaceMiddleware(), paymentHandler.ConfirmPayment)
-		protected.PUT("/roomspaces/:id/payments/:paymentId/reject", middleware.RoomspaceMiddleware(), paymentHandler.RejectPayment)
-		protected.GET("/roomspaces/:id/payments/pending", middleware.RoomspaceMiddleware(), paymentHandler.GetPendingConfirmations)
-		protected.GET("/roomspaces/:id/payments/history", middleware.RoomspaceMiddleware(), paymentHandler.GetPaymentHistory)
-		protected.GET("/roomspaces/:id/payments/stats", middleware.RoomspaceMiddleware(), paymentHandler.GetPaymentStats)
+		protected.POST("/roomspaces/:id/payments/confirm", paymentHandler.CreatePaymentConfirmation)
+		protected.PUT("/roomspaces/:id/payments/:paymentId/confirm", paymentHandler.ConfirmPayment)
+		protected.PUT("/roomspaces/:id/payments/:paymentId/reject", paymentHandler.RejectPayment)
+		protected.GET("/roomspaces/:id/payments/pending", paymentHandler.GetPendingConfirmations)
+		protected.GET("/roomspaces/:id/payments/history", paymentHandler.GetPaymentHistory)
+		protected.GET("/roomspaces/:id/payments/stats", paymentHandler.GetPaymentStats)
 
 		// Notification routes
 		protected.GET("/notifications", notificationHandler.GetNotifications)
