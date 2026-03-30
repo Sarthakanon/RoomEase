@@ -98,6 +98,7 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> {
     return MobileScaffold(
       currentIndex: 1,
       showAppBar: false,
+      showBottomNav: false, // Hide bottom nav since MainNavigation handles it
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: primaryColor))
           : _error != null

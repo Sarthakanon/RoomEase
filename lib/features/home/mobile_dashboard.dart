@@ -5,16 +5,19 @@ import '../../core/widgets/mobile_scaffold.dart';
 import '../../core/widgets/roomspace_switcher.dart';
 import '../../core/widgets/global_roomspace_selector.dart';
 import '../../core/widgets/skeleton_loader.dart';
-import '../../services/api_service.dart';
+import '../../services/smart_api_service.dart';
+import '../../services/state_management_service.dart';
 import '../../services/balance_service.dart';
 import '../../services/payment_notification_service.dart';
 import '../../services/ocr_service.dart';
 import '../../models/payment_notification.dart';
 import '../../models/expense_models.dart';
 import '../../providers/roomspace_provider.dart';
+import '../../widgets/smart_future_builder.dart';
 import 'widgets/add_expense_dialog.dart';
 import 'widgets/personal_expense_dialog.dart';
 import 'widgets/receipt_scanner_dialog.dart';
+import 'widgets/balance_details_dialog.dart';
 
 /// Home dashboard — shows balance summary, quick actions, and recent expenses.
 class MobileDashboard extends StatefulWidget {
@@ -25,35 +28,35 @@ class MobileDashboard extends StatefulWidget {
 }
 
 class _MobileDashboardState extends State<MobileDashboard>
-    with WidgetsBindingObserver {
-  final ApiService _apiService = ApiService();
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
+  final SmartApiService _smartApi = SmartApiService();
+  final StateManagementService _state = StateManagementService();
   final BalanceService _balanceService = BalanceService();
 
+  @override
+  bool get wantKeepAlive => true; // Keep state alive when switching tabs
+
   bool _hasRoomspace = false;
-  bool _isLoading = true;
   List<RoommateItem> _roommates = [];
-  int _unreadNotificationCount = 0;
   String? _currentRoomspaceId;
-
-  // Recent expense data
-  List<ExpenseData> _recentExpenses = [];
-  List<PersonalExpenseData> _recentPersonalExpenses = [];
-  bool _isLoadingExpenses = true;
-  String? _expensesError;
-
-  // Balance data
-  double _youAreOwed = 0.0;
-  double _youOwe = 0.0;
-  bool _isLoadingBalance = false;
+  
+  // Cache dashboard data to prevent reloading
+  Map<String, dynamic>? _cachedDashboardData;
+  DateTime? _lastDataLoad;
+  static const Duration _cacheValidDuration = Duration(minutes: 5);
+  
+  // Add a flag to track if we're currently loading
+  bool _isLoading = false;
+  Future<Map<String, dynamic>>? _currentFuture;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkRoomspace();
-    _loadUnreadCount();
-    _loadBalance();
     _initializePaymentNotifications();
+    
+    // Preload common data with extended cache
+    _smartApi.preloadCommonData();
 
     // Listen for roomspace changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -74,18 +77,25 @@ class _MobileDashboardState extends State<MobileDashboard>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Refresh when the app comes back from background
+    // Smart refresh when app comes back from background
     if (state == AppLifecycleState.resumed) {
-      _loadBalance();
-      _loadRecentExpenses();
-      _loadUnreadCount();
+      // Only refresh if cache is old
+      if (_lastDataLoad == null || 
+          DateTime.now().difference(_lastDataLoad!) > _cacheValidDuration) {
+        _smartApi.preloadCommonData();
+      }
     }
   }
 
   /// Called automatically when the active roomspace changes
   void _onRoomspaceChanged() {
-    _loadRecentExpenses();
-    _loadBalance();
+    // Clear cached data when roomspace changes
+    _cachedDashboardData = null;
+    _lastDataLoad = null;
+    
+    // Force refresh dashboard when roomspace changes
+    _state.forceRefresh(ScreenKeys.dashboard);
+    setState(() {}); // Trigger rebuild to refresh UI
   }
 
   Future<void> _initializePaymentNotifications() async {
@@ -100,196 +110,81 @@ class _MobileDashboardState extends State<MobileDashboard>
     }
   }
 
-  Future<void> _loadRecentExpenses() async {
+  /// Smart data loader for dashboard with aggressive caching
+  Future<Map<String, dynamic>> _loadDashboardData({bool forceRefresh = false}) async {
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh && 
+        _cachedDashboardData != null && 
+        _lastDataLoad != null &&
+        DateTime.now().difference(_lastDataLoad!) < _cacheValidDuration) {
+      debugPrint('🚀 Using cached dashboard data');
+      return _cachedDashboardData!;
+    }
+
+    // If we're already loading, return the current future
+    if (_isLoading && _currentFuture != null) {
+      debugPrint('⏳ Dashboard already loading, returning existing future');
+      return _currentFuture!;
+    }
+
+    debugPrint('🌐 Loading fresh dashboard data...');
+    _isLoading = true;
+    
+    _currentFuture = _performDataLoad(forceRefresh);
+    
     try {
-      setState(() {
-        _isLoadingExpenses = true;
-        _expensesError = null;
-      });
-
-      final roomspaceProvider =
-          Provider.of<RoomspaceProvider>(context, listen: false);
-      final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-      final isPersonalSpace = roomspaceProvider.isPersonalSpace;
-
-      final futures = <Future>[];
-
-      // Only load shared expenses when inside a real roomspace
-      if (!isPersonalSpace && activeRoomspaceId != null) {
-        futures.add(_apiService.getRecentExpenses(
-            roomspaceId: activeRoomspaceId, limit: 3));
-      }
-
-      // Always load personal expenses
-      futures.add(_apiService.getPersonalExpenses(limit: 3, offset: 0));
-
-      final results = await Future.wait(futures);
-
-      List<ExpenseData> sharedExpenses = [];
-      List<PersonalExpenseData> personalExpenses = [];
-
-      int idx = 0;
-
-      if (!isPersonalSpace && activeRoomspaceId != null) {
-        final sharedResponse = results[idx++];
-        if (sharedResponse.containsKey('data') && sharedResponse['data'] is List) {
-          sharedExpenses = (sharedResponse['data'] as List)
-              .map((e) => ExpenseData.fromJson(e))
-              .toList();
-        }
-      }
-
-      final personalResponse = results[idx];
-      if (personalResponse.containsKey('data') &&
-          personalResponse['data'] is List) {
-        personalExpenses = (personalResponse['data'] as List)
-            .map((e) => PersonalExpenseData.fromJson(e))
-            .toList();
-      }
-
-      if (mounted) {
-        setState(() {
-          _recentExpenses = sharedExpenses;
-          _recentPersonalExpenses = personalExpenses;
-          _isLoadingExpenses = false;
-        });
-      }
+      final result = await _currentFuture!;
+      _isLoading = false;
+      return result;
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _expensesError = 'Failed to load recent expenses';
-          _isLoadingExpenses = false;
-        });
-      }
+      _isLoading = false;
+      rethrow;
     }
   }
 
-  Future<void> _refreshRecentExpenses() async {
-    await _loadRecentExpenses();
-    await _loadBalance();
-  }
+  Future<Map<String, dynamic>> _performDataLoad(bool forceRefresh) async {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    final isPersonalSpace = roomspaceProvider.isPersonalSpace;
 
-  Future<void> _loadUnreadCount() async {
-    try {
-      final results = await Future.wait([
-        _apiService.getNotifications(),
-        _apiService.getJoinRequests(),
-      ]);
-
-      final notifications = results[0]['data'] as List<dynamic>? ?? [];
-      final joinRequests = results[1]['data'] as List<dynamic>? ?? [];
-      final unread = notifications.where((n) => n['is_read'] != true).length;
-
-      if (mounted) {
-        setState(() {
-          _unreadNotificationCount = unread + joinRequests.length;
-        });
-      }
-    } catch (_) {
-      // Notification count is non-critical; silently ignore errors
+    // Load data in parallel with extended cache times
+    final futures = <String, Future<Map<String, dynamic>>>{};
+    
+    // Always load notifications and personal expenses
+    futures['notifications'] = _smartApi.getNotifications(forceRefresh: forceRefresh);
+    futures['personalExpenses'] = _smartApi.getPersonalExpenses(limit: 3, offset: 0, forceRefresh: forceRefresh);
+    
+    // Load roomspace-specific data if in a roomspace
+    if (!isPersonalSpace && activeRoomspaceId != null) {
+      futures['roomspaceExpenses'] = _smartApi.getRoomspaceExpenses(activeRoomspaceId, limit: 3, forceRefresh: forceRefresh);
+      futures['balances'] = _smartApi.getRoomspaceBalances(activeRoomspaceId, forceRefresh: forceRefresh);
+      futures['members'] = _smartApi.getRoomspaceMembers(activeRoomspaceId, forceRefresh: forceRefresh);
     }
-  }
 
-  Future<void> _checkRoomspace() async {
-    try {
-      final roomspaceProvider =
-          Provider.of<RoomspaceProvider>(context, listen: false);
-      await roomspaceProvider.loadRoomspaces();
-
-      final activeRoomspace = roomspaceProvider.activeRoomspace;
-      final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-
-      // Load roommates if in a roomspace
-      if (activeRoomspaceId != null && activeRoomspace != null) {
-        try {
-          final response = await _apiService.getRoomspaceMembers(activeRoomspaceId);
-          if (response['success'] == true && response['data'] != null) {
-            final members = response['data'] as List;
-            _roommates = members
-                .map((m) => RoommateItem(
-                      id: m['user_id'] ?? '',
-                      name: m['user_name'] ?? m['name'] ?? 'Unknown',
-                    ))
-                .toList();
-            _currentRoomspaceId = activeRoomspaceId;
-          }
-        } catch (e) {
-          debugPrint('Error loading roommates: $e');
-          _roommates = [];
-          _currentRoomspaceId = null;
-        }
-      } else {
-        _roommates = [];
-        _currentRoomspaceId = null;
-      }
-
-      if (mounted) {
-        setState(() {
-          _hasRoomspace = activeRoomspace != null;
-          _isLoading = false;
-        });
-      }
-
-      await _loadRecentExpenses();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
+    // Wait for all data to load
+    final results = <String, Map<String, dynamic>>{};
+    for (final entry in futures.entries) {
+      try {
+        results[entry.key] = await entry.value;
+      } catch (e) {
+        debugPrint('Error loading ${entry.key}: $e');
+        results[entry.key] = {'data': [], 'error': e.toString()};
       }
     }
-  }
 
-  Future<void> _loadBalance() async {
-    setState(() => _isLoadingBalance = true);
+    final dashboardData = {
+      'roomspaceId': activeRoomspaceId,
+      'isPersonalSpace': isPersonalSpace,
+      'hasRoomspace': activeRoomspaceId != null,
+      ...results,
+    };
 
-    try {
-      final roomspaceProvider =
-          Provider.of<RoomspaceProvider>(context, listen: false);
-      final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-      final isPersonalSpace = roomspaceProvider.isPersonalSpace;
-      final currentUser = FirebaseAuth.instance.currentUser;
+    // Cache the data
+    _cachedDashboardData = dashboardData;
+    _lastDataLoad = DateTime.now();
+    debugPrint('💾 Dashboard data cached at ${_lastDataLoad}');
 
-      // No balance to show in personal space
-      if (isPersonalSpace || activeRoomspaceId == null || currentUser == null) {
-        setState(() {
-          _youAreOwed = 0.0;
-          _youOwe = 0.0;
-          _isLoadingBalance = false;
-        });
-        return;
-      }
-
-      final balance = await _balanceService.getUserBalance(
-        activeRoomspaceId,
-        currentUser.uid,
-      );
-
-      if (balance != null && mounted) {
-        setState(() {
-          if (balance.balance > 0) {
-            _youAreOwed = balance.balance;
-            _youOwe = 0.0;
-          } else {
-            _youAreOwed = 0.0;
-            _youOwe = balance.balance.abs();
-          }
-          _isLoadingBalance = false;
-        });
-      } else if (mounted) {
-        setState(() {
-          _youAreOwed = 0.0;
-          _youOwe = 0.0;
-          _isLoadingBalance = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _youAreOwed = 0.0;
-          _youOwe = 0.0;
-          _isLoadingBalance = false;
-        });
-      }
-    }
+    return dashboardData;
   }
 
   // ──────────────────────────────────────────
@@ -426,8 +321,14 @@ class _MobileDashboardState extends State<MobileDashboard>
     );
   }
 
-  void _showSharedExpenseDialog({PaymentNotification? paymentNotification}) {
-    if (_roommates.isEmpty || _currentRoomspaceId == null) {
+  Future<void> _showSharedExpenseDialog({PaymentNotification? paymentNotification}) async {
+    final roomspaceProvider =
+        Provider.of<RoomspaceProvider>(context, listen: false);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+
+    // Check if user is in a real roomspace (not personal space)
+    if (isPersonalSpace || activeRoomspaceId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Join a roomspace first to add shared expenses'),
@@ -436,13 +337,78 @@ class _MobileDashboardState extends State<MobileDashboard>
       return;
     }
 
-    AddExpenseDialog.show(
-      context,
-      roommates: _roommates,
-      roomspaceId: _currentRoomspaceId!,
-      paymentNotification: paymentNotification,
-      onSubmit: _handleExpenseSubmission,
-    );
+    // If roommates haven't loaded yet or roomspace changed, load them
+    if (_roommates.isEmpty || _currentRoomspaceId != activeRoomspaceId) {
+      try {
+        // Show loading indicator
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Loading roomspace members...'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+
+        final response = await _smartApi.getRoomspaceMembers(activeRoomspaceId);
+        
+        if (response['success'] == true && response['data'] != null) {
+          final members = response['data'] as List;
+          _roommates = members
+              .map((m) {
+                // Extract user name from nested user object or fallback to direct fields
+                String userName = 'Unknown';
+                if (m['user'] != null && m['user']['name'] != null) {
+                  userName = m['user']['name'];
+                } else if (m['user_name'] != null) {
+                  userName = m['user_name'];
+                } else if (m['name'] != null) {
+                  userName = m['name'];
+                }
+                
+                return RoommateItem(
+                  id: m['user_id'] ?? '',
+                  name: userName,
+                );
+              })
+              .toList();
+          _currentRoomspaceId = activeRoomspaceId;
+          
+          // Allow adding expense even with just one member (yourself)
+          // This is useful for tracking expenses before others join
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to load members: ${response['message'] ?? 'Unknown error'}'),
+              ),
+            );
+          }
+          return;
+        }
+      } catch (e) {
+        debugPrint('Error loading roommates: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading members: ${e.toString()}'),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    // Show the dialog with loaded roommates (even if it's just you)
+    if (mounted) {
+      AddExpenseDialog.show(
+        context,
+        roommates: _roommates,
+        roomspaceId: _currentRoomspaceId!,
+        paymentNotification: paymentNotification,
+        onSubmit: _handleExpenseSubmission,
+      );
+    }
   }
 
   void _showPersonalExpenseDialog({PaymentNotification? paymentNotification}) {
@@ -452,8 +418,7 @@ class _MobileDashboardState extends State<MobileDashboard>
       onSubmit: (expense) async {
         try {
           final request = PersonalExpenseCreateRequest.fromExpenseData(expense);
-          await _apiService.createPersonalExpense(request.toJson());
-          await _refreshRecentExpenses();
+          await _smartApi.createPersonalExpense(request.toJson());
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -629,8 +594,12 @@ class _MobileDashboardState extends State<MobileDashboard>
     try {
       final request = ExpenseCreateRequest.fromExpenseData(
           expense, _currentRoomspaceId!);
-      await _apiService.createExpense(request.toJson());
-      await _refreshRecentExpenses();
+      
+      // Debug: Log the request data
+      debugPrint('Creating expense with paid_by: ${request.paidBy}');
+      debugPrint('Request JSON: ${request.toJson()}');
+      
+      await _smartApi.createExpense(request.toJson());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -654,64 +623,70 @@ class _MobileDashboardState extends State<MobileDashboard>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    
     final user = FirebaseAuth.instance.currentUser;
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     return MobileScaffold(
       currentIndex: 0,
       showAppBar: false,
-      body: SingleChildScrollView(
+      showBottomNav: false, // Hide bottom nav since MainNavigation handles it
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _loadDashboardData(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return _buildErrorState(primaryColor);
+          }
+          
+          if (snapshot.hasData) {
+            return RefreshIndicator(
+              onRefresh: () async {
+                _cachedDashboardData = null;
+                _lastDataLoad = null;
+                setState(() {}); // Trigger rebuild with fresh data
+              },
+              child: _buildDashboardContent(context, snapshot.data!, user, primaryColor),
+            );
+          }
+          
+          return _buildLoadingSkeleton();
+        },
+      ),
+    );
+  }
+
+  Widget _buildErrorState(Color primaryColor) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ── Header ──
-            _buildHeader(user, primaryColor),
-
-            // ── Quick actions ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: _buildQuickActions(primaryColor),
-            ),
-
-            // ── No roomspace prompt ──
-            if (!_hasRoomspace && !_isLoading)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: _buildNoRoomspaceCard(primaryColor),
-              ),
-
-            // ── Recent Activity ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Recent Activity',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A1A2E),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        Navigator.pushNamed(context, '/expenses'),
-                    child: Text(
-                      'View All',
-                      style: TextStyle(
-                          color: primaryColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
+            Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            const Text(
+              'Couldn\'t load dashboard',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1A1A2E),
               ),
             ),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: _buildRecentActivityList(primaryColor),
+            const SizedBox(height: 8),
+            Text(
+              'Please try again',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                _cachedDashboardData = null;
+                _lastDataLoad = null;
+                setState(() {}); // Trigger rebuild
+              },
+              child: const Text('Try Again'),
             ),
           ],
         ),
@@ -719,12 +694,154 @@ class _MobileDashboardState extends State<MobileDashboard>
     );
   }
 
+  Widget _buildDashboardContent(
+    BuildContext context,
+    Map<String, dynamic> dashboardData,
+    User? user,
+    Color primaryColor,
+  ) {
+    final isPersonalSpace = dashboardData['isPersonalSpace'] as bool? ?? true;
+    final hasRoomspace = dashboardData['hasRoomspace'] as bool? ?? false;
+    final roomspaceId = dashboardData['roomspaceId'] as String?;
+    
+    // Extract data with better null safety
+    final notifications = dashboardData['notifications'] as Map<String, dynamic>? ?? {'data': []};
+    final personalExpenses = dashboardData['personalExpenses'] as Map<String, dynamic>? ?? {'data': []};
+    final roomspaceExpenses = dashboardData['roomspaceExpenses'] as Map<String, dynamic>? ?? {'data': []};
+    final balances = dashboardData['balances'] as Map<String, dynamic>? ?? {'data': {}};
+    final members = dashboardData['members'] as Map<String, dynamic>? ?? {'data': []};
+
+    // Calculate unread notifications
+    final notificationsList = notifications['data'] as List<dynamic>? ?? [];
+    final unreadCount = notificationsList.where((n) => n['is_read'] != true).length;
+
+    // Update local state for dialogs
+    _hasRoomspace = hasRoomspace;
+    _currentRoomspaceId = roomspaceId;
+    
+    // Safely process members data
+    _roommates = [];
+    if (members.containsKey('data') && members['data'] is List) {
+      final membersList = members['data'] as List<dynamic>;
+      _roommates = membersList
+          .map((m) {
+            if (m is! Map<String, dynamic>) return null;
+            
+            String userName = 'Unknown';
+            if (m['user'] != null && m['user']['name'] != null) {
+              userName = m['user']['name'];
+            } else if (m['user_name'] != null) {
+              userName = m['user_name'];
+            } else if (m['name'] != null) {
+              userName = m['name'];
+            }
+            
+            return RoommateItem(
+              id: m['user_id']?.toString() ?? '',
+              name: userName,
+            );
+          })
+          .where((item) => item != null)
+          .cast<RoommateItem>()
+          .toList();
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ──
+          _buildHeader(user, primaryColor, isPersonalSpace, balances, unreadCount),
+
+          // ── Quick actions ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: _buildQuickActions(primaryColor),
+          ),
+
+          // ── No roomspace prompt ──
+          if (!hasRoomspace)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: _buildNoRoomspaceCard(primaryColor),
+            ),
+
+          // ── Recent Activity ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Recent Activity',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A2E),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/expenses'),
+                  child: Text(
+                    'View All',
+                    style: TextStyle(
+                        color: primaryColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: _buildRecentActivityList(primaryColor, personalExpenses, roomspaceExpenses),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingSkeleton() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Header skeleton
+          const SizedBox(height: 56),
+          const SkeletonLoader(height: 80, borderRadius: BorderRadius.all(Radius.circular(12))),
+          const SizedBox(height: 20),
+          
+          // Balance cards skeleton
+          Row(
+            children: [
+              Expanded(child: const SkeletonLoader(height: 100, borderRadius: BorderRadius.all(Radius.circular(12)))),
+              const SizedBox(width: 12),
+              Expanded(child: const SkeletonLoader(height: 100, borderRadius: BorderRadius.all(Radius.circular(12)))),
+            ],
+          ),
+          const SizedBox(height: 20),
+          
+          // Quick actions skeleton
+          const SkeletonLoader(height: 120, borderRadius: BorderRadius.all(Radius.circular(12))),
+          const SizedBox(height: 20),
+          
+          // Recent expenses skeleton
+          ...List.generate(3, (index) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: const SkeletonLoader(height: 70, borderRadius: BorderRadius.all(Radius.circular(12))),
+          )),
+        ],
+      ),
+    );
+  }
+
   // ──────────────────────────────────────────
   // HEADER
   // ──────────────────────────────────────────
-  Widget _buildHeader(User? user, Color primaryColor) {
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
-    final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+  Widget _buildHeader(User? user, Color primaryColor, bool isPersonalSpace, Map<String, dynamic> balances, int unreadCount) {
 
     return Container(
       width: double.infinity,
@@ -762,30 +879,33 @@ class _MobileDashboardState extends State<MobileDashboard>
               // Roomspace switcher
               GlobalRoomspaceSelector(
                 onRoomspaceChanged: () {
-                  _checkRoomspace();
-                  _loadRecentExpenses();
+                  // Force refresh dashboard when roomspace changes
+                  _state.forceRefresh(ScreenKeys.dashboard);
+                  setState(() {});
                 },
               ),
               const SizedBox(width: 4),
               // Notification bell
-              _buildNotificationButton(primaryColor),
+              _buildNotificationButton(primaryColor, unreadCount),
             ],
           ),
 
           const SizedBox(height: 16),
 
           // Balance row — only in roomspace mode
-          if (!isPersonalSpace) _buildBalanceRow(),
+          if (!isPersonalSpace) _buildBalanceRow(balances),
         ],
       ),
     );
   }
 
-  Widget _buildNotificationButton(Color primaryColor) {
+  Widget _buildNotificationButton(Color primaryColor, int unreadCount) {
     return GestureDetector(
       onTap: () async {
         await Navigator.pushNamed(context, '/notifications');
-        _loadUnreadCount();
+        // Force refresh dashboard to update notification count
+        _state.forceRefresh(ScreenKeys.dashboard);
+        setState(() {});
       },
       child: Stack(
         children: [
@@ -798,7 +918,7 @@ class _MobileDashboardState extends State<MobileDashboard>
             child: Icon(Icons.notifications_outlined,
                 size: 20, color: Colors.grey.shade600),
           ),
-          if (_unreadNotificationCount > 0)
+          if (unreadCount > 0)
             Positioned(
               right: 0,
               top: 0,
@@ -811,9 +931,7 @@ class _MobileDashboardState extends State<MobileDashboard>
                 constraints:
                     const BoxConstraints(minWidth: 14, minHeight: 14),
                 child: Text(
-                  _unreadNotificationCount > 9
-                      ? '9+'
-                      : '$_unreadNotificationCount',
+                  unreadCount > 9 ? '9+' : '$unreadCount',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 8,
@@ -828,12 +946,26 @@ class _MobileDashboardState extends State<MobileDashboard>
     );
   }
 
-  Widget _buildBalanceRow() {
+  Widget _buildBalanceRow(Map<String, dynamic> balances) {
+    // Extract balance data - handle both object and array responses
+    dynamic balanceData = balances['data'];
+    
+    // If data is a list, try to get the first item, otherwise use as map
+    Map<String, dynamic> balanceMap = {};
+    if (balanceData is List && balanceData.isNotEmpty) {
+      balanceMap = balanceData.first as Map<String, dynamic>? ?? {};
+    } else if (balanceData is Map<String, dynamic>) {
+      balanceMap = balanceData;
+    }
+    
+    final youOwe = (balanceMap['you_owe'] as num?)?.toDouble() ?? 0.0;
+    final youAreOwed = (balanceMap['you_are_owed'] as num?)?.toDouble() ?? 0.0;
+    
     return Row(
       children: [
-        Expanded(child: _buildBalanceTile('You are owed', _youAreOwed, true)),
+        Expanded(child: _buildBalanceTile('You\'ll get back', youAreOwed, true)),
         const SizedBox(width: 10),
-        Expanded(child: _buildBalanceTile('You owe', _youOwe, false)),
+        Expanded(child: _buildBalanceTile('You need to pay', youOwe, false)),
       ],
     );
   }
@@ -843,39 +975,61 @@ class _MobileDashboardState extends State<MobileDashboard>
         ? const Color(0xFF2E7D32) // dark green
         : const Color(0xFFC62828); // dark red
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFEEEEF2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style:
-                  TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-          const SizedBox(height: 4),
-          _isLoadingBalance
-              ? SizedBox(
-                  height: 22,
-                  width: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: valueColor,
-                  ),
-                )
-              : Text(
-                  'Rs. ${amount.round()}',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: valueColor,
+    return GestureDetector(
+      onTap: amount > 0 ? () => _showBalanceDetails(isPositive, amount) : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7F7FB),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFEEEEF2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                   ),
                 ),
-        ],
+                if (amount > 0)
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 10,
+                    color: Colors.grey.shade400,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Rs. ${amount.round()}',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: valueColor,
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  void _showBalanceDetails(bool isOwed, double actualBalance) {
+    final roomspaceProvider =
+        Provider.of<RoomspaceProvider>(context, listen: false);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+
+    if (activeRoomspaceId == null) return;
+
+    BalanceDetailsDialog.show(
+      context,
+      roomspaceId: activeRoomspaceId,
+      isOwed: isOwed,
+      actualBalance: actualBalance,
     );
   }
 
@@ -973,8 +1127,26 @@ class _MobileDashboardState extends State<MobileDashboard>
   // ──────────────────────────────────────────
   // RECENT ACTIVITY LIST
   // ──────────────────────────────────────────
-  Widget _buildRecentActivityList(Color primaryColor) {
-    if (_isLoadingExpenses) {
+  Widget _buildRecentActivityList(
+    Color primaryColor, 
+    Map<String, dynamic> personalExpenses, 
+    Map<String, dynamic> roomspaceExpenses,
+  ) {
+    // Extract expense data
+    final personalExpensesList = personalExpenses['data'] as List<dynamic>? ?? [];
+    final roomspaceExpensesList = roomspaceExpenses['data'] as List<dynamic>? ?? [];
+    
+    // Check for loading states
+    final isLoadingPersonal = personalExpenses['loading'] == true;
+    final isLoadingRoomspace = roomspaceExpenses['loading'] == true;
+    final isLoading = isLoadingPersonal || isLoadingRoomspace;
+    
+    // Check for errors
+    final personalError = personalExpenses['error'] as String?;
+    final roomspaceError = roomspaceExpenses['error'] as String?;
+    final hasError = personalError != null || roomspaceError != null;
+    
+    if (isLoading) {
       return const Column(
         children: [
           SizedBox(height: 8),
@@ -984,7 +1156,8 @@ class _MobileDashboardState extends State<MobileDashboard>
       );
     }
 
-    if (_expensesError != null) {
+    if (hasError) {
+      final errorMessage = personalError ?? roomspaceError ?? 'Unknown error';
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: Center(
@@ -993,11 +1166,15 @@ class _MobileDashboardState extends State<MobileDashboard>
               Icon(Icons.wifi_off_rounded,
                   size: 36, color: Colors.grey.shade300),
               const SizedBox(height: 10),
-              Text(_expensesError!,
+              Text(errorMessage,
                   style: TextStyle(color: Colors.grey.shade500)),
               const SizedBox(height: 8),
               TextButton(
-                onPressed: _refreshRecentExpenses,
+                onPressed: () {
+                  // Force refresh dashboard
+                  _state.forceRefresh(ScreenKeys.dashboard);
+                  setState(() {});
+                },
                 child: const Text('Retry'),
               ),
               const SizedBox(height: 100),
@@ -1007,16 +1184,55 @@ class _MobileDashboardState extends State<MobileDashboard>
       );
     }
 
-    // Merge shared + personal, sort by date
+    // Combine and sort expenses by date
     final combined = <Map<String, dynamic>>[];
-    for (final e in _recentExpenses) {
-      combined.add({'type': 'shared', 'data': e, 'date': e.createdAt ?? DateTime.now()});
+    
+    // Add personal expenses with safety checks
+    for (final expense in personalExpensesList) {
+      if (expense is! Map<String, dynamic>) continue;
+      
+      final createdAt = expense['created_at'] as String?;
+      DateTime date = DateTime.now();
+      if (createdAt != null) {
+        try {
+          date = DateTime.parse(createdAt);
+        } catch (e) {
+          // Use current time if parsing fails
+        }
+      }
+      
+      combined.add({
+        'type': 'personal',
+        'data': expense,
+        'date': date,
+      });
     }
-    for (final e in _recentPersonalExpenses) {
-      combined.add({'type': 'personal', 'data': e, 'date': e.createdAt ?? DateTime.now()});
+    
+    // Add roomspace expenses with safety checks
+    for (final expense in roomspaceExpensesList) {
+      if (expense is! Map<String, dynamic>) continue;
+      
+      final createdAt = expense['created_at'] as String?;
+      DateTime date = DateTime.now();
+      if (createdAt != null) {
+        try {
+          date = DateTime.parse(createdAt);
+        } catch (e) {
+          // Use current time if parsing fails
+        }
+      }
+      
+      combined.add({
+        'type': 'shared',
+        'data': expense,
+        'date': date,
+      });
     }
-    combined.sort((a, b) =>
-        (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    
+    // Sort by date (newest first)
+    combined.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    
+    // Take only the most recent 5
     final recent = combined.take(5).toList();
 
     if (recent.isEmpty) {
@@ -1057,13 +1273,22 @@ class _MobileDashboardState extends State<MobileDashboard>
 
     return Column(
       children: [
-        ...recent.map((map) {
-          if (map['type'] == 'shared') {
-            return _buildSharedTile(map['data'] as ExpenseData);
-          } else {
-            return _buildPersonalTile(map['data'] as PersonalExpenseData);
+        ...recent.map((expenseMap) {
+          try {
+            final expenseData = expenseMap['data'] as Map<String, dynamic>;
+            final type = expenseMap['type'] as String;
+            
+            if (type == 'shared') {
+              return _buildSharedTileFromData(expenseData);
+            } else {
+              return _buildPersonalTileFromData(expenseData);
+            }
+          } catch (e) {
+            debugPrint('Error rendering expense tile: $e');
+            // Return empty container for invalid expense data
+            return const SizedBox.shrink();
           }
-        }),
+        }).where((widget) => widget is! SizedBox || (widget as SizedBox).height != 0),
         const SizedBox(height: 100),
       ],
     );
@@ -1072,6 +1297,59 @@ class _MobileDashboardState extends State<MobileDashboard>
   // ──────────────────────────────────────────
   // EXPENSE TILES
   // ──────────────────────────────────────────
+  Widget _buildSharedTileFromData(Map<String, dynamic> expense) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final paidBy = expense['paid_by'] as String?;
+    final isPaidByMe = paidBy == currentUser?.uid;
+    final title = expense['title'] as String? ?? 'Unknown Expense';
+    final amount = (expense['amount'] as num?)?.toDouble() ?? 0.0;
+    final payerName = expense['payer_name'] as String?;
+    final createdAt = expense['created_at'] as String?;
+    
+    DateTime? date;
+    if (createdAt != null) {
+      try {
+        date = DateTime.parse(createdAt);
+      } catch (e) {
+        date = DateTime.now();
+      }
+    }
+
+    return _ExpenseTile(
+      title: title,
+      subtitle: isPaidByMe ? 'You paid' : '${payerName ?? 'Someone'} paid',
+      amount: 'Rs. ${amount.toStringAsFixed(0)}',
+      amountColor: isPaidByMe ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+      date: _formatDate(date),
+      icon: Icons.receipt_long_outlined,
+    );
+  }
+
+  Widget _buildPersonalTileFromData(Map<String, dynamic> expense) {
+    final title = expense['title'] as String? ?? 'Unknown Expense';
+    final amount = (expense['amount'] as num?)?.toDouble() ?? 0.0;
+    final category = expense['category'] as String? ?? 'Personal';
+    final createdAt = expense['created_at'] as String?;
+    
+    DateTime? date;
+    if (createdAt != null) {
+      try {
+        date = DateTime.parse(createdAt);
+      } catch (e) {
+        date = DateTime.now();
+      }
+    }
+
+    return _ExpenseTile(
+      title: title,
+      subtitle: category,
+      amount: 'Rs. ${amount.toStringAsFixed(0)}',
+      amountColor: const Color(0xFF1A1A2E),
+      date: _formatDate(date),
+      icon: Icons.account_balance_wallet_outlined,
+    );
+  }
+
   Widget _buildSharedTile(ExpenseData expense) {
     final currentUser = FirebaseAuth.instance.currentUser;
     final isPaidByMe = expense.paidBy == currentUser?.uid;

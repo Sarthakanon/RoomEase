@@ -86,9 +86,14 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen> w
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        key: const ValueKey('record_payment_fab'),
         onPressed: _showRecordDialog,
-        backgroundColor: primary, foregroundColor: Colors.white, elevation: 2,
-        icon: const Icon(Icons.add_rounded), label: const Text('Record Payment', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+        backgroundColor: primary, 
+        foregroundColor: Colors.white, 
+        elevation: 2,
+        tooltip: 'Record Payment',
+        icon: const Icon(Icons.add_rounded), 
+        label: const Text('Record Payment', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
       ),
     );
   }

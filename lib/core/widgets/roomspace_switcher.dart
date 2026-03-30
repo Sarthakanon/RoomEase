@@ -271,9 +271,23 @@ class _RoomspaceSelectorSheetState extends State<_RoomspaceSelectorSheet>
       child: SlideTransition(
         position: _slideAnimation,
         child: Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFFF8F9FA),
+                Colors.white,
+              ],
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
           ),
           child: SafeArea(
             child: Column(
@@ -281,33 +295,92 @@ class _RoomspaceSelectorSheetState extends State<_RoomspaceSelectorSheet>
               children: [
                 // Handle bar
                 Container(
-                  margin: const EdgeInsets.only(top: 12),
-                  width: 40,
-                  height: 4,
+                  margin: const EdgeInsets.only(top: 14),
+                  width: 48,
+                  height: 5,
                   decoration: BoxDecoration(
                     color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(3),
                   ),
                 ),
                 
-                // Header
-                Padding(
+                // Header with gradient background
+                Container(
+                  margin: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                   padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF6366F1).withValues(alpha: 0.1),
+                        const Color(0xFF8B5CF6).withValues(alpha: 0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                      width: 1.5,
+                    ),
+                  ),
                   child: Row(
                     children: [
-                      Text(
-                        'Switch Roomspace',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.swap_horiz_rounded,
+                          color: Color(0xFF6366F1),
+                          size: 24,
                         ),
                       ),
-                      const Spacer(),
-                      Text(
-                        '${widget.provider.roomspaceCount}/5',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Switch Roomspace',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF1A1A2E),
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Select your active space',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.grey[300]!,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          '${widget.provider.roomspaceCount}/5',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A1A2E),
+                          ),
                         ),
                       ),
                     ],
@@ -317,19 +390,40 @@ class _RoomspaceSelectorSheetState extends State<_RoomspaceSelectorSheet>
                 // Roomspace list
                 Flexible(
                   child: isLoading
-                      ? const Padding(
-                          padding: EdgeInsets.all(16),
+                      ? Padding(
+                          padding: const EdgeInsets.all(32),
                           child: Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                CircularProgressIndicator(),
-                                SizedBox(height: 16),
-                                Text(
+                                Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Color(0xFF6366F1),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                const Text(
                                   'Switching roomspace...',
                                   style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1A1A2E),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Please wait a moment',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[600],
                                   ),
                                 ),
                               ],
@@ -338,7 +432,8 @@ class _RoomspaceSelectorSheetState extends State<_RoomspaceSelectorSheet>
                         )
                       : ListView.builder(
                           shrinkWrap: true,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          physics: const BouncingScrollPhysics(),
                           itemCount: widget.provider.roomspaces.length,
                           itemBuilder: (context, index) {
                             final roomspace = widget.provider.roomspaces[index];
@@ -362,7 +457,7 @@ class _RoomspaceSelectorSheetState extends State<_RoomspaceSelectorSheet>
                         ),
                 ),
                 
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -389,8 +484,9 @@ class _RoomspaceListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.only(bottom: 12),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      margin: const EdgeInsets.only(bottom: 14),
       child: AbsorbPointer(
         absorbing: isDisabled,
         child: Opacity(
@@ -399,121 +495,241 @@ class _RoomspaceListItem extends StatelessWidget {
             color: Colors.transparent,
             child: InkWell(
               onTap: onTap,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
+              splashColor: roomspace.visualColor.withValues(alpha: 0.1),
+              highlightColor: roomspace.visualColor.withValues(alpha: 0.05),
               child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isActive
-                  ? roomspace.visualColor.withValues(alpha: 0.1)
-                  : Colors.grey[50],
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isActive
-                    ? roomspace.visualColor.withValues(alpha: 0.3)
-                    : Colors.grey[200]!,
-                width: isActive ? 2 : 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                // Visual indicator
-                _RoomspaceIndicator(
-                  roomspace: roomspace,
-                  size: 48,
-                ),
-                
-                const SizedBox(width: 16),
-                
-                // Roomspace info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              roomspace.name,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: isActive
-                                    ? roomspace.visualColor
-                                    : Colors.black87,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: isActive
+                      ? LinearGradient(
+                          colors: [
+                            roomspace.visualColor.withValues(alpha: 0.12),
+                            roomspace.visualColor.withValues(alpha: 0.06),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: isActive ? null : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isActive
+                        ? roomspace.visualColor.withValues(alpha: 0.4)
+                        : Colors.grey[200]!,
+                    width: isActive ? 2.5 : 1.5,
+                  ),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: roomspace.visualColor.withValues(alpha: 0.15),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
-                          if (isActive)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: roomspace.visualColor,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'Active',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                ),
+                child: Row(
+                  children: [
+                    // Visual indicator with enhanced styling
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            roomspace.visualColor.withValues(alpha: 0.2),
+                            roomspace.visualColor.withValues(alpha: 0.1),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: roomspace.visualColor.withValues(alpha: 0.3),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: roomspace.visualColor.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        roomspace.visualIcon,
+                        color: roomspace.visualColor,
+                        size: 28,
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 16),
+                    
+                    // Roomspace info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  roomspace.name,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: isActive
+                                        ? roomspace.visualColor
+                                        : const Color(0xFF1A1A2E),
+                                    letterSpacing: -0.3,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                            ),
+                              if (isActive)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        roomspace.visualColor,
+                                        roomspace.visualColor.withValues(alpha: 0.8),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(10),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: roomspace.visualColor.withValues(alpha: 0.3),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle,
+                                        size: 12,
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Active',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.people_rounded,
+                                      size: 13,
+                                      color: Colors.grey[700],
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${roomspace.memberCount}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.key_rounded,
+                                      size: 13,
+                                      color: Colors.grey[700],
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      roomspace.inviteCode,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.grey[700],
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.people_outline,
-                            size: 14,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${roomspace.memberCount} members',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Icon(
-                            Icons.vpn_key_outlined,
-                            size: 14,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            roomspace.inviteCode,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[600],
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        ],
+                    ),
+                    
+                    const SizedBox(width: 12),
+                    
+                    // Arrow/Check indicator
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? roomspace.visualColor.withValues(alpha: 0.15)
+                            : Colors.grey[100],
+                        shape: BoxShape.circle,
                       ),
-                    ],
-                  ),
+                      child: Icon(
+                        isActive
+                            ? Icons.check_circle_rounded
+                            : Icons.arrow_forward_ios_rounded,
+                        color: isActive ? roomspace.visualColor : Colors.grey[400],
+                        size: isActive ? 22 : 16,
+                      ),
+                    ),
+                  ],
                 ),
-                
-                // Arrow indicator
-                Icon(
-                  isActive
-                      ? Icons.check_circle_rounded
-                      : Icons.arrow_forward_ios_rounded,
-                  color: isActive ? roomspace.visualColor : Colors.grey[400],
-                  size: isActive ? 24 : 16,
-                ),
-              ],
-            ),
-          ),
+              ),
             ),
           ),
         ),

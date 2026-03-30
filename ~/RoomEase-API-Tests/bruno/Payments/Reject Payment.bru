@@ -1,0 +1,22 @@
+meta {
+  name: Reject Payment
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{base_url}}/api/roomspaces/{{roomspace_id}}/payments/1/reject
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}
+
+body:json {
+  {
+    "reason": "Wrong amount"
+  }
+}

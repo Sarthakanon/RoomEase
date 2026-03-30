@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../models/analytics_models.dart';
 import '../../../services/analytics_service.dart';
+import '../../../services/smart_api_service.dart';
+import '../../../services/state_management_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
 import '../../../core/widgets/global_roomspace_selector.dart';
 import '../../../providers/roomspace_provider.dart';
+import '../../../widgets/smart_future_builder.dart';
 import '../widgets/spending_trends_chart.dart';
 import '../widgets/category_breakdown_chart.dart';
 import '../widgets/recommendations_card.dart';
@@ -19,76 +22,106 @@ class AnalyticsPage extends StatefulWidget {
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
-class _AnalyticsPageState extends State<AnalyticsPage> {
+class _AnalyticsPageState extends State<AnalyticsPage> 
+    with AutomaticKeepAliveClientMixin {
   final AnalyticsService _analyticsService = AnalyticsService();
+  final SmartApiService _smartApi = SmartApiService();
+  final StateManagementService _state = StateManagementService();
 
-  bool _isLoading = true;
-  String? _error;
-  DateTime? _lastUpdated;
-  bool _isUsingCache = false;
+  @override
+  bool get wantKeepAlive => true; // Keep state alive when switching tabs
 
-  AnalyticsSummary? _summary;
+  // Cache analytics data to prevent reloading
+  Map<String, dynamic>? _cachedAnalyticsData;
+  DateTime? _lastDataLoad;
+  static const Duration _cacheValidDuration = Duration(minutes: 5);
+  
   String? _currentRoomspaceId;
 
   @override
   void initState() {
     super.initState();
-    _loadAnalytics();
+    
+    // Listen for roomspace changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final roomspaceProvider =
+          Provider.of<RoomspaceProvider>(context, listen: false);
+      roomspaceProvider.addListener(_onRoomspaceChanged);
+    });
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
-    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-
-    if (activeRoomspaceId != _currentRoomspaceId && activeRoomspaceId != null) {
-      _currentRoomspaceId = activeRoomspaceId;
-      _loadAnalytics();
-    }
+  void dispose() {
+    final roomspaceProvider =
+        Provider.of<RoomspaceProvider>(context, listen: false);
+    roomspaceProvider.removeListener(_onRoomspaceChanged);
+    super.dispose();
   }
 
-  Future<void> _loadAnalytics() async {
-    if (!mounted) return;
+  /// Called automatically when the active roomspace changes
+  void _onRoomspaceChanged() {
+    // Clear cached data when roomspace changes
+    _cachedAnalyticsData = null;
+    _lastDataLoad = null;
+    
+    // Force refresh analytics when roomspace changes
+    _state.forceRefresh(ScreenKeys.analytics);
+    setState(() {}); // Trigger rebuild to refresh UI
+  }
+
+  /// Smart data loader for analytics with caching
+  Future<Map<String, dynamic>> _loadAnalyticsData({bool forceRefresh = false}) async {
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh && 
+        _cachedAnalyticsData != null && 
+        _lastDataLoad != null &&
+        DateTime.now().difference(_lastDataLoad!) < _cacheValidDuration) {
+      debugPrint('🚀 Using cached analytics data');
+      return Future.value(_cachedAnalyticsData!); // Return as completed Future
+    }
+
+    debugPrint('🌐 Loading fresh analytics data...');
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
 
     try {
       final summary = await _analyticsService.getSummary(roomspaceId: activeRoomspaceId);
       final cacheKey = _analyticsService.getSummaryCacheKey(roomspaceId: activeRoomspaceId);
       final cacheTimestamp = await _analyticsService.getCacheTimestamp(cacheKey);
 
-      if (mounted) {
-        setState(() {
-          _summary = summary;
-          _isLoading = false;
-          _lastUpdated = cacheTimestamp ?? DateTime.now();
-          _isUsingCache = cacheTimestamp != null;
-        });
-      }
+      final analyticsData = {
+        'summary': summary,
+        'roomspaceId': activeRoomspaceId,
+        'lastUpdated': cacheTimestamp ?? DateTime.now(),
+        'isUsingCache': cacheTimestamp != null,
+      };
+
+      // Cache the data
+      _cachedAnalyticsData = analyticsData;
+      _lastDataLoad = DateTime.now();
+      _currentRoomspaceId = activeRoomspaceId;
+      debugPrint('💾 Analytics data cached at ${_lastDataLoad}');
+
+      return analyticsData;
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
+      debugPrint('Error loading analytics: $e');
+      return {
+        'error': e.toString(),
+        'roomspaceId': activeRoomspaceId,
+      };
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
     final activeRoomspace = roomspaceProvider.activeRoomspace;
 
     return MobileScaffold(
       currentIndex: 3,
-      showBottomNav: true,
+      showBottomNav: false, // Hide bottom nav since MainNavigation handles it
       showAppBar: false,
       body: SafeArea(
         child: Container(
@@ -96,9 +129,117 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           child: Column(
             children: [
               _buildHeader(activeRoomspace?.name),
-              Expanded(child: _buildAnalyticsView()),
+              Expanded(
+                child: FutureBuilder<Map<String, dynamic>>(
+                  future: _loadAnalyticsData(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return _buildErrorState();
+                    }
+                    
+                    if (snapshot.hasData) {
+                      return RefreshIndicator(
+                        onRefresh: () async {
+                          _cachedAnalyticsData = null;
+                          _lastDataLoad = null;
+                          setState(() {}); // Trigger rebuild with fresh data
+                        },
+                        child: _buildAnalyticsContent(context, snapshot.data!),
+                      );
+                    }
+                    
+                    return _buildLoadingSkeleton();
+                  },
+                ),
+              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsContent(
+    BuildContext context,
+    Map<String, dynamic> analyticsData,
+  ) {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    
+    // Check for error
+    final error = analyticsData['error'] as String?;
+    if (error != null) {
+      return _buildErrorState();
+    }
+    
+    // Extract summary
+    final summary = analyticsData['summary'] as AnalyticsSummary?;
+    if (summary == null) {
+      return _buildErrorState();
+    }
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHealthScore(summary),
+          const SizedBox(height: 20),
+          _buildSmartInsightBubble(summary),
+          const SizedBox(height: 24),
+          _buildMetricsGrid(summary),
+          const SizedBox(height: 24),
+          SpendingTrendsChart(roomspaceId: activeRoomspaceId),
+          const SizedBox(height: 24),
+          CategoryBreakdownChart(categories: summary.topCategories),
+          const SizedBox(height: 24),
+          RecommendationsCard(roomspaceId: activeRoomspaceId),
+          const SizedBox(height: 24),
+          PredictionsCard(roomspaceId: activeRoomspaceId),
+          const SizedBox(height: 24),
+          AnomalyAlertCard(roomspaceId: activeRoomspaceId),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingSkeleton() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: const [
+        SummarySkeletonLoader(),
+        SizedBox(height: 16),
+        ChartSkeletonLoader(),
+        SizedBox(height: 16),
+        ListItemSkeletonLoader(),
+        ListItemSkeletonLoader(),
+      ],
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.query_stats_rounded, size: 64, color: Colors.indigo.withOpacity(0.1)),
+            const SizedBox(height: 16),
+            Text('No analytics found',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                _cachedAnalyticsData = null;
+                _lastDataLoad = null;
+                _state.forceRefresh(ScreenKeys.analytics);
+              }, 
+              child: const Text('Retry Refresh')
+            ),
+          ],
         ),
       ),
     );
@@ -137,76 +278,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ),
           ),
           const SizedBox(width: 8),
-          const GlobalRoomspaceSelector(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnalyticsView() {
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
-
-    if (_isLoading) {
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: const [
-          SummarySkeletonLoader(),
-          SizedBox(height: 16),
-          ChartSkeletonLoader(),
-          SizedBox(height: 16),
-          ListItemSkeletonLoader(),
-          ListItemSkeletonLoader(),
-        ],
-      );
-    }
-
-    if (_error != null || _summary == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.query_stats_rounded, size: 64, color: Colors.indigo.withOpacity(0.1)),
-              const SizedBox(height: 16),
-              Text('No analytics found',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              TextButton(onPressed: _loadAnalytics, child: const Text('Retry Refresh')),
-            ],
+          GlobalRoomspaceSelector(
+            onRoomspaceChanged: () {
+              // Clear cache when roomspace changes
+              _cachedAnalyticsData = null;
+              _lastDataLoad = null;
+              _state.forceRefresh(ScreenKeys.analytics);
+              setState(() {}); // Trigger rebuild to refresh UI
+            },
           ),
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadAnalytics,
-      color: Colors.indigo,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHealthScore(_summary!),
-            const SizedBox(height: 20),
-            _buildSmartInsightBubble(_summary!),
-            const SizedBox(height: 24),
-            _buildMetricsGrid(_summary!),
-            const SizedBox(height: 24),
-            SpendingTrendsChart(roomspaceId: activeRoomspaceId),
-            const SizedBox(height: 24),
-            CategoryBreakdownChart(categories: _summary!.topCategories),
-            const SizedBox(height: 24),
-            RecommendationsCard(roomspaceId: activeRoomspaceId),
-            const SizedBox(height: 24),
-            PredictionsCard(roomspaceId: activeRoomspaceId),
-            const SizedBox(height: 24),
-            AnomalyAlertCard(roomspaceId: activeRoomspaceId),
-          ],
-        ),
+        ],
       ),
     );
   }

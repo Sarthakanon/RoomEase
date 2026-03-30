@@ -1,0 +1,26 @@
+meta {
+  name: Create Payment Confirmation
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/roomspaces/{{roomspace_id}}/payments/confirm
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}
+
+body:json {
+  {
+    "to_user_id": "{{other_user_id}}",
+    "amount": 2405.2,
+    "payment_type": "FULL",
+    "notes": "Full payment for expenses",
+    "payment_date": "2026-02-01T12:00:00Z"
+  }
+}

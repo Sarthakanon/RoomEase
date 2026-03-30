@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import '../../../models/expense_models.dart';
 import '../../../models/payment_notification.dart';
 import '../../../services/payment_parser_service.dart';
@@ -70,28 +71,61 @@ class _PersonalExpenseDialogState extends State<PersonalExpenseDialog> {
   }
 
   void _autoFillFromPaymentNotification() {
-    if (widget.paymentNotification == null) return;
-    final n = widget.paymentNotification!;
-    if (n.amount != null) _amountController.text = n.amount!.toStringAsFixed(0);
-    _titleController.text = n.merchant ?? 'Payment via ${n.appName}';
-    final suggested = PaymentParserService.suggestExpenseCategory(n.merchant, n.rawText);
-    _selectedCategory = _categories.any((c) => c.name == suggested) ? suggested : 'General';
-    _descriptionController.text = 'Personal · From ${n.appName}';
+    if (widget.paymentNotification == null || !mounted) return;
+    
+    try {
+      final n = widget.paymentNotification!;
+      if (n.amount != null) {
+        _amountController.text = n.amount!.toStringAsFixed(0);
+      }
+      _titleController.text = n.merchant ?? 'Payment via ${n.appName}';
+      
+      final suggested = PaymentParserService.suggestExpenseCategory(n.merchant, n.rawText);
+      _selectedCategory = _categories.any((c) => c.name == suggested) ? suggested : 'General';
+      _descriptionController.text = 'Personal · From ${n.appName}';
+    } catch (e) {
+      // Handle any errors gracefully without affecting the UI
+      debugPrint('Error auto-filling from payment notification: $e');
+    }
   }
 
   Future<void> _scanReceipt() async {
-    final result = await ReceiptScannerDialog.show(context);
-    if (result != null && mounted) {
-      if (result.amount != null) _amountController.text = result.amount!.toStringAsFixed(0);
-      if (result.merchant != null) _titleController.text = result.merchant!;
-      _descriptionController.text = 'Scanned from receipt';
-      setState(() {});
+    try {
+      final result = await ReceiptScannerDialog.show(context);
+      
+      // Check if widget is still mounted before using the result
+      if (result != null && mounted) {
+        if (result.amount != null) {
+          _amountController.text = result.amount!.toStringAsFixed(0);
+        }
+        if (result.merchant != null) {
+          _titleController.text = result.merchant!;
+        }
+        _descriptionController.text = 'Scanned from receipt';
+        
+        // Only call setState if widget is still mounted
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      // Handle any errors gracefully
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to scan receipt: ${e.toString()}';
+        });
+      }
     }
   }
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() { _isSubmitting = true; _errorMessage = null; });
+    
+    setState(() { 
+      _isSubmitting = true; 
+      _errorMessage = null; 
+    });
+    
     try {
       final expense = PersonalExpenseData(
         title: _titleController.text.trim(),
@@ -99,10 +133,21 @@ class _PersonalExpenseDialogState extends State<PersonalExpenseDialog> {
         description: _descriptionController.text.trim(),
         category: _selectedCategory,
       );
+      
       await widget.onSubmit(expense);
-      if (mounted) Navigator.pop(context);
+      
+      // Check if widget is still mounted before using context
+      if (mounted) {
+        Navigator.pop(context);
+      }
     } catch (e) {
-      if (mounted) setState(() { _isSubmitting = false; _errorMessage = e.toString(); });
+      // Check if widget is still mounted before calling setState
+      if (mounted) {
+        setState(() { 
+          _isSubmitting = false; 
+          _errorMessage = e.toString(); 
+        });
+      }
     }
   }
 

@@ -1,0 +1,270 @@
+{
+  "info": {
+    "name": "Admin Management API Tests",
+    "description": "Test cases for admin panel endpoints including user management and system statistics",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "default"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "testUserId",
+      "value": "test_user_firebase_uid",
+      "type": "default"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get System Statistics",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/stats",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "stats"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has system stats', function () { const json = pm.response.json(); pm.expect(json.data).to.have.property('total_users'); pm.expect(json.data).to.have.property('total_roomspaces'); pm.expect(json.data).to.have.property('total_expenses'); });"
+    },
+    {
+      "name": "Get All Users",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users?page=1&limit=50",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "50"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has users array', function () { const json = pm.response.json(); pm.expect(json.data).to.be.an('array'); pm.expect(json.pagination).to.have.property('total'); });"
+    },
+    {
+      "name": "Search Users",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users?search=test&page=1&limit=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users"],
+          "query": [
+            {
+              "key": "search",
+              "value": "test"
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "20"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has filtered users', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    },
+    {
+      "name": "Get User Details",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/{{testUserId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", "{{testUserId}}"]
+        }
+      },
+      "tests": "pm.test('Status code is 200 or 404', function () { pm.expect(pm.response.code).to.be.oneOf([200, 404]); }); if (pm.response.code === 200) { pm.test('Response has user details', function () { const json = pm.response.json(); pm.expect(json.data).to.have.property('user'); pm.expect(json.data).to.have.property('roomspace_count'); }); }"
+    },
+    {
+      "name": "Check User Ban Status",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/{{testUserId}}/ban-status",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", "{{testUserId}}", "ban-status"]
+        }
+      },
+      "tests": "pm.test('Status code is 200 or 404', function () { pm.expect(pm.response.code).to.be.oneOf([200, 404]); }); if (pm.response.code === 200) { pm.test('Response has ban status', function () { const json = pm.response.json(); pm.expect(json).to.have.property('is_banned'); }); }"
+    },
+    {
+      "name": "Ban User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reason\": \"Violation of terms of service - testing ban functionality\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/{{testUserId}}/ban",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", "{{testUserId}}", "ban"]
+        }
+      },
+      "tests": "pm.test('Status code is 200 or 404', function () { pm.expect(pm.response.code).to.be.oneOf([200, 404]); }); if (pm.response.code === 200) { pm.test('User banned successfully', function () { pm.expect(pm.response.json().message).to.include('banned'); }); }"
+    },
+    {
+      "name": "Unban User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/{{testUserId}}/unban",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", "{{testUserId}}", "unban"]
+        }
+      },
+      "tests": "pm.test('Status code is 200 or 404', function () { pm.expect(pm.response.code).to.be.oneOf([200, 404]); }); if (pm.response.code === 200) { pm.test('User unbanned successfully', function () { pm.expect(pm.response.json().message).to.include('unbanned'); }); }"
+    },
+    {
+      "name": "Ban User - Missing Reason",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"invalid_field\": \"test\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/{{testUserId}}/ban",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", "{{testUserId}}", "ban"]
+        }
+      },
+      "tests": "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+    },
+    {
+      "name": "Get User Details - Invalid ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/nonexistent_user_id",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", "nonexistent_user_id"]
+        }
+      },
+      "tests": "pm.test('Status code is 404', function () { pm.response.to.have.status(404); });"
+    },
+    {
+      "name": "Ban Nonexistent User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reason\": \"Testing ban on nonexistent user\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users/nonexistent_user_id/ban",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users", "nonexistent_user_id", "ban"]
+        }
+      },
+      "tests": "pm.test('Status code is 404', function () { pm.response.to.have.status(404); });"
+    },
+    {
+      "name": "Get Users with Large Limit",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/users?page=1&limit=1000",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "users"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "1000"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response handles large limit', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    }
+  ]
+}

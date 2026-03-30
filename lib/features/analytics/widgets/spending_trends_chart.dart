@@ -174,10 +174,21 @@ class _SpendingTrendsChartState extends State<SpendingTrendsChart> {
           ),
         ],
         lineTouchData: LineTouchData(
+          enabled: true,
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => const Color(0xFF1A1A2E),
-            getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem('Rs. ${s.y.toInt()}', const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))).toList(),
+            getTooltipItems: (touchedSpots) => touchedSpots.map((s) => 
+              LineTooltipItem(
+                'Rs. ${s.y.toInt()}', 
+                const TextStyle(
+                  color: Colors.white, 
+                  fontSize: 10, 
+                  fontWeight: FontWeight.bold
+                )
+              )
+            ).toList(),
           ),
+          handleBuiltInTouches: true,
         ),
       ),
     );

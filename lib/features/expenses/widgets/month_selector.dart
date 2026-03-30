@@ -6,10 +6,10 @@ class MonthSelector extends StatelessWidget {
   final ValueChanged<DateTime> onMonthChanged;
   
   const MonthSelector({
-    Key? key,
+    super.key,
     required this.selectedMonth,
     required this.onMonthChanged,
-  }) : super(key: key);
+  });
   
   @override
   Widget build(BuildContext context) {
@@ -28,6 +28,7 @@ class MonthSelector extends StatelessWidget {
         children: [
           // Previous month button
           IconButton(
+            key: const ValueKey('prev_month_btn'),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             icon: Icon(
@@ -71,6 +72,7 @@ class MonthSelector extends StatelessWidget {
           
           // Next month button
           IconButton(
+            key: const ValueKey('next_month_btn'),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             icon: Icon(

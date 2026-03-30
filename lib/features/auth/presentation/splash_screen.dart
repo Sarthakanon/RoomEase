@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_state_service.dart';
+import '../../../services/ban_monitoring_service.dart';
 import '../../../providers/roomspace_provider.dart';
+import '../../../widgets/ban_countdown_dialog.dart';
 import '../controllers/auth_controller.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -14,11 +17,35 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   final _authController = AuthController();
+  late StreamSubscription<String>? _banSubscription;
 
   @override
   void initState() {
     super.initState();
+    _setupBanListener();
     _checkAuthState();
+  }
+
+  @override
+  void dispose() {
+    _banSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupBanListener() {
+    _banSubscription = BanMonitoringService().banNotificationStream.listen((reason) {
+      if (mounted) {
+        _showBanDialog(reason);
+      }
+    });
+  }
+
+  void _showBanDialog(String reason) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => BanCountdownDialog(reason: reason),
+    );
   }
 
   Future<void> _checkAuthState() async {

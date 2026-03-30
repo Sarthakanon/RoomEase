@@ -3,8 +3,10 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/constants.dart';
+import 'ban_monitoring_service.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -38,25 +40,70 @@ class ApiService {
   }
 
   ApiService._internal() {
-    _cookieJar = CookieJar();
-
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
+        connectTimeout: const Duration(seconds: 30), // Increased from 10s
+        receiveTimeout: const Duration(seconds: 30), // Increased from 10s
+        sendTimeout: const Duration(seconds: 30), // Added send timeout
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Connection': 'keep-alive', // Keep connections alive
         },
       ),
     );
 
-    // Add cookie manager to persist cookies
-    _dio.interceptors.add(CookieManager(_cookieJar));
+    // Add cookie manager only for non-web platforms
+    if (!kIsWeb) {
+      _cookieJar = CookieJar();
+      _dio.interceptors.add(CookieManager(_cookieJar));
+    }
 
     _dio.interceptors.add(
       LogInterceptor(requestBody: true, responseBody: true, error: true),
+    );
+
+    // Add ban detection interceptor
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onResponse: (response, handler) {
+          print('📡 API Response: ${response.statusCode} - ${response.requestOptions.path}');
+          print('📡 Response Data: ${response.data}');
+          
+          // Check if response indicates user is banned
+          if (response.data is Map<String, dynamic>) {
+            final data = response.data as Map<String, dynamic>;
+            if (data['banned'] == true || 
+                (data['error'] != null && 
+                 (data['error'].toString().toLowerCase().contains('suspended') ||
+                  data['error'].toString().toLowerCase().contains('banned')))) {
+              final reason = data['error']?.toString() ?? 'Account suspended';
+              print('🚫 BAN DETECTED in response: $reason');
+              _handleBanResponse(reason);
+            }
+          }
+          handler.next(response);
+        },
+        onError: (error, handler) {
+          print('❌ API Error: ${error.response?.statusCode} - ${error.requestOptions.path}');
+          print('❌ Error Data: ${error.response?.data}');
+          
+          // Check if error response indicates user is banned
+          if (error.response?.data is Map<String, dynamic>) {
+            final data = error.response!.data as Map<String, dynamic>;
+            if (data['banned'] == true || 
+                (data['error'] != null && 
+                 (data['error'].toString().toLowerCase().contains('suspended') ||
+                  data['error'].toString().toLowerCase().contains('banned')))) {
+              final reason = data['error']?.toString() ?? 'Account suspended';
+              print('🚫 BAN DETECTED in error: $reason');
+              _handleBanResponse(reason);
+            }
+          }
+          handler.next(error);
+        },
+      ),
     );
   }
 
@@ -87,8 +134,10 @@ class ApiService {
   }
 
   Future<void> clearCookies() async {
-    // Clear all cookies from the cookie jar
-    await _cookieJar.deleteAll();
+    // Clear all cookies from the cookie jar (only on non-web platforms)
+    if (!kIsWeb) {
+      await _cookieJar.deleteAll();
+    }
   }
 
   Future<Map<String, dynamic>> login(String firebaseToken) async {
@@ -97,6 +146,15 @@ class ApiService {
         '/api/auth/login',
         data: {'firebase_token': firebaseToken},
       );
+      
+      // After successful login, check if user is banned
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await _checkUserBanStatus(user.uid);
+        // Start ban monitoring after successful login
+        BanMonitoringService().startMonitoring();
+      }
+      
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       final errorMessage = _handleError(e);
@@ -104,8 +162,47 @@ class ApiService {
     }
   }
 
+  Future<void> _checkUserBanStatus(String userId) async {
+    try {
+      final response = await _dio.get('/api/admin/users/$userId/ban-status');
+      final data = response.data as Map<String, dynamic>;
+      
+      if (data['is_banned'] == true) {
+        final reason = data['ban_reason'] ?? 'Unusual activity';
+        await FirebaseAuth.instance.signOut();
+        throw Exception('Your account has been suspended due to: $reason. Please contact support for assistance.');
+      }
+    } catch (e) {
+      if (e.toString().contains('suspended') || e.toString().contains('banned')) {
+        rethrow;
+      }
+      // If ban check fails, continue with login (don't block user)
+      print('Ban check failed: $e');
+    }
+  }
+
+  /// Handle ban response from any API call
+  Future<void> _handleBanResponse(String errorMessage) async {
+    try {
+      print('🚫 _handleBanResponse called with: $errorMessage');
+      
+      // Stop ban monitoring
+      BanMonitoringService().stopMonitoring();
+      
+      // Trigger ban notification immediately
+      BanMonitoringService().notifyBanDetected(errorMessage);
+      
+      print('🚫 Ban notification sent to UI');
+    } catch (e) {
+      print('❌ Error handling ban response: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> logout() async {
     try {
+      // Stop ban monitoring when logging out
+      BanMonitoringService().stopMonitoring();
+      
       final response = await _dio.post('/api/auth/logout');
       await clearCookies();
       return response.data as Map<String, dynamic>;
@@ -247,6 +344,32 @@ class ApiService {
 
   Future<Map<String, dynamic>> joinRoomspaceByCode(String code) async {
     return await post('/api/roomspaces/code/$code/join');
+  }
+
+  Future<Map<String, dynamic>> getRoomspaceBalances(String roomspaceId) async {
+    try {
+      final response = await get('/api/roomspaces/$roomspaceId/balances');
+      return response;
+    } catch (e) {
+      throw Exception('Failed to get roomspace balances: ${e.toString()}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getSettlements({
+    required String roomspaceId,
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (limit != null) queryParams['limit'] = limit.toString();
+      if (offset != null) queryParams['offset'] = offset.toString();
+      
+      final path = '/api/roomspaces/$roomspaceId/settlements${queryParams.isNotEmpty ? '?${Uri(queryParameters: queryParams).query}' : ''}';
+      return await get(path);
+    } catch (e) {
+      throw Exception('Failed to get settlements: ${e.toString()}');
+    }
   }
 
   Future<Map<String, dynamic>> removeMemberFromRoomspace(
@@ -454,7 +577,20 @@ class ApiService {
 
   Future<Map<String, dynamic>> getRoomspaceMembers(String roomspaceId) async {
     try {
-      final response = await get('/api/roomspaces/$roomspaceId/members');
+      // Get the roomspace data which includes members
+      final response = await get('/api/roomspaces/$roomspaceId');
+      
+      // Extract members from the roomspace data
+      if (response['success'] == true && response['data'] != null) {
+        final roomspaceData = response['data'] as Map<String, dynamic>;
+        final members = roomspaceData['members'] as List<dynamic>? ?? [];
+        
+        return {
+          'success': true,
+          'data': members,
+        };
+      }
+      
       return response;
     } catch (e) {
       throw Exception('Failed to get roomspace members: ${e.toString()}');

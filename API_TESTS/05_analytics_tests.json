@@ -1,0 +1,330 @@
+{
+  "info": {
+    "name": "Analytics API Tests",
+    "description": "Test cases for analytics and AI-powered insights endpoints",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "default"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "roomspaceId",
+      "value": "",
+      "type": "default"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get Analytics Summary",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/summary?start_date=2024-01-01&end_date=2024-12-31",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "summary"],
+          "query": [
+            {
+              "key": "start_date",
+              "value": "2024-01-01"
+            },
+            {
+              "key": "end_date",
+              "value": "2024-12-31"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has summary data', function () { const json = pm.response.json(); pm.expect(json.success).to.be.true; pm.expect(json.data).to.be.an('object'); });"
+    },
+    {
+      "name": "Get Analytics Summary for Roomspace",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/summary?roomspace_id={{roomspaceId}}&start_date=2024-01-01&end_date=2024-12-31",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "summary"],
+          "query": [
+            {
+              "key": "roomspace_id",
+              "value": "{{roomspaceId}}"
+            },
+            {
+              "key": "start_date",
+              "value": "2024-01-01"
+            },
+            {
+              "key": "end_date",
+              "value": "2024-12-31"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has roomspace summary', function () { pm.expect(pm.response.json().data).to.be.an('object'); });"
+    },
+    {
+      "name": "Get Spending Trends",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/trends?group_by=month&start_date=2024-01-01&end_date=2024-12-31",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "trends"],
+          "query": [
+            {
+              "key": "group_by",
+              "value": "month"
+            },
+            {
+              "key": "start_date",
+              "value": "2024-01-01"
+            },
+            {
+              "key": "end_date",
+              "value": "2024-12-31"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has trends data', function () { const json = pm.response.json(); pm.expect(json.data.trends).to.be.an('array'); });"
+    },
+    {
+      "name": "Get AI Predictions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/predictions",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "predictions"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has predictions', function () { pm.expect(pm.response.json().data).to.be.an('object'); });"
+    },
+    {
+      "name": "Get Spending Patterns",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/patterns",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "patterns"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has patterns', function () { const json = pm.response.json(); pm.expect(json.data.patterns).to.be.an('array'); });"
+    },
+    {
+      "name": "Get Anomaly Detection",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/anomalies",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "anomalies"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has anomalies', function () { const json = pm.response.json(); pm.expect(json.data.anomalies).to.be.an('array'); });"
+    },
+    {
+      "name": "Get AI Recommendations",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/recommendations",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "recommendations"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has recommendations', function () { const json = pm.response.json(); pm.expect(json.data.recommendations).to.be.an('array'); });"
+    },
+    {
+      "name": "Get Roomspace Analytics",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/roomspace/{{roomspaceId}}?start_date=2024-01-01&end_date=2024-12-31",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "roomspace", "{{roomspaceId}}"],
+          "query": [
+            {
+              "key": "start_date",
+              "value": "2024-01-01"
+            },
+            {
+              "key": "end_date",
+              "value": "2024-12-31"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has roomspace analytics', function () { pm.expect(pm.response.json().data).to.be.an('object'); });"
+    },
+    {
+      "name": "Submit Recommendation Feedback",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recommendation_id\": \"rec_123456\",\n  \"feedback_type\": \"helpful\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/feedback",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "feedback"]
+        }
+      },
+      "tests": "pm.test('Status code is 201', function () { pm.response.to.have.status(201); }); pm.test('Feedback submitted successfully', function () { pm.expect(pm.response.json().message).to.include('submitted'); });"
+    },
+    {
+      "name": "Get Trends - Invalid Group By",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/trends?group_by=invalid",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "trends"],
+          "query": [
+            {
+              "key": "group_by",
+              "value": "invalid"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+    },
+    {
+      "name": "Submit Feedback - Invalid Type",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recommendation_id\": \"rec_123456\",\n  \"feedback_type\": \"invalid_type\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/analytics/feedback",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "analytics", "feedback"]
+        }
+      },
+      "tests": "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+    }
+  ]
+}

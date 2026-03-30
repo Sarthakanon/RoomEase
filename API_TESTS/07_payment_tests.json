@@ -1,0 +1,340 @@
+{
+  "info": {
+    "name": "Payment System API Tests",
+    "description": "Test cases for payment confirmations and payment notification endpoints",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "default"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "roomspaceId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "notificationId",
+      "value": "",
+      "type": "default"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Payment Confirmation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to_user_id\": \"recipient_user_uid\",\n  \"amount\": 75.50,\n  \"payment_type\": \"cash\",\n  \"notes\": \"Payment for shared dinner\",\n  \"payment_date\": \"2024-03-28T10:00:00Z\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/payments/confirm",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "payments", "confirm"]
+        }
+      },
+      "tests": "pm.test('Status code is 201', function () { pm.response.to.have.status(201); }); pm.test('Payment confirmation created', function () { const json = pm.response.json(); pm.expect(json.success).to.be.true; pm.collectionVariables.set('paymentId', json.data.id); });"
+    },
+    {
+      "name": "Get Pending Payment Confirmations",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/payments/pending",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "payments", "pending"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has pending payments', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    },
+    {
+      "name": "Confirm Payment",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/payments/{{paymentId}}/confirm",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "payments", "{{paymentId}}", "confirm"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Payment confirmed successfully', function () { pm.expect(pm.response.json().message).to.include('confirmed'); });"
+    },
+    {
+      "name": "Reject Payment",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reason\": \"Did not receive this payment\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/payments/{{paymentId}}/reject",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "payments", "{{paymentId}}", "reject"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Payment rejected successfully', function () { pm.expect(pm.response.json().message).to.include('rejected'); });"
+    },
+    {
+      "name": "Get Payment History",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/payments/history?limit=20&offset=0",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "payments", "history"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "20"
+            },
+            {
+              "key": "offset",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has payment history', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    },
+    {
+      "name": "Get Payment Statistics",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/payments/stats",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "payments", "stats"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has payment stats', function () { pm.expect(pm.response.json().data).to.be.an('object'); });"
+    },
+    {
+      "name": "Create Payment Notification",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"amount\": 25.99,\n  \"merchant\": \"Starbucks\",\n  \"app_name\": \"Google Pay\",\n  \"raw_text\": \"You paid Rs.25.99 to Starbucks via Google Pay\",\n  \"type\": \"debit\",\n  \"timestamp\": \"2024-03-28T09:30:00Z\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/payment-notifications",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "payment-notifications"]
+        }
+      },
+      "tests": "pm.test('Status code is 201', function () { pm.response.to.have.status(201); }); pm.test('Payment notification created', function () { const json = pm.response.json(); pm.expect(json.success).to.be.true; pm.collectionVariables.set('notificationId', json.data.id); });"
+    },
+    {
+      "name": "Get Payment Notifications",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/payment-notifications?limit=50&offset=0",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "payment-notifications"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "50"
+            },
+            {
+              "key": "offset",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has notifications', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    },
+    {
+      "name": "Get Payment Notification by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/payment-notifications/{{notificationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "payment-notifications", "{{notificationId}}"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has notification data', function () { pm.expect(pm.response.json().data).to.have.property('amount'); });"
+    },
+    {
+      "name": "Mark Payment Notification as Processed",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"expense_id\": 123\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/payment-notifications/{{notificationId}}/processed",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "payment-notifications", "{{notificationId}}", "processed"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Notification marked as processed', function () { pm.expect(pm.response.json().message).to.include('processed'); });"
+    },
+    {
+      "name": "Delete Payment Notification",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/payment-notifications/{{notificationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "payment-notifications", "{{notificationId}}"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Notification deleted successfully', function () { pm.expect(pm.response.json().message).to.include('deleted'); });"
+    },
+    {
+      "name": "Create Payment Confirmation - Invalid Data",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"amount\": -50.00,\n  \"payment_type\": \"invalid_type\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/payments/confirm",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "payments", "confirm"]
+        }
+      },
+      "tests": "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+meta {
+  name: Get Notifications
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/notifications
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}

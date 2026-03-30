@@ -1,0 +1,16 @@
+meta {
+  name: Get Balances
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/roomspaces/{{roomspace_id}}/balances
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}

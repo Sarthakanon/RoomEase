@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/roomspace_data.dart';
-import '../services/api_service.dart';
+import '../services/smart_api_service.dart';
 
 /// Error types for roomspace operations
 enum RoomspaceErrorType {
@@ -30,7 +30,7 @@ class RoomspaceException implements Exception {
 /// Provider for managing roomspace state across the application
 /// Handles multiple roomspace support with active roomspace context
 class RoomspaceProvider extends ChangeNotifier {
-  final ApiService _apiService = ApiService();
+  final SmartApiService _smartApi = SmartApiService();
   
   List<RoomspaceData> _roomspaces = [];
   RoomspaceData? _activeRoomspace;
@@ -74,7 +74,7 @@ class RoomspaceProvider extends ChangeNotifier {
     
     try {
       print('📡 Fetching roomspaces from API...');
-      final response = await _apiService.getRoomspaces();
+      final response = await _smartApi.getRoomspaces(forceRefresh: forceRefresh);
       print('✅ API Response: $response');
       
       // Parse roomspaces from response
@@ -283,7 +283,7 @@ class RoomspaceProvider extends ChangeNotifier {
       }
       
       // Call API to leave roomspace
-      await _apiService.removeMemberFromRoomspace(
+      await _smartApi.removeMemberFromRoomspace(
         int.parse(roomspaceId),
         currentUser.uid,
       );

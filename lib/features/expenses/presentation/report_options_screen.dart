@@ -328,6 +328,7 @@ class _ReportOptionsScreenState extends State<ReportOptionsScreen> {
             ),
           ),
           IconButton(
+            key: ValueKey('generate_report_${month.month}_${month.year}'),
             onPressed: hasData ? () {
               final lastDay = DateTime(month.year, month.month + 1, 0);
               _generateForRange(

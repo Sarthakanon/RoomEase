@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:room_ease/models/expense_models.dart';
 import 'package:room_ease/services/expense_service.dart';
-import 'package:room_ease/services/api_service.dart';
+import 'package:room_ease/services/cached_api_service.dart';
 import 'package:room_ease/providers/roomspace_provider.dart';
 import 'package:room_ease/core/widgets/skeleton_loader.dart';
 import 'package:room_ease/features/expenses/presentation/expense_details_screen.dart';
@@ -26,7 +26,7 @@ class ExpenseListScreen extends StatefulWidget {
 
 class _ExpenseListScreenState extends State<ExpenseListScreen> {
   final ExpenseService _expenseService = ExpenseService();
-  final ApiService _apiService = ApiService();
+  final CachedApiService _cachedApiService = CachedApiService();
   final ScrollController _scrollController = ScrollController();
   
   List<ExpenseData> _expenses = [];
@@ -191,9 +191,11 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
               ? _buildErrorState(themeColor)
               : _buildList(themeColor, horizontalPadding),
       floatingActionButton: FloatingActionButton(
+        key: const ValueKey('add_expense_fab'),
         onPressed: _showAddExpenseDialog,
         backgroundColor: themeColor,
         elevation: 2,
+        tooltip: 'Add Expense',
         child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
       ),
     );
@@ -383,7 +385,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     if (active == null) return;
     
     try {
-      final res = await _apiService.getRoomspaces();
+      final res = await _cachedApiService.getRoomspaces();
       final data = (res['data'] as List).firstWhere((r) => r['id'].toString() == active.id);
       final roommates = (data['members'] as List).map((m) => RoommateItem(
         id: m['user_id'] ?? '',
@@ -393,7 +395,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       
       if (!mounted) return;
       AddExpenseDialog.show(context, roommates: roommates, roomspaceId: active.id, onSubmit: (ex) async {
-        await _apiService.createExpense(ExpenseCreateRequest.fromExpenseData(ex, active.id).toJson());
+        await _cachedApiService.createExpense(ExpenseCreateRequest.fromExpenseData(ex, active.id).toJson());
         _loadExpenses(reset: true);
       });
     } catch (_) {}
@@ -401,7 +403,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   void _showPersonalExpenseDialog() {
     PersonalExpenseDialog.show(context, onSubmit: (ex) async {
-      await _apiService.createPersonalExpense(PersonalExpenseCreateRequest.fromExpenseData(ex).toJson());
+      await _cachedApiService.createPersonalExpense(PersonalExpenseCreateRequest.fromExpenseData(ex).toJson());
       _loadExpenses(reset: true);
     });
   }

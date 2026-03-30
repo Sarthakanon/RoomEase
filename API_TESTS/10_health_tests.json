@@ -1,0 +1,88 @@
+{
+  "info": {
+    "name": "Health Check API Tests",
+    "description": "Test cases for health check and system status endpoints",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "default"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has healthy status', function () { const json = pm.response.json(); pm.expect(json.status).to.equal('healthy'); pm.expect(json).to.have.property('timestamp'); }); pm.test('Response time is acceptable', function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+    },
+    {
+      "name": "Health Check - Multiple Requests",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Consistent response format', function () { const json = pm.response.json(); pm.expect(json).to.have.property('status'); pm.expect(json).to.have.property('timestamp'); }); pm.test('Timestamp is recent', function () { const json = pm.response.json(); const timestamp = new Date(json.timestamp); const now = new Date(); const diff = Math.abs(now - timestamp); pm.expect(diff).to.be.below(5000); });"
+    },
+    {
+      "name": "Health Check - HEAD Request",
+      "request": {
+        "method": "HEAD",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "tests": "pm.test('Status code is 200 or 405', function () { pm.expect(pm.response.code).to.be.oneOf([200, 405]); });"
+    },
+    {
+      "name": "Health Check - OPTIONS Request",
+      "request": {
+        "method": "OPTIONS",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      },
+      "tests": "pm.test('Status code is 200 or 405', function () { pm.expect(pm.response.code).to.be.oneOf([200, 405]); }); pm.test('CORS headers present', function () { pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.not.be.null; });"
+    }
+  ]
+}

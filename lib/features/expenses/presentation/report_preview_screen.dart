@@ -240,6 +240,7 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
         ),
         actions: [
           IconButton(
+            key: const ValueKey('share_report_btn'),
             icon: const Icon(Icons.share_rounded, size: 20),
             onPressed: () async {
               final pdf = await _generatePdf();
@@ -248,6 +249,7 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
             tooltip: 'Share Report',
           ),
           IconButton(
+            key: const ValueKey('download_report_btn'),
             icon: const Icon(Icons.file_download_rounded),
             onPressed: _handleDownload,
             tooltip: 'Download PDF',

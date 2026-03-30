@@ -126,6 +126,7 @@ class ExpenseCreateRequest {
   final String description;
   final double amount;
   final String category;
+  final String? paidBy;  // Who paid for this expense
   final String splitType;
   final List<String> selectedRoommates;
   final Map<String, double>? customSplits;
@@ -136,6 +137,7 @@ class ExpenseCreateRequest {
     required this.description,
     required this.amount,
     required this.category,
+    this.paidBy,
     required this.splitType,
     required this.selectedRoommates,
     this.customSplits,
@@ -151,6 +153,10 @@ class ExpenseCreateRequest {
       'split_type': splitType,
       'selected_roommates': selectedRoommates,
     };
+    
+    if (paidBy != null) {
+      json['paid_by'] = paidBy!;
+    }
     
     if (customSplits != null && customSplits!.isNotEmpty) {
       json['custom_splits'] = customSplits!;
@@ -170,6 +176,7 @@ class ExpenseCreateRequest {
       description: expenseData.description,
       amount: expenseData.amount,
       category: expenseData.category,
+      paidBy: expenseData.paidBy,
       splitType: expenseData.splitType.apiValue,
       selectedRoommates: expenseData.selectedRoommateIds,
       customSplits: expenseData.customSplits.isNotEmpty 
