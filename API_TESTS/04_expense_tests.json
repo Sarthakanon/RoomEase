@@ -1,0 +1,360 @@
+{
+  "info": {
+    "name": "Expense Management API Tests",
+    "description": "Test cases for expense creation, retrieval, and management endpoints",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "default"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "roomspaceId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "expenseId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "personalExpenseId",
+      "value": "",
+      "type": "default"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Shared Expense",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomspace_id\": \"{{roomspaceId}}\",\n  \"title\": \"Test Grocery Expense\",\n  \"description\": \"Weekly grocery shopping\",\n  \"amount\": 150.50,\n  \"category\": \"Groceries\",\n  \"split_type\": \"equal\",\n  \"selected_roommates\": [\"user1_uid\", \"user2_uid\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/expenses",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "expenses"]
+        }
+      },
+      "tests": "pm.test('Status code is 201', function () { pm.response.to.have.status(201); }); pm.test('Expense created successfully', function () { const json = pm.response.json(); pm.expect(json.success).to.be.true; pm.collectionVariables.set('expenseId', json.data.id); });"
+    },
+    {
+      "name": "Create Personal Expense",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Personal Coffee\",\n  \"description\": \"Morning coffee\",\n  \"amount\": 5.50,\n  \"category\": \"Food & Dining\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/personal-expenses",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "personal-expenses"]
+        }
+      },
+      "tests": "pm.test('Status code is 201', function () { pm.response.to.have.status(201); }); pm.test('Personal expense created', function () { const json = pm.response.json(); pm.expect(json.success).to.be.true; pm.collectionVariables.set('personalExpenseId', json.data.id); });"
+    },
+    {
+      "name": "Get User Expenses",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/expenses?limit=10&offset=0",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "expenses"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "offset",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has expenses array', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    },
+    {
+      "name": "Get Personal Expenses",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/personal-expenses?limit=10&offset=0",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "personal-expenses"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "offset",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has personal expenses', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    },
+    {
+      "name": "Get Expense by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/expenses/{{expenseId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "expenses", "{{expenseId}}"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has expense data', function () { pm.expect(pm.response.json().data).to.have.property('title'); });"
+    },
+    {
+      "name": "Get Roomspace Expenses",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/expenses?limit=10&year=2024&month=3",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "expenses"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "year",
+              "value": "2024"
+            },
+            {
+              "key": "month",
+              "value": "3"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has roomspace expenses', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    },
+    {
+      "name": "Get Recent Expenses",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/expenses/recent?limit=3",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "expenses", "recent"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "3"
+            }
+          ]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has recent expenses', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    },
+    {
+      "name": "Update Expense",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomspace_id\": \"{{roomspaceId}}\",\n  \"title\": \"Updated Grocery Expense\",\n  \"description\": \"Updated weekly grocery shopping\",\n  \"amount\": 175.75,\n  \"category\": \"Groceries\",\n  \"split_type\": \"equal\",\n  \"selected_roommates\": [\"user1_uid\", \"user2_uid\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/expenses/{{expenseId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "expenses", "{{expenseId}}"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Expense updated successfully', function () { pm.expect(pm.response.json().message).to.include('updated'); });"
+    },
+    {
+      "name": "Delete Personal Expense",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/personal-expenses/{{personalExpenseId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "personal-expenses", "{{personalExpenseId}}"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Personal expense deleted', function () { pm.expect(pm.response.json().message).to.include('deleted'); });"
+    },
+    {
+      "name": "Delete Shared Expense",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/expenses/{{expenseId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "expenses", "{{expenseId}}"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Expense deleted successfully', function () { pm.expect(pm.response.json().message).to.include('deleted'); });"
+    },
+    {
+      "name": "Create Expense - Invalid Data",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Invalid Expense\",\n  \"amount\": -50,\n  \"selected_roommates\": []\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/expenses",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "expenses"]
+        }
+      },
+      "tests": "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+    },
+    {
+      "name": "Create Percentage Split Expense",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomspace_id\": \"{{roomspaceId}}\",\n  \"title\": \"Percentage Split Expense\",\n  \"description\": \"Testing percentage splits\",\n  \"amount\": 100.00,\n  \"category\": \"Utilities\",\n  \"split_type\": \"percentage\",\n  \"selected_roommates\": [\"user1_uid\", \"user2_uid\"],\n  \"custom_splits\": {\n    \"user1_uid\": 60.0,\n    \"user2_uid\": 40.0\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/expenses",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "expenses"]
+        }
+      },
+      "tests": "pm.test('Status code is 201', function () { pm.response.to.have.status(201); }); pm.test('Percentage split expense created', function () { pm.expect(pm.response.json().success).to.be.true; });"
+    }
+  ]
+}

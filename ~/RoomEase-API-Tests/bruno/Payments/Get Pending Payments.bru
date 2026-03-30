@@ -1,0 +1,16 @@
+meta {
+  name: Get Pending Payments
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/roomspaces/{{roomspace_id}}/payments/pending
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}

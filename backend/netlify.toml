@@ -1,0 +1,11 @@
+[build]
+  command = "go build -o main ."
+  publish = "."
+
+[functions]
+  directory = "."
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/main/:splat"
+  status = 200
