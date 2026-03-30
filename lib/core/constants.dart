@@ -1,9 +1,9 @@
 /// App-wide constants and configuration
 class AppConstants {
   // Backend Configuration
-  // Update this IP address when switching networks
-  static const String backendIp = '10.64.101.246'; // Your backend server IP
-  static const int backendPort = 8080;
+  // Production backend URL (update after deployment)
+  static const String backendIp = 'roomease-backend.onrender.com'; // Your deployed backend URL
+  static const int backendPort = 443; // HTTPS port for production
   
   // Timeout settings
   static const Duration connectTimeout = Duration(seconds: 10);
