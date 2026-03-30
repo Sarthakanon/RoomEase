@@ -18,11 +18,13 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 
-# Copy the binary and required files
+# Copy only the binary
 COPY --from=builder /app/main .
-COPY --from=builder /app/serviceAccount.json ./serviceAccount.json
 
-# Expose port (Railway will override this)
+# Create a dummy serviceAccount.json (will be overridden by env vars)
+RUN echo '{}' > serviceAccount.json
+
+# Expose port
 EXPOSE 8080
 
 # Run the application
