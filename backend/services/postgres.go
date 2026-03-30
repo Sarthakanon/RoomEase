@@ -35,6 +35,11 @@ func NewPostgresService() *PostgresService {
 
 // GetUserByFirebaseUID retrieves a user by Firebase UID
 func (s *PostgresService) GetUserByFirebaseUID(firebaseUID string) (*models.User, error) {
+	// Check if database is connected
+	if config.DB == nil {
+		return nil, errors.New("database connection not available")
+	}
+	
 	var user models.User
 	result := config.DB.Where("firebase_uid = ?", firebaseUID).First(&user)
 	

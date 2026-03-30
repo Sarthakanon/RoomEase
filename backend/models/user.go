@@ -13,6 +13,9 @@ type User struct {
 	Email       string         `gorm:"not null" json:"email"`
 	Name        string         `json:"name"`
 	Phone       string         `json:"phone,omitempty"`
+	IsBanned    bool           `gorm:"default:false" json:"is_banned"`
+	BanReason   *string        `json:"ban_reason,omitempty"`
+	BannedAt    *time.Time     `json:"banned_at,omitempty"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`

@@ -1,8 +1,13 @@
 package services
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
+	"strings"
 	"roomease/backend/config"
 	"roomease/backend/models"
 	"time"
@@ -11,12 +16,17 @@ import (
 // AnalyticsService handles analytics operations
 type AnalyticsService struct {
 	dbService *PostgresService
+	mlAPIURL  string
 }
 
 // NewAnalyticsService creates a new analytics service
 func NewAnalyticsService(dbService *PostgresService) *AnalyticsService {
+	// Get ML API configuration
+	mlConfig := config.GetMLConfig()
+	
 	return &AnalyticsService{
 		dbService: dbService,
+		mlAPIURL:  mlConfig.APIURL,
 	}
 }
 
@@ -37,7 +47,117 @@ type AnalyticsSummary struct {
 	SpendingTrend      string          `json:"spending_trend"` // "increasing", "decreasing", "stable"
 }
 
-// GetSpendingSummary calculates spending summary for a user
+// MLExpense represents expense data for ML API
+type MLExpense struct {
+	ID       uint    `json:"id"`
+	Amount   float64 `json:"amount"`
+	Category string  `json:"category"`
+	Date     string  `json:"date"`
+	UserUID  string  `json:"user_uid"`
+}
+
+// MLPredictionResponse represents ML API prediction response
+type MLPredictionResponse struct {
+	Success          bool `json:"success"`
+	Predictions      []MLPrediction `json:"predictions"`
+	InsufficientData bool `json:"insufficient_data"`
+}
+
+// MLPrediction represents a single ML prediction
+type MLPrediction struct {
+	Category        string  `json:"category"`
+	PredictedAmount float64 `json:"predicted_amount"`
+	ConfidenceLow   float64 `json:"confidence_low"`
+	ConfidenceHigh  float64 `json:"confidence_high"`
+	HistoricalAvg   float64 `json:"historical_avg"`
+	MLConfidence    float64 `json:"ml_confidence"`
+}
+
+// MLRecommendationResponse represents ML API recommendation response
+type MLRecommendationResponse struct {
+	Success         bool `json:"success"`
+	Recommendations []MLRecommendation `json:"recommendations"`
+}
+
+// MLRecommendation represents a single ML recommendation
+type MLRecommendation struct {
+	ID               string  `json:"id"`
+	Type             string  `json:"type"`
+	Category         string  `json:"category"`
+	CurrentSpending  float64 `json:"current_spending"`
+	SuggestedLimit   float64 `json:"suggested_limit"`
+	PotentialSavings float64 `json:"potential_savings"`
+	Description      string  `json:"description"`
+	Priority         int     `json:"priority"`
+	MLConfidence     float64 `json:"ml_confidence"`
+}
+
+// MLAnomalyResponse represents ML API anomaly response
+type MLAnomalyResponse struct {
+	Success   bool `json:"success"`
+	Anomalies []MLAnomaly `json:"anomalies"`
+}
+
+// MLAnomaly represents a single ML anomaly
+type MLAnomaly struct {
+	ExpenseID       uint    `json:"expense_id"`
+	Amount          float64 `json:"amount"`
+	Category        string  `json:"category"`
+	AnomalyScore    float64 `json:"anomaly_score"`
+	Reason          string  `json:"reason"`
+	CategoryAverage float64 `json:"category_average"`
+	Date            string  `json:"date"`
+	MLConfidence    float64 `json:"ml_confidence"`
+}
+
+// callMLAPI makes HTTP requests to the ML API
+func (s *AnalyticsService) callMLAPI(endpoint string, payload interface{}) ([]byte, error) {
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %v", err)
+	}
+
+	url := s.mlAPIURL + endpoint
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call ML API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read ML API response: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ML API returned error: %s", string(body))
+	}
+
+	return body, nil
+}
+
+// convertExpensesToMLFormat converts database expenses to ML API format
+func (s *AnalyticsService) convertExpensesToMLFormat(expenses []models.Expense, userUID string) []MLExpense {
+	var mlExpenses []MLExpense
+	
+	for _, expense := range expenses {
+		// Get user's amount from splits
+		userAmount := s.getUserAmountFromExpense(&expense, userUID)
+		if userAmount > 0 {
+			mlExpenses = append(mlExpenses, MLExpense{
+				ID:       expense.ID,
+				Amount:   userAmount,
+				Category: expense.Category,
+				Date:     expense.CreatedAt.Format("2006-01-02"),
+				UserUID:  userUID,
+			})
+		}
+	}
+	
+	return mlExpenses
+}
+
+// GetSpendingSummary calculates spending summary for a user with ML enhancements
 func (s *AnalyticsService) GetSpendingSummary(userUID string, roomspaceID *string, startDate, endDate time.Time) (*AnalyticsSummary, error) {
 	// Get expenses for the period
 	expenses, err := s.getExpensesForPeriod(userUID, roomspaceID, startDate, endDate)
@@ -45,16 +165,14 @@ func (s *AnalyticsService) GetSpendingSummary(userUID string, roomspaceID *strin
 		return nil, fmt.Errorf("failed to get expenses: %v", err)
 	}
 
-	// Calculate total spent
+	// Calculate basic summary
 	totalSpent := 0.0
 	categoryTotals := make(map[string]*CategorySpend)
 
 	for _, expense := range expenses {
-		// For shared expenses, only count the user's split
 		userAmount := s.getUserAmountFromExpense(&expense, userUID)
 		totalSpent += userAmount
 
-		// Aggregate by category
 		if _, exists := categoryTotals[expense.Category]; !exists {
 			categoryTotals[expense.Category] = &CategorySpend{
 				Category: expense.Category,
@@ -74,13 +192,108 @@ func (s *AnalyticsService) GetSpendingSummary(userUID string, roomspaceID *strin
 
 	summary := &AnalyticsSummary{
 		TotalSpent:         totalSpent,
-		PredictedNextMonth: 0, // Will be set by prediction service
-		SavingsPotential:   0, // Will be set by recommendation engine
+		PredictedNextMonth: 0, // Will be set by ML prediction service
+		SavingsPotential:   0, // Will be set by ML recommendation engine
 		TopCategories:      topCategories,
 		SpendingTrend:      trend,
 	}
 
+	// Try to get ML predictions for next month
+	if len(expenses) >= 5 {
+		mlExpenses := s.convertExpensesToMLFormat(expenses, userUID)
+		predictions, err := s.getMLPredictions(userUID, roomspaceID, mlExpenses)
+		if err == nil && !predictions.InsufficientData {
+			totalPredicted := 0.0
+			for _, pred := range predictions.Predictions {
+				totalPredicted += pred.PredictedAmount
+			}
+			summary.PredictedNextMonth = totalPredicted
+		}
+	}
+
+	// Try to get ML recommendations for savings potential
+	if len(expenses) >= 5 {
+		mlExpenses := s.convertExpensesToMLFormat(expenses, userUID)
+		recommendations, err := s.getMLRecommendations(userUID, roomspaceID, mlExpenses)
+		if err == nil {
+			totalSavings := 0.0
+			for _, rec := range recommendations.Recommendations {
+				totalSavings += rec.PotentialSavings
+			}
+			summary.SavingsPotential = totalSavings
+		}
+	}
+
 	return summary, nil
+}
+
+// getMLPredictions calls the ML API for predictions
+func (s *AnalyticsService) getMLPredictions(userUID string, roomspaceID *string, expenses []MLExpense) (*MLPredictionResponse, error) {
+	payload := map[string]interface{}{
+		"user_id":  userUID,
+		"expenses": expenses,
+	}
+	if roomspaceID != nil {
+		payload["roomspace_id"] = *roomspaceID
+	}
+
+	body, err := s.callMLAPI("/api/ml/predictions", payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var response MLPredictionResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal ML prediction response: %v", err)
+	}
+
+	return &response, nil
+}
+
+// getMLRecommendations calls the ML API for recommendations
+func (s *AnalyticsService) getMLRecommendations(userUID string, roomspaceID *string, expenses []MLExpense) (*MLRecommendationResponse, error) {
+	payload := map[string]interface{}{
+		"user_id":  userUID,
+		"expenses": expenses,
+	}
+	if roomspaceID != nil {
+		payload["roomspace_id"] = *roomspaceID
+	}
+
+	body, err := s.callMLAPI("/api/ml/recommendations", payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var response MLRecommendationResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal ML recommendation response: %v", err)
+	}
+
+	return &response, nil
+}
+
+// getMLAnomalies calls the ML API for anomaly detection
+func (s *AnalyticsService) getMLAnomalies(userUID string, roomspaceID *string, expenses []MLExpense) (*MLAnomalyResponse, error) {
+	payload := map[string]interface{}{
+		"user_id":  userUID,
+		"expenses": expenses,
+	}
+	if roomspaceID != nil {
+		payload["roomspace_id"] = *roomspaceID
+	}
+
+	body, err := s.callMLAPI("/api/ml/anomalies", payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var response MLAnomalyResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal ML anomaly response: %v", err)
+	}
+
+	return &response, nil
 }
 
 // GetCategoryBreakdown returns category-wise spending breakdown
@@ -281,20 +494,61 @@ type PredictionResult struct {
 	Message          string               `json:"message,omitempty"`
 }
 
-// GetSpendingPredictions generates spending predictions for the next month
-// NOTE: This now returns simple historical averages. For ML-based predictions,
-// use the Analytics_Model Python service
+// GetSpendingPredictions generates ML-based spending predictions for the next month
 func (s *AnalyticsService) GetSpendingPredictions(userUID string, roomspaceID *string) (*PredictionResult, error) {
-	// Check if user has at least 30 days of data
+	// Get last 60 days of expenses for ML analysis
 	now := time.Now()
-	thirtyDaysAgo := now.AddDate(0, 0, -30)
+	sixtyDaysAgo := now.AddDate(0, 0, -60)
 
-	expenses, err := s.getExpensesForPeriod(userUID, roomspaceID, thirtyDaysAgo, now)
+	expenses, err := s.getExpensesForPeriod(userUID, roomspaceID, sixtyDaysAgo, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expenses: %v", err)
 	}
 
+	// Check if we have enough data
+	if len(expenses) < 5 {
+		return &PredictionResult{
+			Predictions:      []SpendingPrediction{},
+			InsufficientData: true,
+			DataDays:         0,
+			Message:          "Need at least 5 expenses for ML predictions",
+		}, nil
+	}
+
+	// Convert to ML format
+	mlExpenses := s.convertExpensesToMLFormat(expenses, userUID)
+
+	// Try ML predictions first
+	mlResponse, err := s.getMLPredictions(userUID, roomspaceID, mlExpenses)
+	if err == nil && !mlResponse.InsufficientData {
+		// Convert ML predictions to our format
+		var predictions []SpendingPrediction
+		for _, mlPred := range mlResponse.Predictions {
+			predictions = append(predictions, SpendingPrediction{
+				Category:        mlPred.Category,
+				PredictedAmount: mlPred.PredictedAmount,
+				ConfidenceLow:   mlPred.ConfidenceLow,
+				ConfidenceHigh:  mlPred.ConfidenceHigh,
+				HistoricalAvg:   mlPred.HistoricalAvg,
+			})
+		}
+
+		return &PredictionResult{
+			Predictions:      predictions,
+			InsufficientData: false,
+			DataDays:         60,
+			Message:          "ML-powered predictions",
+		}, nil
+	}
+
+	// Fallback to statistical predictions if ML fails
+	return s.getStatisticalPredictions(userUID, roomspaceID, expenses)
+}
+
+// getStatisticalPredictions provides fallback statistical predictions
+func (s *AnalyticsService) getStatisticalPredictions(userUID string, roomspaceID *string, expenses []models.Expense) (*PredictionResult, error) {
 	// Calculate actual days of data
+	now := time.Now()
 	var oldestDate time.Time
 	if len(expenses) > 0 {
 		oldestDate = expenses[len(expenses)-1].CreatedAt
@@ -307,17 +561,7 @@ func (s *AnalyticsService) GetSpendingPredictions(userUID string, roomspaceID *s
 
 	dataDays := int(now.Sub(oldestDate).Hours() / 24)
 
-	// If less than 30 days of data, return insufficient data message
-	if len(expenses) == 0 || dataDays < 30 {
-		return &PredictionResult{
-			Predictions:      []SpendingPrediction{},
-			InsufficientData: true,
-			DataDays:         dataDays,
-			Message:          fmt.Sprintf("Need at least 30 days of expense history. Currently have %d days.", dataDays),
-		}, nil
-	}
-
-	// Simple prediction based on historical average (no ML)
+	// Simple prediction based on historical average
 	categoryData := make(map[string][]float64)
 
 	for _, expense := range expenses {
@@ -364,6 +608,7 @@ func (s *AnalyticsService) GetSpendingPredictions(userUID string, roomspaceID *s
 		Predictions:      predictions,
 		InsufficientData: false,
 		DataDays:         dataDays,
+		Message:          "Statistical predictions (ML unavailable)",
 	}, nil
 }
 
@@ -379,11 +624,9 @@ type Recommendation struct {
 	Priority         int     `json:"priority"` // 1=high, 2=medium, 3=low
 }
 
-// GetBudgetRecommendations generates simple budget recommendations
-// NOTE: This provides basic rule-based recommendations. For ML-based recommendations,
-// use the Analytics_Model Python service
+// GetBudgetRecommendations generates ML-enhanced budget recommendations
 func (s *AnalyticsService) GetBudgetRecommendations(userUID string, roomspaceID *string) ([]Recommendation, error) {
-	// Get last 60 days of expenses for analysis
+	// Get last 60 days of expenses for ML analysis
 	now := time.Now()
 	sixtyDaysAgo := now.AddDate(0, 0, -60)
 
@@ -392,67 +635,166 @@ func (s *AnalyticsService) GetBudgetRecommendations(userUID string, roomspaceID 
 		return nil, fmt.Errorf("failed to get expenses: %v", err)
 	}
 
-	if len(expenses) == 0 {
+	if len(expenses) < 5 {
 		return []Recommendation{}, nil
 	}
 
-	// Calculate category spending
-	categorySpending := make(map[string]float64)
+	// Convert to ML format
+	mlExpenses := s.convertExpensesToMLFormat(expenses, userUID)
+
+	// Try ML recommendations first
+	mlResponse, err := s.getMLRecommendations(userUID, roomspaceID, mlExpenses)
+	if err == nil && len(mlResponse.Recommendations) > 0 {
+		// Convert ML recommendations to our format
+		var recommendations []Recommendation
+		for _, mlRec := range mlResponse.Recommendations {
+			recommendations = append(recommendations, Recommendation{
+				ID:               mlRec.ID,
+				Type:             "ml_" + mlRec.Type,
+				Category:         mlRec.Category,
+				CurrentSpending:  mlRec.CurrentSpending,
+				SuggestedLimit:   mlRec.SuggestedLimit,
+				PotentialSavings: mlRec.PotentialSavings,
+				Description:      mlRec.Description,
+				Priority:         mlRec.Priority,
+			})
+		}
+
+		return recommendations, nil
+	}
+
+	// Fallback to rule-based recommendations if ML fails
+	return s.getRuleBasedRecommendations(userUID, roomspaceID, expenses)
+}
+
+// getRuleBasedRecommendations provides fallback rule-based recommendations
+func (s *AnalyticsService) getRuleBasedRecommendations(userUID string, roomspaceID *string, expenses []models.Expense) ([]Recommendation, error) {
+	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+
+	// Calculate category spending for last 60 days and last 30 days
+	categorySpending60 := make(map[string]float64)
+	categorySpending30 := make(map[string]float64)
 	categoryCount := make(map[string]int)
 
 	for _, expense := range expenses {
 		userAmount := s.getUserAmountFromExpense(&expense, userUID)
-		categorySpending[expense.Category] += userAmount
+		categorySpending60[expense.Category] += userAmount
 		categoryCount[expense.Category]++
+		
+		// Track last 30 days separately for trend analysis
+		if expense.CreatedAt.After(thirtyDaysAgo) {
+			categorySpending30[expense.Category] += userAmount
+		}
 	}
 
 	// Calculate total spending
 	totalSpending := 0.0
-	for _, amount := range categorySpending {
+	for _, amount := range categorySpending60 {
 		totalSpending += amount
 	}
 
 	var recommendations []Recommendation
 	recommendationID := 1
 
-	// Simple rule-based recommendations
-	for category, spending := range categorySpending {
-		percentage := (spending / totalSpending) * 100.0
+	// Enhanced category-specific recommendations
+	for category, spending60 := range categorySpending60 {
+		percentage := (spending60 / totalSpending) * 100.0
+		spending30 := categorySpending30[category]
+		
+		// Calculate monthly average
+		monthlyAvg := spending60 / 2.0 // 60 days = ~2 months
+		
+		// Determine trend
+		trend := "stable"
+		if spending30 > monthlyAvg*1.15 {
+			trend = "increasing"
+		} else if spending30 < monthlyAvg*0.85 {
+			trend = "decreasing"
+		}
 
-		// High spending category
-		if percentage > 30.0 {
-			suggestedLimit := spending * 0.85
-			potentialSavings := spending - suggestedLimit
+		// Generate recommendations for high spending categories
+		if percentage > 25.0 || (trend == "increasing" && percentage > 15.0) {
+			priority := 2 // Moderate
+			if percentage > 35.0 {
+				priority = 1 // Critical
+			} else if percentage < 20.0 {
+				priority = 3 // Low
+			}
+			
+			suggestedLimit := monthlyAvg * 0.80 // 20% reduction target
+			potentialSavings := monthlyAvg - suggestedLimit
+
+			// Generate category-specific actionable tips
+			description := s.generateCategoryRecommendation(category, monthlyAvg, potentialSavings, trend)
 
 			recommendations = append(recommendations, Recommendation{
 				ID:               fmt.Sprintf("rec_%d", recommendationID),
 				Type:             "reduce_spending",
 				Category:         category,
-				CurrentSpending:  math.Round(spending*100) / 100,
+				CurrentSpending:  math.Round(monthlyAvg*100) / 100,
 				SuggestedLimit:   math.Round(suggestedLimit*100) / 100,
 				PotentialSavings: math.Round(potentialSavings*100) / 100,
-				Description:      fmt.Sprintf("Consider reducing %s spending by 15%% to save %.2f", category, potentialSavings),
-				Priority:         1,
+				Description:      description,
+				Priority:         priority,
 			})
 			recommendationID++
 		}
 	}
 
-	// Sort by potential savings
+	// Sort by priority (1=highest) then by potential savings
 	for i := 0; i < len(recommendations); i++ {
 		for j := i + 1; j < len(recommendations); j++ {
-			if recommendations[j].PotentialSavings > recommendations[i].PotentialSavings {
+			if recommendations[j].Priority < recommendations[i].Priority ||
+				(recommendations[j].Priority == recommendations[i].Priority &&
+					recommendations[j].PotentialSavings > recommendations[i].PotentialSavings) {
 				recommendations[i], recommendations[j] = recommendations[j], recommendations[i]
 			}
 		}
 	}
 
-	// Limit to top 3 recommendations
-	if len(recommendations) > 3 {
-		recommendations = recommendations[:3]
+	// Limit to top 5 recommendations
+	if len(recommendations) > 5 {
+		recommendations = recommendations[:5]
 	}
 
 	return recommendations, nil
+}
+
+// generateCategoryRecommendation creates actionable, category-specific recommendations
+func (s *AnalyticsService) generateCategoryRecommendation(category string, currentSpending, potentialSavings float64, trend string) string {
+	trendEmoji := "→"
+	if trend == "increasing" {
+		trendEmoji = "↑"
+	} else if trend == "decreasing" {
+		trendEmoji = "↓"
+	}
+	
+	categoryLower := strings.ToLower(category)
+	
+	// Category-specific actionable recommendations
+	if strings.Contains(categoryLower, "food") || strings.Contains(categoryLower, "groceries") {
+		return fmt.Sprintf("%s Food spending is high. Try: Cook 2-3 more meals at home weekly, buy in bulk with roommates, meal prep on weekends, use grocery apps for discounts. Target: Save Rs. %.0f/month", trendEmoji, potentialSavings)
+	}
+	
+	if strings.Contains(categoryLower, "utilities") || strings.Contains(categoryLower, "bill") {
+		return fmt.Sprintf("%s Utility costs are high. Try: Turn off unused appliances, use energy-efficient bulbs, set AC to 24°C, share internet/streaming costs with roommates. Target: Save Rs. %.0f/month", trendEmoji, potentialSavings)
+	}
+	
+	if strings.Contains(categoryLower, "transport") || strings.Contains(categoryLower, "travel") {
+		return fmt.Sprintf("%s Transport costs are high. Try: Carpool with roommates, use public transport, get monthly passes, combine errands into single trips. Target: Save Rs. %.0f/month", trendEmoji, potentialSavings)
+	}
+	
+	if strings.Contains(categoryLower, "entertainment") {
+		return fmt.Sprintf("%s Entertainment spending is high. Try: Share streaming subscriptions, look for free events, use student discounts, limit dining out to 2x/week. Target: Save Rs. %.0f/month", trendEmoji, potentialSavings)
+	}
+	
+	if strings.Contains(categoryLower, "rent") {
+		return fmt.Sprintf("%s Rent is a major expense. Consider: Negotiating with landlord, finding additional roommates, moving to a more affordable area, or subletting unused space. Potential: Save Rs. %.0f/month", trendEmoji, potentialSavings)
+	}
+	
+	// Generic recommendation for other categories
+	return fmt.Sprintf("%s %s spending is %.0f%% of your budget. Try: Track expenses daily, set category limits, find cheaper alternatives, delay non-urgent purchases. Target: Save Rs. %.0f/month", 
+		trendEmoji, category, (currentSpending/potentialSavings)*100, potentialSavings)
 }
 
 // Anomaly represents a detected spending anomaly
@@ -466,9 +808,7 @@ type Anomaly struct {
 	Date            string  `json:"date"`
 }
 
-// DetectAnomalies identifies unusual spending patterns using simple statistical methods
-// NOTE: This uses basic statistical analysis. For ML-based anomaly detection,
-// use the Analytics_Model Python service
+// DetectAnomalies identifies unusual spending patterns using ML-enhanced detection
 func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) ([]Anomaly, error) {
 	// Get last 90 days of expenses for baseline
 	now := time.Now()
@@ -483,11 +823,40 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 		return []Anomaly{}, nil
 	}
 
+	// Convert to ML format
+	mlExpenses := s.convertExpensesToMLFormat(expenses, userUID)
+
+	// Try ML anomaly detection first
+	mlResponse, err := s.getMLAnomalies(userUID, roomspaceID, mlExpenses)
+	if err == nil && len(mlResponse.Anomalies) > 0 {
+		// Convert ML anomalies to our format
+		var anomalies []Anomaly
+		for _, mlAnomaly := range mlResponse.Anomalies {
+			anomalies = append(anomalies, Anomaly{
+				ExpenseID:       mlAnomaly.ExpenseID,
+				Amount:          mlAnomaly.Amount,
+				Category:        mlAnomaly.Category,
+				AnomalyScore:    mlAnomaly.AnomalyScore,
+				Reason:          mlAnomaly.Reason,
+				CategoryAverage: mlAnomaly.CategoryAverage,
+				Date:            mlAnomaly.Date,
+			})
+		}
+
+		return anomalies, nil
+	}
+
+	// Fallback to statistical anomaly detection if ML fails
+	return s.getStatisticalAnomalies(expenses)
+}
+
+// getStatisticalAnomalies provides fallback statistical anomaly detection
+func (s *AnalyticsService) getStatisticalAnomalies(expenses []models.Expense) ([]Anomaly, error) {
 	// Calculate category statistics
 	categoryAmounts := make(map[string][]float64)
 
 	for _, expense := range expenses {
-		userAmount := s.getUserAmountFromExpense(&expense, userUID)
+		userAmount := s.getUserAmountFromExpense(&expense, expense.PaidBy) // Use PaidBy as fallback
 		categoryAmounts[expense.Category] = append(categoryAmounts[expense.Category], userAmount)
 	}
 
@@ -522,14 +891,14 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 
 	// Detect anomalies (expenses > 2 standard deviations from mean)
 	var anomalies []Anomaly
-	thirtyDaysAgo := now.AddDate(0, 0, -30)
+	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
 
 	for _, expense := range expenses {
 		if expense.CreatedAt.Before(thirtyDaysAgo) {
 			continue
 		}
 
-		userAmount := s.getUserAmountFromExpense(&expense, userUID)
+		userAmount := s.getUserAmountFromExpense(&expense, expense.PaidBy)
 		stats, exists := categoryStats[expense.Category]
 		if !exists {
 			continue
@@ -539,7 +908,7 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 
 		if userAmount > threshold && stats.stdDev > 0 {
 			anomalyScore := (userAmount - stats.mean) / stats.stdDev
-			reason := fmt.Sprintf("This expense is %.1f standard deviations above your average %s spending",
+			reason := fmt.Sprintf("Statistical analysis: %.1f standard deviations above average %s spending",
 				anomalyScore, expense.Category)
 
 			anomalies = append(anomalies, Anomaly{
