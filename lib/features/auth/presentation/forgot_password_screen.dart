@@ -45,7 +45,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: _emailSent ? _buildSuccess(primaryColor) : _buildForm(primaryColor),
           ),
         ),
@@ -59,15 +59,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       child: Column(
         children: [
           Container(
-            height: 72, width: 72,
-            decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(18)),
-            child: Icon(Icons.lock_reset_rounded, color: primary, size: 36),
+            height: 60, width: 60,
+            decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
+            child: Icon(Icons.lock_reset_rounded, color: primary, size: 30),
           ),
+          const SizedBox(height: 24),
+          const Text('Reset Password', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
+          const SizedBox(height: 6),
+          Text('Enter your email to receive recovery instructions.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
           const SizedBox(height: 32),
-          const Text('Reset Password', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
-          const SizedBox(height: 8),
-          Text('Enter your email to receive recovery instructions.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-          const SizedBox(height: 48),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -89,14 +89,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
-            height: 52,
+            height: 48,
             child: ElevatedButton(
               onPressed: _isLoading ? null : _resetPassword,
-              style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
-              child: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Send Reset Link', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primary, 
+                foregroundColor: Colors.white, 
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              ),
+              child: _isLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Send Reset Link', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
             ),
           ),
         ],
@@ -108,26 +114,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.1), shape: BoxShape.circle),
-          child: const Icon(Icons.mark_email_read_rounded, size: 48, color: Colors.green),
+          child: const Icon(Icons.mark_email_read_rounded, size: 40, color: Colors.green),
         ),
+        const SizedBox(height: 24),
+        const Text('Check Your Email', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
+        const SizedBox(height: 8),
+        Text('We sent a recovery link to:', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+        Text(_emailController.text, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: primary)),
         const SizedBox(height: 32),
-        const Text('Check Your Email', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
-        const SizedBox(height: 12),
-        Text('We sent a recovery link to:', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-        Text(_emailController.text, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: primary)),
-        const SizedBox(height: 48),
         SizedBox(
           width: double.infinity,
-          height: 52,
+          height: 48,
           child: ElevatedButton(
             onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-            style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primary, 
+              foregroundColor: Colors.white, 
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            ),
             child: const Text('Back to Login', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
           ),
         ),
-        TextButton(onPressed: () => setState(() => _emailSent = false), child: Text('Try another email', style: TextStyle(fontSize: 13, color: Colors.grey.shade500))),
+        TextButton(onPressed: () => setState(() => _emailSent = false), child: Text('Try another email', style: TextStyle(fontSize: 12, color: Colors.grey.shade500))),
       ],
     );
   }

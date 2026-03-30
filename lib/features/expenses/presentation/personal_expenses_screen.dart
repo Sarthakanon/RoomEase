@@ -79,11 +79,15 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
       ),
       body: _isLoading ? const Center(child: CircularProgressIndicator()) : _buildList(width, primary),
       floatingActionButton: FloatingActionButton(
+        key: const ValueKey('add_personal_expense_fab'),
         onPressed: () => PersonalExpenseDialog.show(context, onSubmit: (e) async {
           await _apiService.createPersonalExpense(PersonalExpenseCreateRequest.fromExpenseData(e).toJson());
           _load(reset: true);
         }),
-        backgroundColor: primary, foregroundColor: Colors.white, elevation: 2,
+        backgroundColor: primary, 
+        foregroundColor: Colors.white, 
+        elevation: 2,
+        tooltip: 'Add Personal Expense',
         child: const Icon(Icons.add_rounded),
       ),
     );

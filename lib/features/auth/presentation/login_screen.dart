@@ -67,29 +67,29 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _buildLogo(primaryColor),
-                  const SizedBox(height: 32),
-                  const Text('Welcome Back', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
-                  const SizedBox(height: 6),
-                  Text('Sign in to manage your RoomEase expenses', style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-                  const SizedBox(height: 48),
-                  _buildField(_emailController, 'Email', Icons.email_outlined),
                   const SizedBox(height: 16),
+                  const Text('Welcome Back', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
+                  const SizedBox(height: 4),
+                  Text('Sign in to manage your RoomEase expenses', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                  const SizedBox(height: 20),
+                  _buildField(_emailController, 'Email', Icons.email_outlined),
+                  const SizedBox(height: 10),
                   _buildField(_passwordController, 'Password', Icons.lock_outline_rounded, isPassword: true),
                   _buildOptions(primaryColor),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   _buildLoginButton(primaryColor),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 18),
                   _buildDivider(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 18),
                   _buildGoogleButton(),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 24),
                   _buildSignupLink(primaryColor),
                 ],
               ),
@@ -102,10 +102,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildLogo(Color primary) {
     return Container(
-      height: 72,
-      width: 72,
-      decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(18), border: Border.all(color: primary.withValues(alpha: 0.05))),
-      child: Center(child: Icon(Icons.home_work_rounded, color: primary, size: 36)),
+      height: 50,
+      width: 50,
+      decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14), border: Border.all(color: primary.withValues(alpha: 0.05))),
+      child: Center(child: Icon(Icons.home_work_rounded, color: primary, size: 26)),
     );
   }
 
@@ -153,11 +153,17 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildLoginButton(Color primary) {
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: 48,
       child: ElevatedButton(
         onPressed: _authController.isLoading ? null : _login,
-        style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
-        child: _authController.isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)) : const Text('Sign In', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primary, 
+          foregroundColor: Colors.white, 
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        ),
+        child: _authController.isLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)) : const Text('Sign In', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -175,16 +181,28 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildGoogleButton() {
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: 48,
       child: OutlinedButton(
         onPressed: _authController.isLoading ? null : _googleLogin,
-        style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFEEEEF2)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), foregroundColor: const Color(0xFF1A1A2E)),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: Color(0xFFEEEEF2)), 
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
+          foregroundColor: const Color(0xFF1A1A2E),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.network('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/480px-Google_%22G%22_logo.svg.png', height: 20, width: 20),
-            const SizedBox(width: 12),
-            const Text('Continue with Google', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            Image.asset('png/google.png', height: 18, width: 18),
+            const SizedBox(width: 10),
+            const Flexible(
+              child: Text(
+                'Continue with Google', 
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
       ),

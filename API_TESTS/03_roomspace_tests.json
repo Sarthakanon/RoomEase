@@ -1,0 +1,241 @@
+{
+  "info": {
+    "name": "Roomspace Management API Tests",
+    "description": "Test cases for roomspace creation, joining, and management endpoints",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "default"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "roomspaceId",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "inviteCode",
+      "value": "",
+      "type": "default"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Roomspace",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test Roomspace\",\n  \"description\": \"A test roomspace for API testing\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces"]
+        }
+      },
+      "tests": "pm.test('Status code is 201', function () { pm.response.to.have.status(201); }); pm.test('Roomspace created successfully', function () { const json = pm.response.json(); pm.expect(json.success).to.be.true; pm.collectionVariables.set('roomspaceId', json.data.id); pm.collectionVariables.set('inviteCode', json.data.invite_code); });"
+    },
+    {
+      "name": "Get User Roomspaces",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has roomspaces array', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+    },
+    {
+      "name": "Get Specific Roomspace",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Response has roomspace data', function () { pm.expect(pm.response.json().data).to.have.property('name'); });"
+    },
+    {
+      "name": "Search Roomspace by Code",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/code/{{inviteCode}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "code", "{{inviteCode}}"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Found roomspace by code', function () { pm.expect(pm.response.json().data).to.have.property('invite_code'); });"
+    },
+    {
+      "name": "Join Roomspace by Code",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/code/{{inviteCode}}/join",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "code", "{{inviteCode}}", "join"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); }); pm.test('Join request sent', function () { pm.expect(pm.response.json().message).to.include('request'); });"
+    },
+    {
+      "name": "Join Roomspace by ID",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/join",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "join"]
+        }
+      },
+      "tests": "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+    },
+    {
+      "name": "Remove Member from Roomspace",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"member_firebase_uid\": \"test_member_uid\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/{{roomspaceId}}/members",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "{{roomspaceId}}", "members"]
+        }
+      },
+      "tests": "pm.test('Status code is 200 or 400', function () { pm.expect(pm.response.code).to.be.oneOf([200, 400]); });"
+    },
+    {
+      "name": "Create Roomspace - Invalid Data",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"description\": \"Missing name field\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces"]
+        }
+      },
+      "tests": "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+    },
+    {
+      "name": "Search Roomspace - Invalid Code",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cookie",
+            "value": "session_id={{sessionId}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/roomspaces/code/INVALID123",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "roomspaces", "code", "INVALID123"]
+        }
+      },
+      "tests": "pm.test('Status code is 404', function () { pm.response.to.have.status(404); });"
+    }
+  ]
+}

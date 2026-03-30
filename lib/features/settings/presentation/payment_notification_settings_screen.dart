@@ -91,6 +91,7 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
         title: const Text('Payment Notifications'),
         actions: [
           IconButton(
+            key: const ValueKey('payment_history_btn'),
             onPressed: () {
               Navigator.push(
                 context,

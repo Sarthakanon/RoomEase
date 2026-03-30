@@ -228,3 +228,86 @@ class BalanceChange {
     }
   }
 }
+
+
+/// Individual balance item for a user in a roomspace
+class BalanceItem {
+  final String userId;
+  final String userName;
+  final double balance;
+  final double totalPaid;
+  final double totalOwed;
+  final int expenseCount;
+
+  BalanceItem({
+    required this.userId,
+    required this.userName,
+    required this.balance,
+    required this.totalPaid,
+    required this.totalOwed,
+    required this.expenseCount,
+  });
+
+  factory BalanceItem.fromJson(Map<String, dynamic> json) {
+    return BalanceItem(
+      userId: json['user_id'] as String,
+      userName: json['user_name'] as String? ?? json['name'] as String? ?? 'Unknown',
+      balance: (json['balance'] as num).toDouble(),
+      totalPaid: (json['total_paid'] as num?)?.toDouble() ?? 0.0,
+      totalOwed: (json['total_owed'] as num?)?.toDouble() ?? 0.0,
+      expenseCount: json['expense_count'] as int? ?? 0,
+    );
+  }
+}
+
+/// Settlement (payment) between users
+class Settlement {
+  final int? id;
+  final String roomspaceId;
+  final String fromUserId;
+  final String fromUserName;
+  final String toUserId;
+  final String toUserName;
+  final double amount;
+  final DateTime? createdAt;
+
+  Settlement({
+    this.id,
+    required this.roomspaceId,
+    required this.fromUserId,
+    required this.fromUserName,
+    required this.toUserId,
+    required this.toUserName,
+    required this.amount,
+    this.createdAt,
+  });
+
+  factory Settlement.fromJson(Map<String, dynamic> json) {
+    // Try to get names from direct fields first, then from nested user objects
+    String fromUserName = json['from_user_name'] as String? ?? 'Unknown';
+    String toUserName = json['to_user_name'] as String? ?? 'Unknown';
+    
+    // Fallback to nested user objects if direct fields not available
+    if (fromUserName == 'Unknown' && json['from_user'] != null) {
+      final fromUser = json['from_user'] as Map<String, dynamic>;
+      fromUserName = fromUser['name'] as String? ?? 'Unknown';
+    }
+    if (toUserName == 'Unknown' && json['to_user'] != null) {
+      final toUser = json['to_user'] as Map<String, dynamic>;
+      toUserName = toUser['name'] as String? ?? 'Unknown';
+    }
+    
+    return Settlement(
+      id: json['id'] as int?,
+      roomspaceId: json['roomspace_id'] as String,
+      fromUserId: json['from_user_id'] as String,
+      fromUserName: fromUserName,
+      toUserId: json['to_user_id'] as String,
+      toUserName: toUserName,
+      amount: (json['amount'] as num).toDouble(),
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at']) 
+          : null,
+    );
+  }
+}

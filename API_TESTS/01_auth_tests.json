@@ -1,0 +1,136 @@
+{
+  "name": "Authentication APIs",
+  "description": "Tests for user authentication, login, logout, and session management",
+  "requests": [
+    {
+      "name": "Login with Firebase Token",
+      "method": "POST",
+      "url": "{{BASE_URL}}/api/auth/login",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "firebase_token": "{{FIREBASE_TOKEN}}"
+      },
+      "tests": {
+        "status": 200,
+        "response_contains": ["success", "user"],
+        "cookies": ["session_id"]
+      },
+      "description": "Login user with Firebase ID token and create session"
+    },
+    {
+      "name": "Login with Invalid Token",
+      "method": "POST", 
+      "url": "{{BASE_URL}}/api/auth/login",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "firebase_token": "invalid_token_12345"
+      },
+      "tests": {
+        "status": 401,
+        "response_contains": ["error"]
+      },
+      "description": "Test login with invalid Firebase token"
+    },
+    {
+      "name": "Login without Token",
+      "method": "POST",
+      "url": "{{BASE_URL}}/api/auth/login", 
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {},
+      "tests": {
+        "status": 400,
+        "response_contains": ["error"]
+      },
+      "description": "Test login without providing Firebase token"
+    },
+    {
+      "name": "Verify Session",
+      "method": "GET",
+      "url": "{{BASE_URL}}/api/auth/verify",
+      "headers": {
+        "Cookie": "session_id={{SESSION_ID}}"
+      },
+      "tests": {
+        "status": 200,
+        "response_contains": ["success", "user"]
+      },
+      "description": "Verify current session is valid"
+    },
+    {
+      "name": "Verify Invalid Session",
+      "method": "GET", 
+      "url": "{{BASE_URL}}/api/auth/verify",
+      "headers": {
+        "Cookie": "session_id=invalid_session_123"
+      },
+      "tests": {
+        "status": 401,
+        "response_contains": ["error"]
+      },
+      "description": "Test session verification with invalid session"
+    },
+    {
+      "name": "Verify without Session",
+      "method": "GET",
+      "url": "{{BASE_URL}}/api/auth/verify",
+      "tests": {
+        "status": 401,
+        "response_contains": ["error", "No session cookie"]
+      },
+      "description": "Test session verification without session cookie"
+    },
+    {
+      "name": "Refresh Session",
+      "method": "POST",
+      "url": "{{BASE_URL}}/api/auth/refresh",
+      "headers": {
+        "Cookie": "session_id={{SESSION_ID}}"
+      },
+      "tests": {
+        "status": 200,
+        "response_contains": ["success"]
+      },
+      "description": "Refresh current session"
+    },
+    {
+      "name": "Logout",
+      "method": "POST",
+      "url": "{{BASE_URL}}/api/auth/logout",
+      "headers": {
+        "Cookie": "session_id={{SESSION_ID}}"
+      },
+      "tests": {
+        "status": 200,
+        "response_contains": ["success"]
+      },
+      "description": "Logout user and invalidate session"
+    },
+    {
+      "name": "Logout without Session",
+      "method": "POST",
+      "url": "{{BASE_URL}}/api/auth/logout",
+      "tests": {
+        "status": 401,
+        "response_contains": ["error"]
+      },
+      "description": "Test logout without valid session"
+    }
+  ],
+  "environment": {
+    "BASE_URL": "http://localhost:8080",
+    "FIREBASE_TOKEN": "your_firebase_id_token_here",
+    "SESSION_ID": "session_cookie_from_login_response"
+  },
+  "notes": [
+    "Run Login test first to get session_id cookie",
+    "Copy session_id from login response to SESSION_ID variable",
+    "Firebase token must be valid and from authenticated user",
+    "Session tests require valid session_id from login"
+  ]
+}

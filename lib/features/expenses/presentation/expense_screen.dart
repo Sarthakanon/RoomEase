@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
 import '../../../core/widgets/global_roomspace_selector.dart';
-import '../../../services/api_service.dart';
+import '../../../services/smart_api_service.dart';
+import '../../../services/state_management_service.dart';
 import '../../../models/expense_models.dart';
 import '../../../providers/roomspace_provider.dart';
+import '../../../widgets/smart_future_builder.dart';
 import '../widgets/month_selector.dart';
 import 'expense_list_screen.dart';
 import 'personal_expenses_screen.dart';
@@ -13,6 +15,7 @@ import 'payment_confirmation_screen.dart';
 import 'who_owes_who_screen.dart';
 import 'report_preview_screen.dart';
 import 'report_options_screen.dart';
+import 'settlements_screen.dart';
 
 /// Main expense screen — acts as a router for different expense-related views.
 class ExpenseScreen extends StatefulWidget {
@@ -22,15 +25,19 @@ class ExpenseScreen extends StatefulWidget {
   State<ExpenseScreen> createState() => _ExpenseScreenState();
 }
 
-class _ExpenseScreenState extends State<ExpenseScreen> {
-  final ApiService _apiService = ApiService();
+class _ExpenseScreenState extends State<ExpenseScreen> 
+    with AutomaticKeepAliveClientMixin {
+  final SmartApiService _smartApi = SmartApiService();
+  final StateManagementService _state = StateManagementService();
+
+  @override
+  bool get wantKeepAlive => true; // Keep state alive when switching tabs
   
-  List<ExpenseData> _recentSharedExpenses = [];
-  List<PersonalExpenseData> _recentPersonalExpenses = [];
-  int _pendingPaymentsCount = 0;
-  bool _isLoading = true;
-  bool _hasError = false;
-  String _errorMessage = '';
+  // Cache expense data to prevent reloading
+  Map<String, dynamic>? _cachedExpenseData;
+  DateTime? _lastDataLoad;
+  static const Duration _cacheValidDuration = Duration(minutes: 3);
+  
   String? _currentRoomspaceId;
   // Initialize with first day of current month
   late DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
@@ -38,181 +45,234 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    
+    // Listen for roomspace changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final roomspaceProvider =
+          Provider.of<RoomspaceProvider>(context, listen: false);
+      roomspaceProvider.addListener(_onRoomspaceChanged);
+    });
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Listen for roomspace changes
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
+  void dispose() {
+    final roomspaceProvider =
+        Provider.of<RoomspaceProvider>(context, listen: false);
+    roomspaceProvider.removeListener(_onRoomspaceChanged);
+    super.dispose();
+  }
+
+  /// Called automatically when the active roomspace changes
+  void _onRoomspaceChanged() {
+    // Clear cached data when roomspace changes
+    _cachedExpenseData = null;
+    _lastDataLoad = null;
+    
+    // Force refresh expenses when roomspace changes
+    _state.forceRefresh(ScreenKeys.expenses);
+    setState(() {}); // Trigger rebuild to refresh UI
+  }
+
+  /// Smart data loader for expenses with caching
+  Future<Map<String, dynamic>> _loadExpenseData({bool forceRefresh = false}) async {
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh && 
+        _cachedExpenseData != null && 
+        _lastDataLoad != null &&
+        DateTime.now().difference(_lastDataLoad!) < _cacheValidDuration) {
+      debugPrint('🚀 Using cached expense data');
+      return _cachedExpenseData!;
+    }
+
+    debugPrint('🌐 Loading fresh expense data...');
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
     final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+
+    // Load data in parallel with caching
+    final futures = <String, Future<Map<String, dynamic>>>{};
     
-    // Reload data if roomspace changed or switched to/from personal space
-    if (activeRoomspaceId != _currentRoomspaceId || isPersonalSpace) {
-      _currentRoomspaceId = activeRoomspaceId;
-      _loadInitialData();
-    }
-  }
-
-  Future<void> _loadInitialData() async {
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-    });
-
-    try {
-      // Get roomspace provider to check if in personal space
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-      final isPersonalSpace = roomspaceProvider.isPersonalSpace;
-      
-      if (isPersonalSpace) {
-        // Only load personal expenses in personal space
-        await _loadRecentPersonalExpenses();
-        _recentSharedExpenses = []; // Clear shared expenses
-        _pendingPaymentsCount = 0; // Clear pending payments
-      } else {
-        // Load both in roomspace mode
-        await Future.wait([
-          _loadRecentSharedExpenses(),
-          _loadRecentPersonalExpenses(),
-          _loadPendingPaymentsCount(),
-        ]);
-      }
-      
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
-      });
-    }
-  }
-
-  Future<void> _loadRecentSharedExpenses() async {
-    try {
-      // Get active roomspace from provider
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-      final activeRoomspace = roomspaceProvider.activeRoomspace;
-      
-      if (activeRoomspace != null) {
-        _currentRoomspaceId = activeRoomspace.id;
-        
-        final response = await _apiService.getRoomspaceExpenses(
-          _currentRoomspaceId!,
-          limit: 3, // Only show 3 on dashboard, full list available via 'View All'
-          offset: 0,
-          month: _selectedMonth, // Pass selected month
-        );
-
-        if (response.containsKey('data')) {
-          final data = response['data'];
-          if (data != null && data is List) {
-            _recentSharedExpenses = data
-                .map((json) => ExpenseData.fromJson(json))
-                .toList();
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading shared expenses: $e');
-    }
-  }
-
-  Future<void> _loadRecentPersonalExpenses() async {
-    try {
-      final response = await _apiService.getPersonalExpenses(
-        limit: 3, // Only show 3 on dashboard, full list available via 'View All'
+    // Always load personal expenses
+    futures['personalExpenses'] = _smartApi.getPersonalExpenses(
+      limit: 3, 
+      offset: 0, 
+      month: _selectedMonth,
+      forceRefresh: forceRefresh,
+    );
+    
+    // Load roomspace-specific data if in a roomspace
+    if (!isPersonalSpace && activeRoomspaceId != null) {
+      futures['sharedExpenses'] = _smartApi.getRoomspaceExpenses(
+        activeRoomspaceId,
+        limit: 3,
         offset: 0,
-        month: _selectedMonth, // Pass selected month
+        month: _selectedMonth,
+        forceRefresh: forceRefresh,
       );
-
-      if (response.containsKey('data')) {
-        final data = response['data'];
-        if (data != null && data is List) {
-          _recentPersonalExpenses = data
-              .map((json) => PersonalExpenseData.fromJson(json))
-              .toList();
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading personal expenses: $e');
+      
+      // Load pending payments count
+      futures['pendingPayments'] = _loadPendingPaymentsCount(activeRoomspaceId);
     }
+
+    // Wait for all data to load
+    final results = <String, Map<String, dynamic>>{};
+    for (final entry in futures.entries) {
+      try {
+        results[entry.key] = await entry.value;
+      } catch (e) {
+        debugPrint('Error loading ${entry.key}: $e');
+        results[entry.key] = {'data': [], 'error': e.toString()};
+      }
+    }
+
+    final expenseData = {
+      'roomspaceId': activeRoomspaceId,
+      'isPersonalSpace': isPersonalSpace,
+      'selectedMonth': _selectedMonth,
+      ...results,
+    };
+
+    // Cache the data
+    _cachedExpenseData = expenseData;
+    _lastDataLoad = DateTime.now();
+    _currentRoomspaceId = activeRoomspaceId;
+    debugPrint('💾 Expense data cached at ${_lastDataLoad}');
+
+    return expenseData;
   }
 
-  Future<void> _loadPendingPaymentsCount() async {
+  Future<Map<String, dynamic>> _loadPendingPaymentsCount(String roomspaceId) async {
     try {
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-      final activeRoomspace = roomspaceProvider.activeRoomspace;
+      final response = await _smartApi.dio.get(
+        '/api/roomspaces/$roomspaceId/payments/pending',
+      );
       
-      if (activeRoomspace != null) {
-        final response = await _apiService.dio.get(
-          '/api/roomspaces/${activeRoomspace.id}/payments/pending',
-        );
-        
-        if (response.statusCode == 200 && response.data['success'] == true) {
-          final List<dynamic> payments = response.data['data'] ?? [];
-          setState(() {
-            _pendingPaymentsCount = payments.length;
-          });
-        }
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final List<dynamic> payments = response.data['data'] ?? [];
+        return {'data': payments, 'count': payments.length};
       }
+      return {'data': [], 'count': 0};
     } catch (e) {
       debugPrint('Error loading pending payments count: $e');
-      setState(() {
-        _pendingPaymentsCount = 0;
-      });
+      return {'data': [], 'count': 0, 'error': e.toString()};
     }
   }
 
-  Future<void> _refreshData() async {
-    await _loadInitialData();
-  }
-  
   void _onMonthChanged(DateTime newMonth) {
     setState(() {
       _selectedMonth = newMonth;
     });
-    _loadInitialData();
-  }
-
-  double get _totalRecentSpending {
-    double sharedSum = _recentSharedExpenses.fold(0, (sum, item) => sum + item.amount);
-    double personalSum = _recentPersonalExpenses.fold(0, (sum, item) => sum + item.amount);
-    return sharedSum + personalSum;
+    // Clear cache when month changes
+    _cachedExpenseData = null;
+    _lastDataLoad = null;
+    _state.forceRefresh(ScreenKeys.expenses);
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     return MobileScaffold(
       currentIndex: 2,
       showAppBar: false,
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: primaryColor))
-          : _hasError
-              ? _buildErrorState(primaryColor)
-              : _buildContent(primaryColor),
+      showBottomNav: false, // Hide bottom nav since MainNavigation handles it
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _loadExpenseData(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return _buildErrorState(primaryColor);
+          }
+          
+          if (snapshot.hasData) {
+            return RefreshIndicator(
+              onRefresh: () async {
+                _cachedExpenseData = null;
+                _lastDataLoad = null;
+                _state.forceRefresh(ScreenKeys.expenses);
+                setState(() {}); // Trigger rebuild with fresh data
+              },
+              child: _buildExpenseContent(context, snapshot.data!, primaryColor),
+            );
+          }
+          
+          return _buildLoadingSkeleton(primaryColor);
+        },
+      ),
     );
   }
 
-  Widget _buildContent(Color primaryColor) {
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
-    final isPersonalSpace = roomspaceProvider.isPersonalSpace;
-    
-    return RefreshIndicator(
-      onRefresh: _refreshData,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
+  Widget _buildErrorState(Color primaryColor) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            const Text(
+              'Couldn\'t load expenses',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1A1A2E),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Please try again',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                _cachedExpenseData = null;
+                _lastDataLoad = null;
+                setState(() {}); // Trigger rebuild
+              },
+              child: const Text('Try Again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpenseContent(
+    BuildContext context,
+    Map<String, dynamic> expenseData,
+    Color primaryColor,
+  ) {
+    final isPersonalSpace = expenseData['isPersonalSpace'] as bool? ?? true;
+    final personalExpenses = expenseData['personalExpenses'] as Map<String, dynamic>? ?? {'data': []};
+    final sharedExpenses = expenseData['sharedExpenses'] as Map<String, dynamic>? ?? {'data': []};
+    final pendingPayments = expenseData['pendingPayments'] as Map<String, dynamic>? ?? {'data': [], 'count': 0};
+    
+    // Extract data safely
+    final personalExpensesList = personalExpenses['data'] as List<dynamic>? ?? [];
+    final sharedExpensesList = sharedExpenses['data'] as List<dynamic>? ?? [];
+    final pendingPaymentsCount = pendingPayments['count'] as int? ?? 0;
+    
+    // Convert to models
+    final recentPersonalExpenses = personalExpensesList
+        .map((json) => PersonalExpenseData.fromJson(json))
+        .toList();
+    final recentSharedExpenses = sharedExpensesList
+        .map((json) => ExpenseData.fromJson(json))
+        .toList();
+    
+    final totalRecentSpending = recentSharedExpenses.fold(0.0, (sum, item) => sum + item.amount) +
+        recentPersonalExpenses.fold(0.0, (sum, item) => sum + item.amount);
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
           children: [
             // ── Header Section ──
-            _buildHeader(primaryColor),
+            _buildHeader(primaryColor, totalRecentSpending),
 
             // ── Month Selector ──
             MonthSelector(
@@ -241,11 +301,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       ),
                       primaryColor: primaryColor,
                     ),
-                    _buildSharedList(primaryColor),
+                    _buildSharedList(primaryColor, recentSharedExpenses),
                     const SizedBox(height: 24),
                     
                     // Settle Up Actions (Who Owes Who + Pending Payments)
-                    _buildSettleUpSection(primaryColor),
+                    _buildSettleUpSection(primaryColor, pendingPaymentsCount),
                     const SizedBox(height: 24),
                   ],
 
@@ -260,7 +320,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     ),
                     primaryColor: Colors.orange.shade700,
                   ),
-                  _buildPersonalList(),
+                  _buildPersonalList(recentPersonalExpenses),
                   
                   const SizedBox(height: 100), // Extra space for bottom nav
                 ],
@@ -268,11 +328,52 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ),
           ],
         ),
+    );
+  }
+
+  Widget _buildLoadingSkeleton(Color primaryColor) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Header skeleton
+          const SizedBox(height: 56),
+          Container(
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          const SizedBox(height: 20),
+          
+          // Month selector skeleton
+          Container(
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          const SizedBox(height: 20),
+          
+          // Expense list skeleton
+          ...List.generate(5, (index) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Container(
+              height: 70,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          )),
+        ],
       ),
     );
   }
 
-  Widget _buildHeader(Color primaryColor) {
+  Widget _buildHeader(Color primaryColor, double totalRecentSpending) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 56, 16, 20),
@@ -296,18 +397,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
               ),
               GlobalRoomspaceSelector(
-                onRoomspaceChanged: _loadInitialData,
+                onRoomspaceChanged: () {
+                  // Clear cache when roomspace changes
+                  _cachedExpenseData = null;
+                  _lastDataLoad = null;
+                  _state.forceRefresh(ScreenKeys.expenses);
+                  setState(() {}); // Trigger rebuild to refresh UI
+                },
               ),
             ],
           ),
           const SizedBox(height: 16),
-          _buildSpendingSummaryPanel(primaryColor),
+          _buildSpendingSummaryPanel(primaryColor, totalRecentSpending),
         ],
       ),
     );
   }
 
-  Widget _buildSpendingSummaryPanel(Color primaryColor) {
+  Widget _buildSpendingSummaryPanel(Color primaryColor, double totalRecentSpending) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -329,7 +436,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Rs. ${_totalRecentSpending.toStringAsFixed(2)}',
+            'Rs. ${totalRecentSpending.toStringAsFixed(2)}',
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
@@ -380,13 +487,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  Widget _buildSharedList(Color primaryColor) {
-    if (_recentSharedExpenses.isEmpty) {
+  Widget _buildSharedList(Color primaryColor, List<ExpenseData> recentSharedExpenses) {
+    if (recentSharedExpenses.isEmpty) {
       return _buildEmptyState("No shared expenses yet", Icons.people_outline_rounded);
     }
 
     return Column(
-      children: _recentSharedExpenses.map((expense) {
+      children: recentSharedExpenses.map((expense) {
         return _ExpenseTile(
           title: expense.title,
           subtitle: expense.category,
@@ -402,13 +509,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  Widget _buildPersonalList() {
-    if (_recentPersonalExpenses.isEmpty) {
+  Widget _buildPersonalList(List<PersonalExpenseData> recentPersonalExpenses) {
+    if (recentPersonalExpenses.isEmpty) {
       return _buildEmptyState("No personal expenses yet", Icons.account_balance_wallet_outlined);
     }
 
     return Column(
-      children: _recentPersonalExpenses.map((expense) {
+      children: recentPersonalExpenses.map((expense) {
         return _ExpenseTile(
           title: expense.title,
           subtitle: expense.category,
@@ -429,7 +536,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  Widget _buildSettleUpSection(Color primaryColor) {
+  Widget _buildSettleUpSection(Color primaryColor, int pendingPaymentsCount) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -464,12 +571,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         const SizedBox(height: 12),
         _ManagementActionCard(
           title: 'Confirm Payments',
-          subtitle: _pendingPaymentsCount > 0 
-              ? '$_pendingPaymentsCount pending confirmation${_pendingPaymentsCount > 1 ? 's' : ''}'
+          subtitle: pendingPaymentsCount > 0 
+              ? '$pendingPaymentsCount pending confirmation${pendingPaymentsCount > 1 ? 's' : ''}'
               : 'Review and verify payments',
           icon: Icons.payment_rounded,
           color: Colors.blue.shade600,
-          badgeCount: _pendingPaymentsCount,
+          badgeCount: pendingPaymentsCount,
           onTap: () {
             final roomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
             if (roomspaceId != null) {
@@ -478,7 +585,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 MaterialPageRoute(
                   builder: (context) => PaymentConfirmationScreen(roomspaceId: roomspaceId),
                 ),
-              ).then((_) => _loadPendingPaymentsCount());
+              ).then((_) {
+                // Refresh pending payments count after returning
+                _cachedExpenseData = null;
+                _lastDataLoad = null;
+                _state.forceRefresh(ScreenKeys.expenses);
+                setState(() {});
+              });
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        _ManagementActionCard(
+          title: 'Settlements',
+          subtitle: 'View payment history between roommates',
+          icon: Icons.payments_rounded,
+          color: Colors.green.shade700,
+          onTap: () {
+            final roomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+            if (roomspaceId != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SettlementsScreen(roomspaceId: roomspaceId),
+                ),
+              );
             }
           },
         ),
@@ -517,40 +648,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState(Color primaryColor) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            const Text(
-              'Couldn\'t load expenses',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A2E),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _errorMessage,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _loadInitialData,
-              child: const Text('Try Again'),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -32,9 +32,9 @@ class _MobileScaffoldState extends State<MobileScaffold> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Light grey background
+      backgroundColor: Colors.white, // Changed from grey to white
       appBar: widget.showAppBar ? AppBar(
-        backgroundColor: const Color(0xFFF8F9FA), // Light grey background
+        backgroundColor: Colors.white, // Changed from grey to white
         elevation: 0,
         automaticallyImplyLeading: false,
         title: Text(
@@ -71,16 +71,16 @@ class _MobileScaffoldState extends State<MobileScaffold> {
                 final horizontalMargin = screenWidth < 360 ? 12.0 : 24.0;
                 final iconSize = screenWidth < 360 ? 22.0 : 24.0;
                 final fontSize = screenWidth < 360 ? 12.0 : 14.0;
-                final navBarHeight = screenWidth < 360 ? 70.0 : 80.0;
+                final navBarHeight = screenWidth < 360 ? 55.0 : 63.0;
                 
                 return SafeArea(
                   child: Container(
-                    // Responsive height
+                    // Responsive height - adjusted 5% bigger
                     height: navBarHeight,
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10), // Slightly increased from 9
                     margin: EdgeInsets.symmetric(
                       horizontal: horizontalMargin,
-                      vertical: 12,
+                      vertical: 10, // Slightly increased from 9
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -202,9 +202,9 @@ class _NavBarItem extends StatelessWidget {
     final Color primaryColor = Theme.of(context).colorScheme.primary;
     final screenWidth = MediaQuery.of(context).size.width;
     
-    // Responsive padding
+    // Responsive padding - adjusted 5% bigger
     final horizontalPadding = screenWidth < 360 ? 8.0 : 12.0;
-    final verticalPadding = screenWidth < 360 ? 6.0 : 8.0;
+    final verticalPadding = screenWidth < 360 ? 5.0 : 6.5; // Slightly increased
 
     return GestureDetector(
       onTap: onTap,

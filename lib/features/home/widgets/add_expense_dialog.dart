@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import '../../../models/payment_notification.dart';
 import '../../../models/expense_models.dart';
+import '../../../providers/roomspace_provider.dart';
 import '../../../services/payment_parser_service.dart';
 import '../../../utils/expense_calculation_utils.dart';
 import 'receipt_scanner_dialog.dart';
@@ -59,6 +63,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
 
   String _selectedCategory = 'General';
   final Set<String> _selectedRoommates = {};
+  String? _paidBy; // Who actually paid for this expense
   SplitType _splitType = SplitType.equal;
   final Map<String, double> _customSplits = {};
 
@@ -83,40 +88,98 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   }
 
   void _autoFillFromPaymentNotification() {
-    if (widget.paymentNotification == null) return;
-    final n = widget.paymentNotification!;
-    if (n.amount != null) _amountController.text = n.amount!.toStringAsFixed(0);
-    _titleController.text = n.merchant ?? 'Payment via ${n.appName}';
-    final suggested = PaymentParserService.suggestExpenseCategory(n.merchant, n.rawText);
-    _selectedCategory = _categories.any((c) => c.name == suggested) ? suggested : 'General';
-    _descriptionController.text = 'From ${n.appName}';
+    if (widget.paymentNotification == null || !mounted) return;
+    
+    try {
+      final n = widget.paymentNotification!;
+      if (n.amount != null) {
+        _amountController.text = n.amount!.toStringAsFixed(0);
+      }
+      _titleController.text = n.merchant ?? 'Payment via ${n.appName}';
+      
+      final suggested = PaymentParserService.suggestExpenseCategory(n.merchant, n.rawText);
+      _selectedCategory = _categories.any((c) => c.name == suggested) ? suggested : 'General';
+      _descriptionController.text = 'From ${n.appName}';
+    } catch (e) {
+      // Handle any errors gracefully without affecting the UI
+      debugPrint('Error auto-filling from payment notification: $e');
+    }
   }
 
   Future<void> _scanReceipt() async {
-    final result = await ReceiptScannerDialog.show(context);
-    if (result != null && mounted) {
-      if (result.amount != null) _amountController.text = result.amount!.toStringAsFixed(0);
-      if (result.merchant != null) _titleController.text = result.merchant!;
-      _descriptionController.text = 'Scanned from receipt';
-      setState(() {});
+    try {
+      final result = await ReceiptScannerDialog.show(context);
+      
+      // Check if widget is still mounted before using the result
+      if (result != null && mounted) {
+        if (result.amount != null) {
+          _amountController.text = result.amount!.toStringAsFixed(0);
+        }
+        if (result.merchant != null) {
+          _titleController.text = result.merchant!;
+        }
+        _descriptionController.text = 'Scanned from receipt';
+        
+        // Only call setState if widget is still mounted
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      // Handle any errors gracefully
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to scan receipt: ${e.toString()}';
+        });
+      }
     }
   }
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    if (_paidBy == null) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Select who paid for this expense');
+      }
+      return;
+    }
+    
     if (_selectedRoommates.isEmpty) {
-      setState(() => _errorMessage = 'Select at least one roommate');
+      if (mounted) {
+        setState(() => _errorMessage = 'Select at least one roommate to split with');
+      }
+      return;
+    }
+    
+    // Check if only one person is selected (solo expense)
+    if (_selectedRoommates.length == 1) {
+      _showSoloExpenseDialog();
       return;
     }
 
     final totalAmount = double.parse(_amountController.text);
-    final validation = ExpenseCalculationUtils.validateSplitData(_splitType, totalAmount, _selectedRoommates.toList(), _customSplits);
+    final validation = ExpenseCalculationUtils.validateSplitData(
+      _splitType, 
+      totalAmount, 
+      _selectedRoommates.toList(), 
+      _customSplits
+    );
+    
     if (!validation.isValid) {
-      setState(() => _errorMessage = validation.errorMessage);
+      if (mounted) {
+        setState(() => _errorMessage = validation.errorMessage);
+      }
       return;
     }
 
-    setState(() { _isSubmitting = true; _errorMessage = null; });
+    if (mounted) {
+      setState(() { 
+        _isSubmitting = true; 
+        _errorMessage = null; 
+      });
+    }
+    
     try {
       final expense = ExpenseData(
         title: _titleController.text.trim(),
@@ -126,11 +189,75 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         selectedRoommateIds: _selectedRoommates.toList(),
         splitType: _splitType,
         customSplits: Map.from(_customSplits),
+        paidBy: _paidBy, // Include who paid
       );
+      
       await widget.onSubmit(expense);
-      if (mounted) Navigator.pop(context);
+      
+      // Check if widget is still mounted before using context
+      if (mounted) {
+        Navigator.pop(context);
+      }
     } catch (e) {
-      if (mounted) setState(() { _isSubmitting = false; _errorMessage = e.toString(); });
+      // Check if widget is still mounted before calling setState
+      if (mounted) {
+        setState(() { 
+          _isSubmitting = false; 
+          _errorMessage = e.toString(); 
+        });
+      }
+    }
+  }
+  
+  void _showSoloExpenseDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 12),
+            const Text('Personal Expense', style: TextStyle(fontSize: 18)),
+          ],
+        ),
+        content: const Text(
+          'This expense is only for you. Would you like to add it as a personal expense instead?',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Close expense dialog
+              _switchToPersonalAndAddExpense();
+            },
+            child: const Text('Switch to Personal'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _switchToPersonalAndAddExpense() async {
+    // Import provider
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    
+    // Switch to personal space
+    await roomspaceProvider.switchToPersonalSpace();
+    
+    // Show snackbar
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Switched to Personal Space. Add your expense now.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -158,12 +285,21 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                     const SizedBox(height: 20),
                     _buildField(controller: _amountController, label: 'AMOUNT', hint: '0', icon: Icons.payments_outlined, isNumeric: true, prefix: 'Rs. ', validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Invalid amount' : null),
                     const SizedBox(height: 24),
+                    _buildSectionLabel('PAID BY'),
+                    const SizedBox(height: 8),
+                    _buildPaidBySelector(primary),
+                    const SizedBox(height: 24),
                     _buildSectionLabel('CATEGORY'),
                     const SizedBox(height: 12),
                     _buildCategoryRow(primary),
                     const SizedBox(height: 24),
                     _buildSectionLabel('SPLIT WITH'),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Select who should share this expense',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    ),
+                    const SizedBox(height: 8),
                     _buildRoommateChipArea(primary),
                     const SizedBox(height: 24),
                     _buildSectionLabel('SPLIT TYPE'),
@@ -198,8 +334,17 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
           const Text('Add Expense', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
           Row(
             children: [
-              IconButton(onPressed: _scanReceipt, icon: Icon(Icons.document_scanner_rounded, size: 20, color: primary), tooltip: 'Scan Receipt'),
-              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded, size: 22, color: Color(0xFF1A1A2E))),
+              IconButton(
+                key: const ValueKey('scan_receipt_btn'),
+                onPressed: _scanReceipt, 
+                icon: Icon(Icons.document_scanner_rounded, size: 20, color: primary), 
+                tooltip: 'Scan Receipt'
+              ),
+              IconButton(
+                key: const ValueKey('close_dialog_btn'),
+                onPressed: () => Navigator.pop(context), 
+                icon: const Icon(Icons.close_rounded, size: 22, color: Color(0xFF1A1A2E))
+              ),
             ],
           ),
         ],
@@ -229,6 +374,78 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
 
   Widget _buildSectionLabel(String text) {
     return Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.grey.shade400, letterSpacing: 0.8));
+  }
+
+  Widget _buildPaidBySelector(Color primary) {
+    // Only show roommates who are selected in the split
+    final availablePayers = widget.roommates
+        .where((r) => _selectedRoommates.contains(r.id))
+        .toList();
+    
+    // Auto-select if only one roommate is selected
+    if (availablePayers.length == 1 && _paidBy != availablePayers.first.id) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() {
+          _paidBy = availablePayers.first.id;
+        });
+      });
+    }
+    
+    // Clear paidBy if the selected payer is no longer in the split
+    if (_paidBy != null && !_selectedRoommates.contains(_paidBy)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() {
+          _paidBy = null;
+        });
+      });
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F7FB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _paidBy,
+          hint: Text(
+            availablePayers.isEmpty 
+                ? 'Select roommates first' 
+                : 'Who paid?',
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+          ),
+          isExpanded: true,
+          icon: Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1A1A2E)),
+          items: availablePayers.map((roommate) {
+            return DropdownMenuItem<String>(
+              value: roommate.id,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: primary.withValues(alpha: 0.1),
+                    child: Text(
+                      roommate.name[0].toUpperCase(),
+                      style: TextStyle(fontSize: 10, color: primary, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(roommate.name),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: availablePayers.isEmpty ? null : (value) {
+            setState(() {
+              _paidBy = value;
+            });
+          },
+        ),
+      ),
+    );
   }
 
   Widget _buildCategoryRow(Color primary) {

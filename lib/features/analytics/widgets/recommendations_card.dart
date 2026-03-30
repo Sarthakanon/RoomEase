@@ -118,8 +118,37 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
             children: [
               _buildPriorityBadge(rec.priority),
               const Expanded(child: SizedBox()),
-              Text('Save Rs. ${rec.potentialSavings.toInt()}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.indigo)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.green.shade400, Colors.green.shade600],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.green.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.savings_outlined, color: Colors.white, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Save Rs. ${rec.potentialSavings.toInt()}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -128,7 +157,19 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: const Color(0xFFEFF1FF), borderRadius: BorderRadius.circular(14)),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFEFF1FF),
+                      Colors.indigo.shade50,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.indigo.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
                 child: Icon(_getCategoryIcon(rec.category), color: Colors.indigo, size: 22),
               ),
               const SizedBox(width: 16),
@@ -136,18 +177,119 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(rec.description,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E), height: 1.5)),
+                    Text(
+                      rec.category.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.grey.shade500,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Main suggestion as bullet point
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.only(top: 6),
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: Colors.indigo,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            rec.description,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1A1A2E),
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 14),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
+                    // Spending comparison
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8F9FA),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.grey.shade200,
+                          width: 1,
+                        ),
+                      ),
                       child: Row(
                         children: [
-                          _buildSpendingTag('Now', 'Rs. ${rec.currentSpending.toInt()}', Colors.red.shade400),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.keyboard_double_arrow_right_rounded, size: 16, color: Colors.grey),
-                          const SizedBox(width: 8),
-                          _buildSpendingTag('Target', 'Rs. ${rec.suggestedLimit.toInt()}', Colors.green.shade600),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Current',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade600,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Rs. ${rec.currentSpending.toInt()}',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.red.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'Target',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade600,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Rs. ${rec.suggestedLimit.toInt()}',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.green.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),

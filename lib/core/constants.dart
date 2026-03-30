@@ -1,8 +1,8 @@
 /// App-wide constants and configuration
 class AppConstants {
   // Backend Configuration
-  // Production backend URL (update after deployment)
-  static const String backendIp = 'roomease-backend.onrender.com'; // Your deployed backend URL
+  // Production backend URL - UPDATE THIS after Railway deployment
+  static const String backendIp = 'your-railway-url.up.railway.app'; // Replace with actual Railway URL
   static const int backendPort = 443; // HTTPS port for production
   
   // Timeout settings
