@@ -41,119 +41,158 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Record Payment'),
+      title: const Text(
+        'Record Payment',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+      ),
+      contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Record a payment you made to a roommate',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            
-            // Roommate selector
-            DropdownButtonFormField<String>(
-              value: _selectedRoommateId,
-              decoration: const InputDecoration(
-                labelText: 'Paid to',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person),
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Record a payment you made to a roommate',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
-              items: widget.roommates.map((roommate) {
-                return DropdownMenuItem(
-                  value: roommate['id'],
-                  child: Text(roommate['name']!),
-                );
-              }).toList(),
-              onChanged: (value) => setState(() => _selectedRoommateId = value),
-            ),
-            const SizedBox(height: 16),
-            
-            // Amount
-            TextField(
-              controller: _amountController,
-              decoration: const InputDecoration(
-                labelText: 'Amount',
-                prefixText: 'Rs. ',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.currency_rupee),
-              ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Payment type
-            const Text(
-              'Payment Type',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<PaymentType>(
-              segments: const [
-                ButtonSegment(
-                  value: PaymentType.partial,
-                  label: Text('Partial'),
-                  icon: Icon(Icons.pie_chart_outline),
-                ),
-                ButtonSegment(
-                  value: PaymentType.full,
-                  label: Text('Full'),
-                  icon: Icon(Icons.check_circle_outline),
-                ),
-              ],
-              selected: {_paymentType},
-              onSelectionChanged: (Set<PaymentType> newSelection) {
-                setState(() => _paymentType = newSelection.first);
-              },
-            ),
-            const SizedBox(height: 16),
-            
-            // Notes
-            TextField(
-              controller: _notesController,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-                hintText: 'e.g., Rent payment for January',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.note),
-              ),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 16),
-            
-            // Date picker
-            InkWell(
-              onTap: _selectDate,
-              child: InputDecorator(
+              const SizedBox(height: 12),
+              
+              // Roommate selector
+              DropdownButtonFormField<String>(
+                value: _selectedRoommateId,
+                style: const TextStyle(fontSize: 13, color: Colors.black87),
                 decoration: const InputDecoration(
-                  labelText: 'Payment Date',
+                  labelText: 'Paid to',
+                  labelStyle: TextStyle(fontSize: 12),
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.calendar_today),
+                  prefixIcon: Icon(Icons.person, size: 18),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  isDense: true,
                 ),
-                child: Text(
-                  _formatDate(_paymentDate),
-                  style: const TextStyle(fontSize: 16),
+                items: widget.roommates.map((roommate) {
+                  return DropdownMenuItem(
+                    value: roommate['id'],
+                    child: Text(
+                      roommate['name']!,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) => setState(() => _selectedRoommateId = value),
+              ),
+              const SizedBox(height: 12),
+              
+              // Amount
+              TextField(
+                controller: _amountController,
+                style: const TextStyle(fontSize: 13),
+                decoration: const InputDecoration(
+                  labelText: 'Amount',
+                  labelStyle: TextStyle(fontSize: 12),
+                  prefixText: 'Rs. ',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.currency_rupee, size: 18),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  isDense: true,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                ],
+              ),
+              const SizedBox(height: 12),
+              
+              // Payment type
+              const Text(
+                'Payment Type',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              SegmentedButton<PaymentType>(
+                style: SegmentedButton.styleFrom(
+                  textStyle: const TextStyle(fontSize: 11),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+                segments: const [
+                  ButtonSegment(
+                    value: PaymentType.partial,
+                    label: Text('Partial'),
+                    icon: Icon(Icons.pie_chart_outline, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: PaymentType.full,
+                    label: Text('Full'),
+                    icon: Icon(Icons.check_circle_outline, size: 16),
+                  ),
+                ],
+                selected: {_paymentType},
+                onSelectionChanged: (Set<PaymentType> newSelection) {
+                  setState(() => _paymentType = newSelection.first);
+                },
+              ),
+              const SizedBox(height: 12),
+              
+              // Notes
+              TextField(
+                controller: _notesController,
+                style: const TextStyle(fontSize: 13),
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  labelStyle: TextStyle(fontSize: 12),
+                  hintText: 'e.g., Rent payment for January',
+                  hintStyle: TextStyle(fontSize: 11),
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.note, size: 18),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  isDense: true,
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 12),
+              
+              // Date picker
+              InkWell(
+                onTap: _selectDate,
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Payment Date',
+                    labelStyle: TextStyle(fontSize: 12),
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.calendar_today, size: 18),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                  child: Text(
+                    _formatDate(_paymentDate),
+                    style: const TextStyle(fontSize: 13),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          ),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(fontSize: 12),
+          ),
         ),
         ElevatedButton(
           onPressed: _submit,
           style: ElevatedButton.styleFrom(
             backgroundColor: Theme.of(context).primaryColor,
             foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
           child: const Text('Record Payment'),
         ),

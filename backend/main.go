@@ -89,6 +89,12 @@ func main() {
 	paymentConfirmationService := services.NewPaymentConfirmationService(config.DB, balanceService, dbService)
 	paymentConfirmationHandler := handlers.NewPaymentConfirmationHandler(paymentConfirmationService, dbService)
 	
+	// Initialize recurring expense handler
+	recurringExpenseHandler := handlers.NewRecurringExpenseHandler(dbService)
+	
+	// Initialize eSewa handler
+	esewaHandler := handlers.NewEsewaHandler(dbService)
+	
 	// Initialize admin handler
 	adminHandler := handlers.NewAdminHandler()
 
@@ -128,6 +134,7 @@ func main() {
 		protected.POST("/roomspaces", roomspaceHandler.CreateRoomspace)
 		protected.GET("/roomspaces/:id", middleware.ValidateRoomspaceMembership(), roomspaceHandler.GetRoomspace)
 		protected.POST("/roomspaces/:id/join", roomspaceHandler.JoinRoomspace)
+		protected.POST("/roomspaces/:id/leave", middleware.ValidateRoomspaceMembership(), roomspaceHandler.LeaveRoomspace)
 		protected.GET("/roomspaces/code/:code", roomspaceHandler.SearchRoomspaceByCode)
 		protected.POST("/roomspaces/code/:code/join", roomspaceHandler.JoinRoomspaceByCode)
 		protected.DELETE("/roomspaces/:id/members", middleware.ValidateRoomspaceMembership(), roomspaceHandler.RemoveMember)
@@ -186,6 +193,22 @@ func main() {
 		protected.GET("/roomspaces/:id/payments/pending", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.GetPendingConfirmations)
 		protected.GET("/roomspaces/:id/payments/history", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.GetPaymentHistory)
 		protected.GET("/roomspaces/:id/payments/stats", middleware.ValidateRoomspaceMembership(), paymentConfirmationHandler.GetPaymentStats)
+		
+		// Recurring Expense routes
+		protected.POST("/recurring-expenses", recurringExpenseHandler.CreateRecurringExpenseTemplate)
+		protected.GET("/roomspaces/:id/recurring-expenses", middleware.ValidateRoomspaceMembership(), recurringExpenseHandler.GetRecurringExpenseTemplates)
+		protected.PUT("/recurring-expenses/:template_id", recurringExpenseHandler.UpdateRecurringExpenseTemplate)
+		protected.DELETE("/recurring-expenses/:template_id", recurringExpenseHandler.DeleteRecurringExpenseTemplate)
+		protected.GET("/recurring-expenses/notifications", recurringExpenseHandler.GetRecurringExpenseNotifications)
+		protected.POST("/recurring-expenses/notifications/:notification_id/process", recurringExpenseHandler.ProcessRecurringExpenseNotification)
+		protected.GET("/roomspaces/:id/recurring-expenses/upcoming", middleware.ValidateRoomspaceMembership(), recurringExpenseHandler.GetUpcomingRecurringExpenses)
+		protected.GET("/roomspaces/:id/recurring-expenses/stats", middleware.ValidateRoomspaceMembership(), recurringExpenseHandler.GetRecurringExpenseStats)
+		
+		// eSewa Payment routes
+		protected.POST("/payments/subscription/verify", esewaHandler.VerifySubscriptionPayment)
+		protected.POST("/payments/settlement/verify", esewaHandler.VerifyBalanceSettlement)
+		protected.GET("/payments/history", esewaHandler.GetPaymentHistory)
+		protected.GET("/roomspaces/:id/settlements/history", middleware.ValidateRoomspaceMembership(), esewaHandler.GetSettlementHistory)
 		
 		// Admin routes (moved to public section above)
 		// protected.GET("/admin/stats", adminHandler.GetSystemStats)

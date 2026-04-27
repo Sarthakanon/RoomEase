@@ -1,0 +1,27 @@
+meta {
+  name: Logout - No Cookie
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/auth/logout
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: isDefined
+}
+
+tests {
+  test("No session cookie returns 401", function() {
+    expect(res.status).to.equal(401);
+    expect(res.body).to.have.property('error');
+  });
+  
+  test("Error indicates no active session", function() {
+    expect(res.body.error).to.equal('No active session');
+  });
+}

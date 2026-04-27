@@ -25,6 +25,7 @@ type Expense struct {
 	Category    string           `gorm:"not null;size:100;check:length(category) > 0" json:"category"`
 	PaidBy      string           `gorm:"not null;size:128;check:length(paid_by) > 0" json:"paid_by"` // Firebase UID
 	SplitType   ExpenseSplitType `gorm:"not null;check:split_type IN ('EQUAL','PERCENTAGE','EXACT')" json:"split_type"`
+	RecurringConfig *RecurringConfig `gorm:"type:jsonb" json:"recurring_config,omitempty"`
 	CreatedAt   time.Time        `json:"created_at"`
 	UpdatedAt   time.Time        `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt   `gorm:"index" json:"-"`
@@ -60,6 +61,7 @@ type CreateExpenseRequest struct {
 	SplitType         ExpenseSplitType       `json:"split_type" binding:"required"`
 	SelectedRoommates []string               `json:"selected_roommates" binding:"required,min=1"`
 	CustomSplits      map[string]float64     `json:"custom_splits,omitempty"`
+	RecurringConfig   *RecurringConfig       `json:"recurring_config,omitempty"`
 }
 
 // ExpenseResponse represents the response for expense data

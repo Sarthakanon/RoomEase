@@ -1,0 +1,38 @@
+meta {
+  name: Login - Invalid Token
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "firebase_token": "invalid_token_12345"
+  }
+}
+
+assert {
+  res.status: eq 401
+  res.body.error: isDefined
+}
+
+tests {
+  test("Invalid token returns 401", function() {
+    expect(res.status).to.equal(401);
+    expect(res.body).to.have.property('error');
+  });
+  
+  test("Error message is descriptive", function() {
+    expect(res.body.error).to.be.a('string');
+    expect(res.body.error.length).to.be.greaterThan(0);
+  });
+}

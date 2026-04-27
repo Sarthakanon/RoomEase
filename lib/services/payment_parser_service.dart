@@ -111,6 +111,8 @@ class PaymentParserService {
     
     // Patterns for different amount formats
     final patterns = [
+      // Your specific format: "Debited by NPR 500.00"
+      r'(?:debited|credited)\s+by\s+NPR\s*([0-9,]+(?:\.[0-9]{1,2})?)',
       // eSewa specific: "transfered Rs. 1.0 to" or "transferred Rs. 1.0 to"
       r'transfer(?:r)?ed\s+Rs\.?\s*([0-9,]+(?:\.[0-9]+)?)',
       // eSewa: "successfully transferred Rs. 1.0"

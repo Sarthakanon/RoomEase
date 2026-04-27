@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/constants.dart';
 import 'ban_monitoring_service.dart';
+import 'real_time_data_service.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -67,6 +68,11 @@ class ApiService {
     // Add ban detection interceptor
     _dio.interceptors.add(
       InterceptorsWrapper(
+        onRequest: (options, handler) {
+          print('📡 API Request: ${options.method} ${options.path}');
+          print('📡 Request Data: ${options.data}');
+          handler.next(options);
+        },
         onResponse: (response, handler) {
           print('📡 API Response: ${response.statusCode} - ${response.requestOptions.path}');
           print('📡 Response Data: ${response.data}');
@@ -88,6 +94,17 @@ class ApiService {
         onError: (error, handler) {
           print('❌ API Error: ${error.response?.statusCode} - ${error.requestOptions.path}');
           print('❌ Error Data: ${error.response?.data}');
+          print('❌ Error Type: ${error.type}');
+          print('❌ Error Message: ${error.message}');
+          
+          // Enhanced error logging for connection issues
+          if (error.type == DioExceptionType.connectionError) {
+            print('🌐 Connection Error Details:');
+            print('   - Base URL: ${_dio.options.baseUrl}');
+            print('   - Request URL: ${error.requestOptions.uri}');
+            print('   - Timeout: ${_dio.options.connectTimeout}');
+            print('   - Platform: ${Platform.operatingSystem}');
+          }
           
           // Check if error response indicates user is banned
           if (error.response?.data is Map<String, dynamic>) {
@@ -382,6 +399,10 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> leaveRoomspace(int roomspaceId) async {
+    return await post('/api/roomspaces/$roomspaceId/leave');
+  }
+
   // Notification APIs
   Future<Map<String, dynamic>> getNotifications() async {
     return await get('/api/notifications');
@@ -417,6 +438,13 @@ class ApiService {
       // Debug: Print the expense data being sent
       print('Creating expense with data: $expenseData');
       final response = await post('/api/expenses', data: expenseData);
+      
+      // Notify real-time service about the new expense
+      final roomspaceId = expenseData['roomspace_id']?.toString();
+      if (roomspaceId != null) {
+        RealTimeDataService().notifyExpenseCreated(roomspaceId, response);
+      }
+      
       return response;
     } catch (e) {
       print('Error creating expense: $e');
@@ -431,6 +459,10 @@ class ApiService {
       // Debug: Print the personal expense data being sent
       print('Creating personal expense with data: $expenseData');
       final response = await post('/api/personal-expenses', data: expenseData);
+      
+      // Notify real-time service about the new personal expense
+      RealTimeDataService().notifyPersonalExpenseCreated(response);
+      
       return response;
     } catch (e) {
       print('Error creating personal expense: $e');
@@ -673,5 +705,104 @@ class ApiService {
     } else {
       return 'Network error: ${error.message}';
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // RECURRING EXPENSES
+  // ══════════════════════════════════════════════════════════════════
+
+  /// Get recurring expense templates for a roomspace
+  Future<Map<String, dynamic>> getRecurringExpenseTemplates(String roomspaceId) async {
+    try {
+      final response = await _dio.get('/api/roomspaces/$roomspaceId/recurring-expenses');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to get recurring expense templates: ${e.toString()}');
+    }
+  }
+
+  /// Create a recurring expense template
+  Future<Map<String, dynamic>> createRecurringExpenseTemplate(Map<String, dynamic> templateData) async {
+    try {
+      final response = await _dio.post('/api/recurring-expenses', data: templateData);
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to create recurring expense template: ${e.toString()}');
+    }
+  }
+
+  /// Update a recurring expense template
+  Future<Map<String, dynamic>> updateRecurringExpenseTemplate(int templateId, Map<String, dynamic> templateData) async {
+    try {
+      final response = await _dio.put('/api/recurring-expenses/$templateId', data: templateData);
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to update recurring expense template: ${e.toString()}');
+    }
+  }
+
+  /// Delete a recurring expense template
+  Future<Map<String, dynamic>> deleteRecurringExpenseTemplate(int templateId) async {
+    try {
+      final response = await _dio.delete('/api/recurring-expenses/$templateId');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to delete recurring expense template: ${e.toString()}');
+    }
+  }
+
+  /// Get recurring expense notifications
+  Future<Map<String, dynamic>> getRecurringExpenseNotifications() async {
+    try {
+      final response = await _dio.get('/api/recurring-expenses/notifications');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to get recurring expense notifications: ${e.toString()}');
+    }
+  }
+
+  /// Process a recurring expense notification
+  Future<Map<String, dynamic>> processRecurringExpenseNotification(
+    int notificationId, 
+    Map<String, dynamic> actionData
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/api/recurring-expenses/notifications/$notificationId/process',
+        data: actionData,
+      );
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to process recurring expense notification: ${e.toString()}');
+    }
+  }
+
+  /// Get upcoming recurring expenses for a roomspace
+  Future<Map<String, dynamic>> getUpcomingRecurringExpenses(String roomspaceId, {int days = 30}) async {
+    try {
+      final response = await _dio.get('/api/roomspaces/$roomspaceId/recurring-expenses/upcoming?days=$days');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to get upcoming recurring expenses: ${e.toString()}');
+    }
+  }
+
+  /// Get recurring expense statistics for a roomspace
+  Future<Map<String, dynamic>> getRecurringExpenseStats(String roomspaceId) async {
+    try {
+      final response = await _dio.get('/api/roomspaces/$roomspaceId/recurring-expenses/stats');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to get recurring expense statistics: ${e.toString()}');
+    }
+  }
+
+  /// Update backend IP address (for testing purposes)
+  Future<void> updateBackendIp(String newIp) async {
+    // For now, this is a placeholder method
+    // In a real implementation, you might want to update the base URL
+    // and reinitialize the Dio instance
+    print('Backend IP update requested: $newIp');
+    // Note: This would require reinitializing the Dio instance with new baseUrl
   }
 }

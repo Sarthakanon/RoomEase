@@ -5,10 +5,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../../models/payment_notification.dart';
 import '../../../models/expense_models.dart';
+import '../../../models/recurring_expense_models.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../../../services/payment_parser_service.dart';
 import '../../../utils/expense_calculation_utils.dart';
 import 'receipt_scanner_dialog.dart';
+import 'recurring_payment_widget.dart';
 
 /// Premium, responsive dialog for adding shared expenses.
 class AddExpenseDialog extends StatefulWidget {
@@ -16,6 +18,7 @@ class AddExpenseDialog extends StatefulWidget {
   final String roomspaceId;
   final Function(ExpenseData) onSubmit;
   final PaymentNotification? paymentNotification;
+  final ExpenseData? initialData; // For editing existing expenses
 
   const AddExpenseDialog({
     super.key,
@@ -23,6 +26,7 @@ class AddExpenseDialog extends StatefulWidget {
     required this.roomspaceId,
     required this.onSubmit,
     this.paymentNotification,
+    this.initialData,
   });
 
   static Future<void> show(
@@ -31,6 +35,7 @@ class AddExpenseDialog extends StatefulWidget {
     required String roomspaceId,
     required Function(ExpenseData) onSubmit,
     PaymentNotification? paymentNotification,
+    ExpenseData? initialData,
   }) {
     final width = MediaQuery.of(context).size.width;
     final isTablet = width > 600;
@@ -46,6 +51,7 @@ class AddExpenseDialog extends StatefulWidget {
           roomspaceId: roomspaceId,
           onSubmit: onSubmit,
           paymentNotification: paymentNotification,
+          initialData: initialData,
         ),
       ),
     );
@@ -66,6 +72,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   String? _paidBy; // Who actually paid for this expense
   SplitType _splitType = SplitType.equal;
   final Map<String, double> _customSplits = {};
+  RecurringExpenseConfig _recurringConfig = RecurringExpenseConfig();
 
   bool _isSubmitting = false;
   String? _errorMessage;
@@ -84,7 +91,60 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   @override
   void initState() {
     super.initState();
+    _autoFillFromInitialData();
     _autoFillFromPaymentNotification();
+  }
+
+  void _autoFillFromInitialData() {
+    if (widget.initialData == null || !mounted) return;
+    
+    try {
+      final expense = widget.initialData!;
+      
+      debugPrint('🔧 AddExpenseDialog: Auto-filling from initial data');
+      debugPrint('🔧 Expense: ${expense.title}, Amount: ${expense.amount}');
+      debugPrint('🔧 Roomspace ID: ${expense.roomspaceId}');
+      debugPrint('🔧 Splits: ${expense.splits?.length ?? 0}');
+      
+      // Fill basic fields
+      _titleController.text = expense.title;
+      _amountController.text = expense.amount.toStringAsFixed(0);
+      _descriptionController.text = expense.description;
+      _selectedCategory = expense.category;
+      _splitType = expense.splitType;
+      _paidBy = expense.paidBy;
+      
+      // Fill selected roommates
+      if (expense.splits != null) {
+        _selectedRoommates.addAll(expense.splits!.map((s) => s.userUid));
+        debugPrint('🔧 Selected roommates from splits: ${_selectedRoommates.toList()}');
+      } else {
+        _selectedRoommates.addAll(expense.selectedRoommateIds);
+        debugPrint('🔧 Selected roommates from IDs: ${_selectedRoommates.toList()}');
+      }
+      
+      // Fill custom splits if applicable
+      if (expense.customSplits.isNotEmpty) {
+        _customSplits.addAll(expense.customSplits);
+      } else if (expense.splits != null && _splitType != SplitType.equal) {
+        for (final split in expense.splits!) {
+          if (_splitType == SplitType.percentage) {
+            _customSplits[split.userUid] = split.percentage ?? 0.0;
+          } else {
+            _customSplits[split.userUid] = split.amount;
+          }
+        }
+      }
+      
+      // Fill recurring config
+      if (expense.recurringConfig != null) {
+        _recurringConfig = expense.recurringConfig!;
+      }
+      
+      debugPrint('✅ Pre-filled expense data for editing: ${expense.title}');
+    } catch (e) {
+      debugPrint('❌ Error auto-filling from initial data: $e');
+    }
   }
 
   void _autoFillFromPaymentNotification() {
@@ -136,6 +196,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   }
 
   void _submit() async {
+    // Check if widget is still mounted at the start
+    if (!mounted) return;
+    
     if (!_formKey.currentState!.validate()) return;
     
     if (_paidBy == null) {
@@ -190,6 +253,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         splitType: _splitType,
         customSplits: Map.from(_customSplits),
         paidBy: _paidBy, // Include who paid
+        recurringConfig: _recurringConfig.isRecurring ? _recurringConfig : null,
       );
       
       await widget.onSubmit(expense);
@@ -210,13 +274,16 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   }
   
   void _showSoloExpenseDialog() {
+    // Check if widget is still mounted before showing dialog
+    if (!mounted) return;
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
+            Icon(Icons.info_outline, color: Theme.of(dialogContext).colorScheme.primary),
             const SizedBox(width: 12),
             const Text('Personal Expense', style: TextStyle(fontSize: 18)),
           ],
@@ -227,14 +294,17 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Close expense dialog
-              _switchToPersonalAndAddExpense();
+              Navigator.pop(dialogContext); // Close dialog
+              // Check if the main dialog is still mounted before closing it
+              if (mounted) {
+                Navigator.pop(context); // Close expense dialog
+                _switchToPersonalAndAddExpense();
+              }
             },
             child: const Text('Switch to Personal'),
           ),
@@ -244,20 +314,35 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   }
   
   void _switchToPersonalAndAddExpense() async {
-    // Import provider
-    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    // Check if widget is still mounted before proceeding
+    if (!mounted) return;
     
-    // Switch to personal space
-    await roomspaceProvider.switchToPersonalSpace();
-    
-    // Show snackbar
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Switched to Personal Space. Add your expense now.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+    try {
+      // Import provider
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      
+      // Switch to personal space
+      await roomspaceProvider.switchToPersonalSpace();
+      
+      // Show snackbar only if widget is still mounted
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Switched to Personal Space. Add your expense now.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Handle any errors gracefully
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error switching to personal space: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -281,13 +366,26 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildField(controller: _titleController, label: 'TITLE', hint: 'e.g. Electricity Bill', icon: Icons.title_rounded, validator: (v) => v!.isEmpty ? 'Title required' : null),
+                    _buildField(
+                      controller: _titleController, 
+                      label: 'TITLE', 
+                      hint: 'e.g. Electricity Bill', 
+                      icon: Icons.title_rounded, 
+                      maxLength: 25,
+                      validator: (v) => v!.isEmpty ? 'Title required' : null
+                    ),
                     const SizedBox(height: 20),
-                    _buildField(controller: _amountController, label: 'AMOUNT', hint: '0', icon: Icons.payments_outlined, isNumeric: true, prefix: 'Rs. ', validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Invalid amount' : null),
-                    const SizedBox(height: 24),
-                    _buildSectionLabel('PAID BY'),
-                    const SizedBox(height: 8),
-                    _buildPaidBySelector(primary),
+                    _buildField(
+                      controller: _amountController, 
+                      label: 'AMOUNT', 
+                      hint: '0', 
+                      icon: Icons.payments_outlined, 
+                      isNumeric: true, 
+                      prefix: 'Rs. ', 
+                      maxLength: 10,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                      validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Invalid amount' : null
+                    ),
                     const SizedBox(height: 24),
                     _buildSectionLabel('CATEGORY'),
                     const SizedBox(height: 12),
@@ -302,6 +400,10 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                     const SizedBox(height: 8),
                     _buildRoommateChipArea(primary),
                     const SizedBox(height: 24),
+                    _buildSectionLabel('PAID BY'),
+                    const SizedBox(height: 8),
+                    _buildPaidBySelector(primary),
+                    const SizedBox(height: 24),
                     _buildSectionLabel('SPLIT TYPE'),
                     const SizedBox(height: 12),
                     _buildSplitTypeSelector(primary),
@@ -309,6 +411,17 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       const SizedBox(height: 20),
                       _buildCustomInputs(primary),
                     ],
+                    const SizedBox(height: 24),
+                    _buildSectionLabel('RECURRING PAYMENT'),
+                    const SizedBox(height: 8),
+                    RecurringPaymentWidget(
+                      initialConfig: _recurringConfig,
+                      onConfigChanged: (config) {
+                        setState(() {
+                          _recurringConfig = config;
+                        });
+                      },
+                    ),
                     const SizedBox(height: 32),
                     _buildSubmit(primary),
                   ],
@@ -352,19 +465,27 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     );
   }
 
-  Widget _buildField({required TextEditingController controller, required String label, required String hint, required IconData icon, bool isNumeric = false, String? prefix, String? Function(String?)? validator}) {
+  Widget _buildField({required TextEditingController controller, required String label, required String hint, required IconData icon, bool isNumeric = false, String? prefix, String? Function(String?)? validator, int? maxLength, List<TextInputFormatter>? inputFormatters}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionLabel(label),
         const SizedBox(height: 8),
         TextFormField(
-          controller: controller, keyboardType: isNumeric ? const TextInputType.numberWithOptions(decimal: true) : null,
+          controller: controller, 
+          keyboardType: isNumeric ? const TextInputType.numberWithOptions(decimal: true) : null,
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          maxLength: maxLength,
+          inputFormatters: inputFormatters,
           decoration: InputDecoration(
-            hintText: hint, prefixText: prefix, hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13), filled: true, fillColor: const Color(0xFFF7F7FB),
+            hintText: hint, 
+            prefixText: prefix, 
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13), 
+            filled: true, 
+            fillColor: const Color(0xFFF7F7FB),
             prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade400),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            counterText: '', // Hide character counter
           ),
           validator: validator,
         ),
@@ -519,7 +640,29 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         final rm = widget.roommates.firstWhere((r) => r.id == id);
         return Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(children: [
           Expanded(child: Text(rm.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-          SizedBox(width: 80, height: 36, child: TextFormField(initialValue: _customSplits[id]?.toStringAsFixed(0) ?? '0', keyboardType: TextInputType.number, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700), decoration: InputDecoration(hintText: '0', suffixText: _splitType == SplitType.percentage ? '%' : '', contentPadding: const EdgeInsets.symmetric(horizontal: 12), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none)), onChanged: (v) => _customSplits[id] = double.tryParse(v) ?? 0)),
+          SizedBox(width: 80, height: 36, child: TextFormField(
+            initialValue: _customSplits[id]?.toStringAsFixed(0) ?? '0', 
+            keyboardType: TextInputType.number, 
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            inputFormatters: _splitType == SplitType.percentage 
+              ? [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(2), // Limit to 2 digits for percentage
+                ]
+              : [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')), // Allow decimals for exact amounts
+                  LengthLimitingTextInputFormatter(8), // Limit to 8 characters for exact amounts
+                ],
+            decoration: InputDecoration(
+              hintText: '0', 
+              suffixText: _splitType == SplitType.percentage ? '%' : '', 
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12), 
+              filled: true, 
+              fillColor: Colors.white, 
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none)
+            ), 
+            onChanged: (v) => _customSplits[id] = double.tryParse(v) ?? 0
+          )),
         ]));
       }).toList()),
     );

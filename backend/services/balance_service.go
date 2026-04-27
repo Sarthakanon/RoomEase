@@ -21,6 +21,8 @@ func NewBalanceService() *BalanceService {
 // CalculateRoomspaceBalances calculates all user balances for a roomspace
 // Returns a BalanceSummary with aggregated balance information
 func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models.BalanceSummary, error) {
+	fmt.Printf("🔍 Starting balance calculation for roomspace: %s\n", roomspaceID)
+	
 	// Get all expenses for the roomspace
 	var expenses []models.Expense
 	result := config.DB.
@@ -30,6 +32,12 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 	
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to fetch expenses: %w", result.Error)
+	}
+
+	fmt.Printf("📋 Found %d expenses for roomspace %s\n", len(expenses), roomspaceID)
+	for i, expense := range expenses {
+		fmt.Printf("  Expense %d: ID=%s, Amount=%.2f, PaidBy=%s, Splits=%d\n", 
+			i+1, expense.ID, expense.Amount, expense.PaidBy, len(expense.Splits))
 	}
 
 	// Get roomspace members
@@ -43,25 +51,56 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 		return nil, fmt.Errorf("failed to fetch members: %w", result.Error)
 	}
 
+	fmt.Printf("👥 Found %d active members for roomspace %s\n", len(members), roomspaceID)
+	for i, member := range members {
+		fmt.Printf("  Member %d: UserID=%s, Name=%s\n", 
+			i+1, member.UserID, member.User.Name)
+	}
+
 	// Initialize balance map for all members
 	userBalances := make(map[string]float64)
 	for _, member := range members {
 		userBalances[member.UserID] = 0.0
 	}
 
+	fmt.Printf("💰 Initialized balances: %+v\n", userBalances)
+
 	// Calculate balances from expenses
 	totalExpenses := 0.0
-	for _, expense := range expenses {
+	for i, expense := range expenses {
+		fmt.Printf("🧮 Processing expense %d: ID=%s, Amount=%.2f, PaidBy=%s\n", 
+			i+1, expense.ID, expense.Amount, expense.PaidBy)
+		
 		totalExpenses += expense.Amount
 		
 		// Payer gets credit for the full amount
-		userBalances[expense.PaidBy] += expense.Amount
+		if _, exists := userBalances[expense.PaidBy]; exists {
+			userBalances[expense.PaidBy] += expense.Amount
+			fmt.Printf("  ✅ Added %.2f to payer %s, new balance: %.2f\n", 
+				expense.Amount, expense.PaidBy, userBalances[expense.PaidBy])
+		} else {
+			fmt.Printf("  ⚠️  Payer %s not found in members list\n", expense.PaidBy)
+		}
 		
 		// Each split member gets debited for their share
-		for _, split := range expense.Splits {
-			userBalances[split.UserUID] -= split.Amount
+		fmt.Printf("  📊 Processing %d splits:\n", len(expense.Splits))
+		for j, split := range expense.Splits {
+			fmt.Printf("    Split %d: UserUID=%s, Amount=%.2f\n", 
+				j+1, split.UserUID, split.Amount)
+			
+			if _, exists := userBalances[split.UserUID]; exists {
+				userBalances[split.UserUID] -= split.Amount
+				fmt.Printf("    ✅ Subtracted %.2f from %s, new balance: %.2f\n", 
+					split.Amount, split.UserUID, userBalances[split.UserUID])
+			} else {
+				fmt.Printf("    ⚠️  Split user %s not found in members list\n", split.UserUID)
+			}
 		}
+		
+		fmt.Printf("  💰 Balances after expense %d: %+v\n", i+1, userBalances)
 	}
+
+	fmt.Printf("🏁 Final balances before settlements: %+v\n", userBalances)
 
 	// Apply settlements (payments) to balances
 	var settlements []models.Settlement

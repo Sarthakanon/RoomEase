@@ -1,0 +1,29 @@
+version: 1.0
+runtime: go1.21
+build:
+  commands:
+    build:
+      - echo "Building RoomEase Go backend..."
+      - go mod download
+      - go build -o main .
+run:
+  runtime-version: go1.21
+  command: ./main
+  network:
+    port: 8080
+    env: PORT
+  env:
+    - name: PORT
+      value: "8080"
+    - name: ENVIRONMENT
+      value: "production"
+    - name: POSTGRES_DATABASE_URL
+      value: "postgresql://postgres:RoomEase2024%21@roomease-db.cru6oo86256i.eu-north-1.rds.amazonaws.com:5432/postgres"
+    - name: FIREBASE_CREDENTIAL_PATH
+      value: "serviceAccount.json"
+    - name: SESSION_TIMEOUT
+      value: "24h"
+    - name: SESSION_SECRET
+      value: "aws-production-secret-roomease-2024"
+    - name: ALLOWED_ORIGINS
+      value: "https://room-ease-r4ie.vercel.app,http://localhost:3000"

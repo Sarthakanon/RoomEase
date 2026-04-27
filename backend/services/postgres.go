@@ -231,6 +231,143 @@ func (s *PostgresService) RemoveMemberFromRoomspace(roomspaceID string, memberFi
 	return nil
 }
 
+// LeaveRoomspaceResult contains the result of a leave roomspace operation
+type LeaveRoomspaceResult struct {
+	Message              string  `json:"message"`
+	OwnershipTransferred bool    `json:"ownership_transferred"`
+	NewCreatorID         *string `json:"new_creator_id,omitempty"`
+	RoomspaceDeleted     bool    `json:"roomspace_deleted"`
+}
+
+// LeaveRoomspace allows any member to leave a roomspace with ownership transfer logic
+func (s *PostgresService) LeaveRoomspace(roomspaceID string, userUID string) (*LeaveRoomspaceResult, error) {
+	// Check if roomspace exists
+	var roomspace models.Roomspace
+	if err := config.DB.Where("id = ?", roomspaceID).First(&roomspace).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("roomspace not found")
+		}
+		return nil, err
+	}
+
+	// Check if user is a member of this roomspace
+	var member models.RoomspaceMember
+	if err := config.DB.Where("roomspace_id = ? AND user_id = ? AND is_active = ?", 
+		roomspaceID, userUID, true).First(&member).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("you are not a member of this roomspace")
+		}
+		return nil, err
+	}
+
+	// Check if user is the creator
+	isCreator := roomspace.CreatorID != nil && *roomspace.CreatorID == userUID
+
+	// Get all active members
+	var allMembers []models.RoomspaceMember
+	if err := config.DB.Where("roomspace_id = ? AND is_active = ?", roomspaceID, true).
+		Order("joined_at ASC").Find(&allMembers).Error; err != nil {
+		return nil, err
+	}
+
+	// Start transaction
+	tx := config.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	result := &LeaveRoomspaceResult{}
+
+	if isCreator {
+		// Creator is leaving - need to handle ownership transfer
+		if len(allMembers) <= 1 {
+			// Creator is the only member - delete the roomspace
+			if err := tx.Delete(&roomspace).Error; err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+			
+			// Remove all members (should just be the creator)
+			if err := tx.Where("roomspace_id = ?", roomspaceID).Delete(&models.RoomspaceMember{}).Error; err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+
+			result.Message = "Left roomspace and deleted it (no other members)"
+			result.RoomspaceDeleted = true
+		} else {
+			// Find the oldest member (excluding the creator)
+			var newCreator *models.RoomspaceMember
+			for _, m := range allMembers {
+				if m.UserID != userUID {
+					newCreator = &m
+					break
+				}
+			}
+
+			if newCreator == nil {
+				tx.Rollback()
+				return nil, errors.New("could not find a member to transfer ownership to")
+			}
+
+			// Transfer ownership
+			if err := tx.Model(&roomspace).Update("creator_id", newCreator.UserID).Error; err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+
+			// Update the new creator's role to creator
+			if err := tx.Model(&models.RoomspaceMember{}).
+				Where("roomspace_id = ? AND user_id = ?", roomspaceID, newCreator.UserID).
+				Update("role", "creator").Error; err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+
+			// Remove the old creator
+			if err := tx.Where("roomspace_id = ? AND user_id = ?", roomspaceID, userUID).
+				Delete(&models.RoomspaceMember{}).Error; err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+
+			result.Message = "Left roomspace and transferred ownership"
+			result.OwnershipTransferred = true
+			result.NewCreatorID = &newCreator.UserID
+
+			// Create notification for the new creator
+			newCreatorUser, _ := s.GetUserByFirebaseUID(newCreator.UserID)
+			if newCreatorUser != nil {
+				notification := &models.Notification{
+					RecipientUID: newCreator.UserID,
+					Type:         models.NotificationTypeOwnershipTransferred,
+					Title:        "You're now the host",
+					Message:      "You are now the host of " + roomspace.Name,
+				}
+				tx.Create(notification)
+			}
+		}
+	} else {
+		// Regular member leaving - just remove them
+		if err := tx.Where("roomspace_id = ? AND user_id = ?", roomspaceID, userUID).
+			Delete(&models.RoomspaceMember{}).Error; err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+
+		result.Message = "Successfully left roomspace"
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 // CheckRoomspaceLimit verifies user hasn't exceeded 5 roomspace limit
 func (s *PostgresService) CheckRoomspaceLimit(userUID string) error {
 	var count int64
@@ -480,6 +617,10 @@ func (s *PostgresService) AutoMigrate() error {
 		&models.UserBalance{},    // Depends on User and Roomspace
 		&models.Settlement{},     // Depends on User and Roomspace
 		&models.PaymentConfirmation{}, // Depends on User and Roomspace
+		&models.RecurringExpenseTemplate{}, // Depends on Roomspace and User
+		&models.RecurringExpenseNotification{}, // Depends on RecurringExpenseTemplate
+		&models.SubscriptionPayment{}, // eSewa subscription payments
+		&models.BalanceSettlement{}, // eSewa balance settlements
 	)
 	if err != nil {
 		return err
@@ -523,6 +664,13 @@ func (s *PostgresService) GetJoinRequestByID(id string) (*models.JoinRequest, er
 
 // CreateExpense creates a new expense
 func (s *PostgresService) CreateExpense(expense *models.Expense) error {
+	fmt.Printf("💾 Saving expense to database:\n")
+	fmt.Printf("  RoomspaceID: %s\n", expense.RoomspaceID)
+	fmt.Printf("  Title: %s\n", expense.Title)
+	fmt.Printf("  Amount: %.2f\n", expense.Amount)
+	fmt.Printf("  PaidBy: %s\n", expense.PaidBy)
+	fmt.Printf("  Splits count: %d\n", len(expense.Splits))
+	
 	tx := config.DB.Begin()
 	if tx.Error != nil {
 		return fmt.Errorf("failed to begin transaction: %v", tx.Error)
@@ -536,24 +684,35 @@ func (s *PostgresService) CreateExpense(expense *models.Expense) error {
 	// Create the expense record
 	if err := tx.Create(expense).Error; err != nil {
 		tx.Rollback()
+		fmt.Printf("❌ Failed to create expense: %v\n", err)
 		return fmt.Errorf("failed to create expense: %v", err)
 	}
+	
+	fmt.Printf("✅ Expense created with ID: %s\n", expense.ID)
 
 	// Create the expense splits
 	for i := range expense.Splits {
 		expense.Splits[i].ID = 0  // Ensure ID is 0 for auto-increment
 		expense.Splits[i].ExpenseID = expense.ID
 		
+		fmt.Printf("💰 Creating split %d: UserUID=%s, Amount=%.2f, ExpenseID=%s\n", 
+			i+1, expense.Splits[i].UserUID, expense.Splits[i].Amount, expense.Splits[i].ExpenseID)
+		
 		if err := tx.Create(&expense.Splits[i]).Error; err != nil {
 			tx.Rollback()
+			fmt.Printf("❌ Failed to create expense split %d: %v\n", i+1, err)
 			return fmt.Errorf("failed to create expense split: %v", err)
 		}
+		
+		fmt.Printf("✅ Split %d created with ID: %d\n", i+1, expense.Splits[i].ID)
 	}
 
 	if err := tx.Commit().Error; err != nil {
+		fmt.Printf("❌ Failed to commit transaction: %v\n", err)
 		return fmt.Errorf("failed to commit transaction: %v", err)
 	}
 
+	fmt.Printf("🎉 Expense and splits saved successfully!\n")
 	return nil
 }
 
@@ -1016,4 +1175,246 @@ func (s *PostgresService) MarkPaymentNotificationAsProcessed(id uint, expenseID 
 func (s *PostgresService) CreateRecommendationFeedback(feedback *models.RecommendationFeedback) error {
 	result := config.DB.Create(feedback)
 	return result.Error
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// ESEWA PAYMENT OPERATIONS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// CreateSubscriptionPayment creates a new subscription payment record
+func (s *PostgresService) CreateSubscriptionPayment(payment *models.SubscriptionPayment) error {
+	if config.DB == nil {
+		return errors.New("database connection not available")
+	}
+
+	result := config.DB.Create(payment)
+	return result.Error
+}
+
+// CreateBalanceSettlement creates a new balance settlement record
+func (s *PostgresService) CreateBalanceSettlement(settlement *models.BalanceSettlement) error {
+	if config.DB == nil {
+		return errors.New("database connection not available")
+	}
+
+	result := config.DB.Create(settlement)
+	return result.Error
+}
+
+// UpdateUserSubscription updates a user's subscription plan
+func (s *PostgresService) UpdateUserSubscription(userID, planID string) error {
+	if config.DB == nil {
+		return errors.New("database connection not available")
+	}
+
+	// Update user's subscription plan and set expiry date
+	var expiryDate time.Time
+	switch planID {
+	case "premium":
+		expiryDate = time.Now().AddDate(0, 1, 0) // 1 month
+	case "pro":
+		expiryDate = time.Now().AddDate(0, 1, 0) // 1 month
+	default:
+		return errors.New("invalid plan ID")
+	}
+
+	result := config.DB.Model(&models.User{}).
+		Where("firebase_uid = ?", userID).
+		Updates(map[string]interface{}{
+			"subscription_plan":   planID,
+			"subscription_expiry": expiryDate,
+			"updated_at":         time.Now(),
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return errors.New("user not found")
+	}
+
+	return nil
+}
+
+// UpdateBalancesAfterSettlement updates balances after a settlement payment
+func (s *PostgresService) UpdateBalancesAfterSettlement(settlement *models.BalanceSettlement) error {
+	if config.DB == nil {
+		return errors.New("database connection not available")
+	}
+
+	// Start a transaction
+	tx := config.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Create a settlement record in the settlements table
+	settlementRecord := &models.Settlement{
+		RoomspaceID: settlement.RoomspaceID,
+		FromUserID:  settlement.PayerUserID,
+		ToUserID:    settlement.RecipientUserID,
+		Amount:      settlement.Amount,
+		Notes:       fmt.Sprintf("eSewa payment: %s", settlement.Description),
+		SettledAt:   settlement.CreatedAt,
+		CreatedAt:   settlement.CreatedAt,
+	}
+
+	if err := tx.Create(settlementRecord).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to create settlement record: %w", err)
+	}
+
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("failed to commit settlement transaction: %w", err)
+	}
+
+	return nil
+}
+
+// GetUserPaymentHistory retrieves payment history for a user
+func (s *PostgresService) GetUserPaymentHistory(userID, paymentType string, limit, offset int) ([]models.PaymentHistoryItem, error) {
+	if config.DB == nil {
+		return nil, errors.New("database connection not available")
+	}
+
+	var history []models.PaymentHistoryItem
+
+	// Get subscription payments
+	if paymentType == "all" || paymentType == "subscription" {
+		var subscriptionPayments []models.SubscriptionPayment
+		query := config.DB.Where("user_id = ?", userID).
+			Order("created_at DESC")
+
+		if paymentType == "subscription" {
+			query = query.Limit(limit).Offset(offset)
+		}
+
+		if err := query.Find(&subscriptionPayments).Error; err != nil {
+			return nil, err
+		}
+
+		for _, payment := range subscriptionPayments {
+			history = append(history, models.PaymentHistoryItem{
+				ID:              payment.ID.String(),
+				Type:            "subscription",
+				Amount:          payment.Amount,
+				Description:     fmt.Sprintf("Subscription: %s", payment.PlanID),
+				TransactionUUID: payment.TransactionUUID,
+				TransactionCode: payment.TransactionCode,
+				PaymentMethod:   payment.PaymentMethod,
+				Status:          payment.Status,
+				CreatedAt:       payment.CreatedAt,
+				PlanID:          &payment.PlanID,
+			})
+		}
+	}
+
+	// Get balance settlements (both sent and received)
+	if paymentType == "all" || paymentType == "settlement" {
+		var settlements []models.BalanceSettlement
+		query := config.DB.Preload("Recipient").Preload("PayerUser").
+			Where("payer_user_id = ? OR recipient_user_id = ?", userID, userID).
+			Order("created_at DESC")
+
+		if paymentType == "settlement" {
+			query = query.Limit(limit).Offset(offset)
+		}
+
+		if err := query.Find(&settlements).Error; err != nil {
+			return nil, err
+		}
+
+		for _, settlement := range settlements {
+			description := settlement.Description
+			if description == "" {
+				if settlement.PayerUserID == userID {
+					description = "Payment sent"
+				} else {
+					description = "Payment received"
+				}
+			}
+
+			var recipientName *string
+			if settlement.Recipient != nil {
+				recipientName = &settlement.Recipient.Name
+			}
+
+			history = append(history, models.PaymentHistoryItem{
+				ID:              settlement.ID.String(),
+				Type:            "settlement",
+				Amount:          settlement.Amount,
+				Description:     description,
+				TransactionUUID: settlement.TransactionUUID,
+				TransactionCode: settlement.TransactionCode,
+				PaymentMethod:   settlement.PaymentMethod,
+				Status:          settlement.Status,
+				CreatedAt:       settlement.CreatedAt,
+				RoomspaceID:     &settlement.RoomspaceID,
+				RecipientUserID: &settlement.RecipientUserID,
+				RecipientName:   recipientName,
+			})
+		}
+	}
+
+	// Sort by created_at descending
+	for i := 0; i < len(history)-1; i++ {
+		for j := i + 1; j < len(history); j++ {
+			if history[i].CreatedAt.Before(history[j].CreatedAt) {
+				history[i], history[j] = history[j], history[i]
+			}
+		}
+	}
+
+	// Apply pagination if getting all types
+	if paymentType == "all" {
+		start := offset
+		end := offset + limit
+		if start > len(history) {
+			return []models.PaymentHistoryItem{}, nil
+		}
+		if end > len(history) {
+			end = len(history)
+		}
+		history = history[start:end]
+	}
+
+	return history, nil
+}
+
+// GetRoomspaceSettlementHistory retrieves settlement history for a roomspace
+func (s *PostgresService) GetRoomspaceSettlementHistory(roomspaceID string, limit, offset int) ([]models.BalanceSettlement, error) {
+	if config.DB == nil {
+		return nil, errors.New("database connection not available")
+	}
+
+	var settlements []models.BalanceSettlement
+	err := config.DB.Preload("PayerUser").Preload("Recipient").
+		Where("roomspace_id = ?", roomspaceID).
+		Order("created_at DESC").
+		Limit(limit).Offset(offset).
+		Find(&settlements).Error
+
+	return settlements, err
+}
+
+// IsUserMemberOfRoomspace checks if a user is a member of a roomspace
+func (s *PostgresService) IsUserMemberOfRoomspace(userID, roomspaceID string) (bool, error) {
+	if config.DB == nil {
+		return false, errors.New("database connection not available")
+	}
+
+	var count int64
+	err := config.DB.Model(&models.RoomspaceMember{}).
+		Where("user_id = ? AND roomspace_id = ?", userID, roomspaceID).
+		Count(&count).Error
+
+	return count > 0, err
 }

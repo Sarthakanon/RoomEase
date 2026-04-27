@@ -2,65 +2,98 @@
 
 This folder contains PlantUML diagrams for the RoomEase application SRS documentation.
 
-## Diagram Order (as per SRS Sample)
-1. Activity Diagrams
-2. Use Case Diagrams
-3. Wireframes (external)
-4. ERD
-5. Data Dictionary (in SRS document)
-6. Class Diagram
-7. Sequence Diagrams
+## Folder Structure
+
+```
+docs/diagrams/
+├── auth/           # Authentication subsystem diagrams
+├── roomspace/      # Roomspace management subsystem diagrams
+├── expense/        # Expense management subsystem diagrams
+├── notification/   # Notification & profile subsystem diagrams
+├── analytics/      # Analytics & insights subsystem diagrams
+├── structure/      # System-wide structural diagrams
+├── README.md       # This file
+└── DIAGRAMS_STATUS.md
+```
 
 ---
 
-## 1. Use Case Diagrams (7 - one per subsystem)
+## Subsystem Diagrams
 
-| File | Subsystem | Description |
-|------|-----------|-------------|
-| `1-use-case-auth.puml` | AUTH | Authentication use cases |
-| `2-use-case-roomspace.puml` | ROOM | Roomspace management use cases |
-| `3-use-case-expense.puml` | EXP | Expense management use cases |
-| `4-use-case-ocr.puml` | OCR | OCR bill scanner use cases |
-| `5-use-case-analytics.puml` | ANL | Analytics use cases |
-| `6-use-case-notification.puml` | NOTIF | Notification use cases |
-| `7-use-case-profile.puml` | PROF | User profile use cases |
-
----
-
-## 2. Activity Diagrams (one per functional requirement)
-
-| File | Requirement | Description |
-|------|-------------|-------------|
-| `activity-signup.puml` | AUTH-F-1.0 | User signup flow |
-| `activity-login.puml` | AUTH-F-1.1 | User login flow |
-| `activity-create-roomspace.puml` | ROOM-F-1.0 | Create roomspace flow |
-| `activity-join-roomspace.puml` | ROOM-F-2.0 | Join roomspace flow |
-| `activity-add-expense.puml` | EXP-F-1.0 | Add expense flow |
-| `activity-ocr-scan.puml` | OCR-F-2.0 | OCR bill scanning flow |
-| `activity-view-analytics.puml` | ANL-F-1.0 | View analytics flow |
-
----
-
-## 3. Sequence Diagrams
-
-| File | Feature | Description |
-|------|---------|-------------|
-| `sequence-login.puml` | Login | User login sequence |
-| `sequence-create-roomspace.puml` | Create Room | Create roomspace sequence |
-| `sequence-join-roomspace.puml` | Join Room | Join with approval sequence |
-| `sequence-add-expense.puml` | Add Expense | Add expense with notification |
-| `sequence-ocr-scan.puml` | OCR Scan | OCR processing sequence |
-| `sequence-analytics.puml` | Analytics | View analytics sequence |
-
----
-
-## 4. Structural Diagrams
-
+### 1. Authentication (auth/)
 | File | Type | Description |
 |------|------|-------------|
-| `fdd-system.puml` | FDD | Functional Decomposition Diagram |
-| `erd-database.puml` | ERD | Entity Relationship Diagram |
-| `class-diagram.puml` | Class | Application class diagram |
+| `1-use-case-auth.puml` | Use Case | Authentication use cases |
+| `activity-signup.puml` | Activity | User signup flow |
+| `activity-login.puml` | Activity | User login flow |
+| `sequence-signup.puml` | Sequence | Signup sequence |
+| `sequence-login.puml` | Sequence | Login sequence |
+| `sequence-google-signin.puml` | Sequence | Google sign-in sequence |
+| `auth-class-diagram.puml` | Class | Authentication class diagram |
+| `dfd-authentication.puml` | DFD | Authentication data flow |
+
+### 2. Roomspace Management (roomspace/)
+| File | Type | Description |
+|------|------|-------------|
+| `2-use-case-roomspace.puml` | Use Case | Roomspace management use cases |
+| `activity-create-roomspace.puml` | Activity | Create roomspace flow |
+| `activity-join-roomspace.puml` | Activity | Join roomspace flow |
+| `sequence-create-roomspace.puml` | Sequence | Create roomspace sequence |
+| `sequence-join-roomspace.puml` | Sequence | Join roomspace sequence |
+| `class-roomspace-subsystem.puml` | Class | Roomspace class diagram |
+| `erd-roomspace-subsystem.puml` | ERD | Roomspace ERD |
+
+### 3. Expense Management (expense/)
+| File | Type | Description |
+|------|------|-------------|
+| `3-use-case-expense.puml` | Use Case | Expense management use cases |
+| `activity-add-expense.puml` | Activity | Add expense flow |
+| `sequence-add-expense.puml` | Sequence | Add expense sequence |
+| `expense-class-diagram.puml` | Class | Expense class diagram |
+| `expense-erd.puml` | ERD | Expense ERD |
+| `expense-activity-create.puml` | Activity | Expense creation flow |
+| `expense-activity-settlement.puml` | Activity | Settlement flow |
+| `expense-balance-calculation-activity.puml` | Activity | Balance calculation |
+| `expense-filtering-sequence.puml` | Sequence | Expense filtering |
+| `expense-notification-sequence.puml` | Sequence | Expense notifications |
+| `expense-sequence-balance-calculation.puml` | Sequence | Balance calc sequence |
+| `expense-sequence-create.puml` | Sequence | Create expense sequence |
+| `expense-sequence-settlement.puml` | Sequence | Settlement sequence |
+| `expense-use-case-diagram.puml` | Use Case | Expense use cases |
+
+### 4. Notifications (notification/)
+| File | Type | Description |
+|------|------|-------------|
+| `6-use-case-notification.puml` | Use Case | Notification use cases |
+| `7-use-case-profile.puml` | Use Case | User profile use cases |
+
+### 5. Analytics (analytics/)
+| File | Type | Description |
+|------|------|-------------|
+| `5-use-case-analytics.puml` | Use Case | Analytics use cases |
+| `activity-view-analytics.puml` | Activity | View analytics flow |
+| `sequence-analytics.puml` | Sequence | Analytics sequence |
+
+### 6. Structure (system-wide)
+| File | Type | Description |
+|------|------|-------------|
+| `class-diagram.puml` | Class | Overall system class diagram |
+| `erd-database.puml` | ERD | Complete database ERD |
+| `erd-auth-subsystem.puml` | ERD | Authentication subsystem ERD |
+| `fdd-system.puml` | FDD | Functional decomposition diagram |
+
+---
+
+## Implemented Subsystems
+
+| Code | Subsystem | Status |
+|------|-----------|--------|
+| AUTH | Authentication | ✅ Built |
+| ROOM | Roomspace Management | ✅ Built |
+| EXP | Expense Management | ✅ Built |
+| NOTIF | Notifications | ✅ Built |
+| PROF | User Profile | ✅ Built |
+| ANL | Expense Analytics | ✅ Built |
 
 ---
 
@@ -87,47 +120,10 @@ This folder contains PlantUML diagrams for the RoomEase application SRS document
 plantuml *.puml
 
 # Generate specific diagram as PNG
-plantuml -tpng sequence-login.puml
+plantuml -tpng auth/sequence-login.puml
 
 # Generate as SVG
-plantuml -tsvg erd-database.puml
-```
-
----
-
-## Subsystem Summary
-
-| Code | Subsystem | Status |
-|------|-----------|--------|
-| AUTH | Authentication | ✅ Built |
-| ROOM | Roomspace Management | ✅ Built |
-| NOTIF | Notifications | ✅ Built |
-| PROF | User Profile | ✅ Built |
-| EXP | Expense Management | 🔄 Partial |
-| OCR | OCR Bill Scanner | ❌ Pending |
-| ANL | Expense Analytics | ❌ Pending |
-
----
-
-## Architecture Overview
-
-```
-┌─────────────┐
-│ Flutter App │
-│  (Mobile)   │
-└──────┬──────┘
-       │
-       ├─────────────┐
-       │             │
-┌──────▼──────┐ ┌───▼────────┐
-│  Firebase   │ │ Go Backend │
-│    Auth     │ │  (REST API)│
-└─────────────┘ └─────┬──────┘
-                      │
-               ┌──────▼──────┐
-               │ PostgreSQL  │
-               │  Database   │
-               └─────────────┘
+plantuml -tsvg structure/erd-database.puml
 ```
 
 ---
@@ -137,4 +133,4 @@ plantuml -tsvg erd-database.puml
 - All diagrams follow PlantUML syntax
 - Diagrams are version-controlled and should be updated with code changes
 - Use these diagrams for documentation, presentations, and onboarding
-- SRS document location: `.kiro/specs/SRS_RoomEase.md`
+- OCR diagrams were removed as the feature is not implemented

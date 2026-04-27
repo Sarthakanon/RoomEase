@@ -4,6 +4,7 @@ import '../../../services/smart_api_service.dart';
 import '../../../services/state_management_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
 import '../../../widgets/smart_future_builder.dart';
+import '../../subscription/presentation/widgets/subscription_status_card.dart';
 
 /// Profile screen — displays and allows editing of the user's profile data.
 class ProfileScreen extends StatefulWidget {
@@ -273,6 +274,10 @@ class _ProfileScreenState extends State<ProfileScreen>
               children: [
                 // Identity card (avatar + name + email)
                 _buildIdentityCard(userName, userEmail, photoURL, primaryColor),
+                const SizedBox(height: 16),
+
+                // Subscription status card
+                const SubscriptionStatusCard(),
                 const SizedBox(height: 16),
 
                 // Info / Edit section
