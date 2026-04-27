@@ -96,6 +96,8 @@ class RoomspaceProvider extends ChangeNotifier {
         // Restore active roomspace from SharedPreferences
         await _restoreActiveRoomspace();
         print('🎯 Active roomspace: ${_activeRoomspace?.name ?? "Personal Space"}');
+        print('🏠 Has roomspaces: ${_roomspaces.isNotEmpty}');
+        print('🔍 Is personal space: ${_activeRoomspace == null}');
         
         // Don't automatically set first roomspace - respect personal space mode
         // User can explicitly switch using the global selector
@@ -151,6 +153,7 @@ class RoomspaceProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       print('✅ loadRoomspaces completed. Count: ${_roomspaces.length}, Active: ${_activeRoomspace?.name ?? "None"}');
+      print('📊 Final state - hasNoRoomspaces: ${_roomspaces.isEmpty}, isPersonalSpace: ${_activeRoomspace == null}');
     }
   }
   
@@ -273,20 +276,8 @@ class RoomspaceProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
-      // Get current user's Firebase UID
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        throw RoomspaceException(
-          'You must be logged in to leave a roomspace.',
-          RoomspaceErrorType.authenticationRequired,
-        );
-      }
-      
-      // Call API to leave roomspace
-      await _smartApi.removeMemberFromRoomspace(
-        int.parse(roomspaceId),
-        currentUser.uid,
-      );
+      // Call API to leave roomspace using new endpoint
+      await _smartApi.leaveRoomspace(int.parse(roomspaceId));
       
       // Remove from local list
       _roomspaces.removeWhere((r) => r.id == roomspaceId);

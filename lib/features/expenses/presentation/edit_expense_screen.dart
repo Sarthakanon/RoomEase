@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:room_ease/models/expense_models.dart';
 import 'package:room_ease/services/expense_service.dart';
 import 'package:room_ease/services/api_service.dart';
+import 'package:room_ease/services/real_time_data_service.dart';
 
 /// Professional, minimalist screen for editing shared expenses.
 class EditExpenseScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
   final ExpenseService _expenseService = ExpenseService();
   final ApiService _apiService = ApiService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
   
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
@@ -78,12 +80,53 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
         selectedRoommates: _selectedRoommateIds,
         customSplits: _selectedSplitType != SplitType.equal ? _customSplits : null,
       );
+      
       final updated = await _expenseService.updateExpense(widget.expense.id!, req);
-      if (mounted) Navigator.pop(context, updated);
+      
+      // Notify real-time service about the expense update
+      if (widget.expense.roomspaceId != null) {
+        final updatedExpenseData = {
+          'id': widget.expense.id,
+          'title': _titleController.text.trim(),
+          'amount': double.parse(_amountController.text),
+          'category': _selectedCategory,
+          'roomspace_id': widget.expense.roomspaceId,
+        };
+        
+        // Get all affected users (original + new selected roommates)
+        final affectedUsers = <String>{};
+        if (widget.expense.splits != null) {
+          affectedUsers.addAll(widget.expense.splits!.map((s) => s.userUid));
+        }
+        affectedUsers.addAll(_selectedRoommateIds);
+        
+        _realTimeService.notifyExpenseUpdated(
+          widget.expense.roomspaceId!,
+          updatedExpenseData,
+          affectedUsers.toList(),
+        );
+      }
+      
+      if (mounted) {
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Expense updated successfully! Teammates have been notified.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        Navigator.pop(context, true); // Return true to indicate success
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update expense: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }

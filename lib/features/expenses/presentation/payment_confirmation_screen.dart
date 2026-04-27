@@ -92,8 +92,14 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen> w
         foregroundColor: Colors.white, 
         elevation: 2,
         tooltip: 'Record Payment',
-        icon: const Icon(Icons.add_rounded), 
-        label: const Text('Record Payment', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+        icon: const Icon(Icons.add_rounded, size: 20), 
+        label: const Text(
+          'Record Payment', 
+          style: TextStyle(
+            fontWeight: FontWeight.w700, 
+            fontSize: 13,
+          ),
+        ),
       ),
     );
   }

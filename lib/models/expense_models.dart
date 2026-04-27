@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'recurring_expense_models.dart';
 
 // Enhanced ExpenseData model for API integration
 class RoommateItem {
@@ -29,6 +30,7 @@ class ExpenseData {
   final DateTime? createdAt;
   final List<ExpenseSplit>? splits;
   final String? payerName;
+  final RecurringExpenseConfig? recurringConfig;
 
   ExpenseData({
     required this.title,
@@ -44,6 +46,7 @@ class ExpenseData {
     this.createdAt,
     this.splits,
     this.payerName,
+    this.recurringConfig,
   });
 
   // Factory constructor from API response
@@ -68,6 +71,9 @@ class ExpenseData {
               .toList()
           : null,
       payerName: json['payer_name'],
+      recurringConfig: json['recurring_config'] != null
+          ? RecurringExpenseConfig.fromJson(json['recurring_config'])
+          : null,
     );
   }
 
@@ -91,6 +97,7 @@ class ExpenseData {
       'split_type': splitType.apiValue,
       'selected_roommates': selectedRoommateIds,
       if (customSplits.isNotEmpty) 'custom_splits': customSplits,
+      if (recurringConfig != null) 'recurring_config': recurringConfig!.toJson(),
     };
   }
 }
@@ -130,6 +137,7 @@ class ExpenseCreateRequest {
   final String splitType;
   final List<String> selectedRoommates;
   final Map<String, double>? customSplits;
+  final RecurringExpenseConfig? recurringConfig;
 
   ExpenseCreateRequest({
     required this.roomspaceId,
@@ -141,6 +149,7 @@ class ExpenseCreateRequest {
     required this.splitType,
     required this.selectedRoommates,
     this.customSplits,
+    this.recurringConfig,
   });
 
   Map<String, dynamic> toJson() {
@@ -160,6 +169,10 @@ class ExpenseCreateRequest {
     
     if (customSplits != null && customSplits!.isNotEmpty) {
       json['custom_splits'] = customSplits!;
+    }
+    
+    if (recurringConfig != null) {
+      json['recurring_config'] = recurringConfig!.toJson();
     }
     
     return json;
@@ -182,6 +195,7 @@ class ExpenseCreateRequest {
       customSplits: expenseData.customSplits.isNotEmpty 
           ? expenseData.customSplits 
           : null,
+      recurringConfig: expenseData.recurringConfig,
     );
   }
 }

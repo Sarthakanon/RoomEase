@@ -344,6 +344,7 @@ class SmartApiService {
   Future<Map<String, dynamic>> getExpenses({String? roomspaceId, int? limit, int? offset}) => _api.getExpenses(roomspaceId: roomspaceId, limit: limit, offset: offset);
   Future<Map<String, dynamic>> getExpenseById(int expenseId) => _api.getExpenseById(expenseId);
   Future<Map<String, dynamic>> removeMemberFromRoomspace(int roomspaceId, String memberFirebaseUid) => _api.removeMemberFromRoomspace(roomspaceId, memberFirebaseUid);
+  Future<Map<String, dynamic>> leaveRoomspace(int roomspaceId) => _api.leaveRoomspace(roomspaceId);
   Future<Map<String, dynamic>> getSettlements({required String roomspaceId, int? limit, int? offset}) => _api.getSettlements(roomspaceId: roomspaceId, limit: limit, offset: offset);
   Future<Map<String, dynamic>> createPaymentNotification(Map<String, dynamic> notificationData) => _api.createPaymentNotification(notificationData);
   Future<Map<String, dynamic>> getPaymentNotifications({String? roomspaceId, int? limit, int? offset}) => _api.getPaymentNotifications(roomspaceId: roomspaceId, limit: limit, offset: offset);

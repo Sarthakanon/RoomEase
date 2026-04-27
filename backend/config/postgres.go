@@ -21,7 +21,7 @@ func InitPostgreSQL(databaseURL string) error {
 		return fmt.Errorf("database URL is empty")
 	}
 	
-	// Check if it's a Supabase connection (contains supabase.co)
+	// Check if it's a Supabase connection (contains supabase.co) or AWS RDS (contains amazonaws.com)
 	if strings.Contains(databaseURL, "supabase.co") {
 		// Try to resolve IPv4 address for Supabase hostname
 		hostname := "db.raabjafkrerotvqbimbp.supabase.co"
@@ -52,6 +52,10 @@ func InitPostgreSQL(databaseURL string) error {
 		// Add connection optimizations for Supabase
 		dsn = dsn + "?sslmode=require&connect_timeout=30&statement_timeout=30000&idle_in_transaction_session_timeout=30000&tcp_user_timeout=30000&application_name=roomease_backend&prefer_simple_protocol=true"
 		log.Println("🌐 Connecting to Supabase PostgreSQL with optimized settings...")
+	} else if strings.Contains(databaseURL, "amazonaws.com") {
+		// AWS RDS connection
+		dsn = databaseURL + "?sslmode=require&connect_timeout=10"
+		log.Println("☁️  Connecting to AWS RDS PostgreSQL...")
 	} else {
 		dsn = databaseURL + "?sslmode=disable&connect_timeout=10"
 		log.Println("🐳 Connecting to local PostgreSQL...")

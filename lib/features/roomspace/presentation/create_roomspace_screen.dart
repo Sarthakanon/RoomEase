@@ -47,9 +47,15 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
   }
   
   void _checkLimit() {
+    if (!mounted) return;
     final provider = Provider.of<RoomspaceProvider>(context, listen: false);
     if (!provider.canJoinMore) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Limit reached (5/5)'), backgroundColor: Colors.orange));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Limit reached (5/5)'), 
+          backgroundColor: Colors.orange
+        )
+      );
     }
   }
 
@@ -63,11 +69,22 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
       address: _addressController.text,
       description: _descriptionController.text,
     );
+    
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (result['success'] == true) _showSuccess(result['inviteCode']);
-    else ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
+    if (result['success'] == true) {
+      _showSuccess(result['inviteCode']);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']), 
+            backgroundColor: Colors.red
+          )
+        );
+      }
+    }
   }
 
   void _showSuccess(String code) {

@@ -143,6 +143,11 @@ func (r *Roomspace) GetCreators() []RoomspaceMember {
 
 // ValidateInviteCode validates the format of an invite code
 func (r *Roomspace) ValidateInviteCode() error {
+	// Skip validation if invite code is empty (will be generated)
+	if r.InviteCode == "" {
+		return nil
+	}
+	
 	if len(r.InviteCode) != 8 {
 		return errors.New("invite code must be exactly 8 characters")
 	}

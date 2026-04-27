@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/mobile_scaffold.dart';
 import '../../core/widgets/roomspace_switcher.dart';
 import '../../core/widgets/global_roomspace_selector.dart';
 import '../../core/widgets/skeleton_loader.dart';
+import '../../core/mixins/auto_refresh_mixin.dart';
 import '../../services/smart_api_service.dart';
 import '../../services/state_management_service.dart';
 import '../../services/balance_service.dart';
@@ -28,7 +30,7 @@ class MobileDashboard extends StatefulWidget {
 }
 
 class _MobileDashboardState extends State<MobileDashboard>
-    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, AutoRefreshMixin {
   final SmartApiService _smartApi = SmartApiService();
   final StateManagementService _state = StateManagementService();
   final BalanceService _balanceService = BalanceService();
@@ -146,6 +148,7 @@ class _MobileDashboardState extends State<MobileDashboard>
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
     final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+    final hasAnyRoomspaces = roomspaceProvider.roomspaces.isNotEmpty; // Check if user has any roomspaces
 
     // Load data in parallel with extended cache times
     final futures = <String, Future<Map<String, dynamic>>>{};
@@ -175,7 +178,7 @@ class _MobileDashboardState extends State<MobileDashboard>
     final dashboardData = {
       'roomspaceId': activeRoomspaceId,
       'isPersonalSpace': isPersonalSpace,
-      'hasRoomspace': activeRoomspaceId != null,
+      'hasRoomspace': hasAnyRoomspaces, // Use hasAnyRoomspaces instead of activeRoomspaceId != null
       ...results,
     };
 
@@ -591,29 +594,29 @@ class _MobileDashboardState extends State<MobileDashboard>
   }
 
   Future<void> _handleExpenseSubmission(ExpenseData expense) async {
-    try {
-      final request = ExpenseCreateRequest.fromExpenseData(
-          expense, _currentRoomspaceId!);
-      
-      // Debug: Log the request data
-      debugPrint('Creating expense with paid_by: ${request.paidBy}');
-      debugPrint('Request JSON: ${request.toJson()}');
-      
-      await _smartApi.createExpense(request.toJson());
+    await performOperationWithRefresh(
+      () async {
+        final request = ExpenseCreateRequest.fromExpenseData(
+            expense, _currentRoomspaceId!);
+        
+        // Debug: Log the request data
+        debugPrint('Creating expense with paid_by: ${request.paidBy}');
+        debugPrint('Request JSON: ${request.toJson()}');
+        
+        await _smartApi.createExpense(request.toJson());
+      },
+      successMessage: 'Added: ${expense.title} · Rs. ${expense.amount.toStringAsFixed(2)}',
+      errorMessage: 'Failed to add expense',
+    );
+  }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'Added: ${expense.title} · Rs. ${expense.amount.toStringAsFixed(2)}')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add expense: $e')),
-        );
-      }
+  @override
+  Future<void> refreshData() async {
+    // Clear cached data to force refresh
+    _cachedDashboardData = null;
+    _lastDataLoad = null;
+    if (mounted) {
+      setState(() {}); // Trigger rebuild with fresh data
     }
   }
 
@@ -704,6 +707,9 @@ class _MobileDashboardState extends State<MobileDashboard>
     final hasRoomspace = dashboardData['hasRoomspace'] as bool? ?? false;
     final roomspaceId = dashboardData['roomspaceId'] as String?;
     
+    // Debug logging
+    debugPrint('🏠 Dashboard state: isPersonalSpace=$isPersonalSpace, hasRoomspace=$hasRoomspace, roomspaceId=$roomspaceId');
+    
     // Extract data with better null safety
     final notifications = dashboardData['notifications'] as Map<String, dynamic>? ?? {'data': []};
     final personalExpenses = dashboardData['personalExpenses'] as Map<String, dynamic>? ?? {'data': []};
@@ -760,11 +766,29 @@ class _MobileDashboardState extends State<MobileDashboard>
           ),
 
           // ── No roomspace prompt ──
-          if (!hasRoomspace)
+          if (!hasRoomspace) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: _buildNoRoomspaceCard(primaryColor),
             ),
+            // Debug info
+            if (kDebugMode)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Text(
+                    'DEBUG: hasRoomspace=$hasRoomspace, isPersonalSpace=$isPersonalSpace, roomspaceId=$roomspaceId',
+                    style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
+                  ),
+                ),
+              ),
+          ],
 
           // ── Recent Activity ──
           Padding(
@@ -842,6 +866,9 @@ class _MobileDashboardState extends State<MobileDashboard>
   // HEADER
   // ──────────────────────────────────────────
   Widget _buildHeader(User? user, Color primaryColor, bool isPersonalSpace, Map<String, dynamic> balances, int unreadCount) {
+    // Debug logging for balance data
+    debugPrint('🏠 Header - isPersonalSpace: $isPersonalSpace');
+    debugPrint('💰 Balance data received: $balances');
 
     return Container(
       width: double.infinity,
@@ -947,19 +974,40 @@ class _MobileDashboardState extends State<MobileDashboard>
   }
 
   Widget _buildBalanceRow(Map<String, dynamic> balances) {
-    // Extract balance data - handle both object and array responses
+    // Debug logging for balance data
+    debugPrint('🔍 Raw balance response: $balances');
+    
+    // Extract balance data - handle the new response structure
     dynamic balanceData = balances['data'];
+    debugPrint('🔍 Balance data extracted: $balanceData');
     
-    // If data is a list, try to get the first item, otherwise use as map
-    Map<String, dynamic> balanceMap = {};
-    if (balanceData is List && balanceData.isNotEmpty) {
-      balanceMap = balanceData.first as Map<String, dynamic>? ?? {};
-    } else if (balanceData is Map<String, dynamic>) {
-      balanceMap = balanceData;
+    // Initialize default values
+    double youOwe = 0.0;
+    double youAreOwed = 0.0;
+    
+    // Handle the new response structure with you_owe and you_are_owed fields
+    if (balanceData is Map<String, dynamic>) {
+      youOwe = (balanceData['you_owe'] as num?)?.toDouble() ?? 0.0;
+      youAreOwed = (balanceData['you_are_owed'] as num?)?.toDouble() ?? 0.0;
+      
+      // Debug logging
+      debugPrint('💰 Balance data: you_owe=$youOwe, you_are_owed=$youAreOwed');
+      debugPrint('💰 Your balance: ${balanceData['your_balance']}');
+      debugPrint('💰 Summary: ${balanceData['summary']}');
+    } else {
+      // Fallback: try to extract from legacy format
+      Map<String, dynamic> balanceMap = {};
+      if (balanceData is List && balanceData.isNotEmpty) {
+        balanceMap = balanceData.first as Map<String, dynamic>? ?? {};
+      } else if (balanceData is Map<String, dynamic>) {
+        balanceMap = balanceData;
+      }
+      
+      youOwe = (balanceMap['you_owe'] as num?)?.toDouble() ?? 0.0;
+      youAreOwed = (balanceMap['you_are_owed'] as num?)?.toDouble() ?? 0.0;
+      
+      debugPrint('💰 Legacy balance data: you_owe=$youOwe, you_are_owed=$youAreOwed');
     }
-    
-    final youOwe = (balanceMap['you_owe'] as num?)?.toDouble() ?? 0.0;
-    final youAreOwed = (balanceMap['you_are_owed'] as num?)?.toDouble() ?? 0.0;
     
     return Row(
       children: [

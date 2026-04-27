@@ -1,0 +1,15 @@
+{
+  "name": "roomease-api-test-helpers",
+  "version": "1.0.0",
+  "description": "Helper scripts for RoomEase API testing",
+  "main": "get-firebase-token.js",
+  "scripts": {
+    "get-token": "node get-firebase-token.js"
+  },
+  "dependencies": {
+    "firebase": "^10.0.0"
+  },
+  "keywords": ["firebase", "testing", "api", "roomease"],
+  "author": "RoomEase Team",
+  "license": "MIT"
+}

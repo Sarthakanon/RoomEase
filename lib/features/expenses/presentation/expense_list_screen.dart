@@ -3,11 +3,14 @@ import 'package:provider/provider.dart';
 import 'package:room_ease/models/expense_models.dart';
 import 'package:room_ease/services/expense_service.dart';
 import 'package:room_ease/services/cached_api_service.dart';
+import 'package:room_ease/services/real_time_data_service.dart';
 import 'package:room_ease/providers/roomspace_provider.dart';
 import 'package:room_ease/core/widgets/skeleton_loader.dart';
 import 'package:room_ease/features/expenses/presentation/expense_details_screen.dart';
 import 'package:room_ease/features/home/widgets/add_expense_dialog.dart';
 import 'package:room_ease/features/home/widgets/personal_expense_dialog.dart';
+import 'package:room_ease/widgets/enhanced_expense_tile.dart';
+import 'dart:async';
 
 /// Screen displaying a paginated list of expenses (shared or personal).
 class ExpenseListScreen extends StatefulWidget {
@@ -27,6 +30,7 @@ class ExpenseListScreen extends StatefulWidget {
 class _ExpenseListScreenState extends State<ExpenseListScreen> {
   final ExpenseService _expenseService = ExpenseService();
   final CachedApiService _cachedApiService = CachedApiService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
   final ScrollController _scrollController = ScrollController();
   
   List<ExpenseData> _expenses = [];
@@ -42,12 +46,41 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   String? _selectedCategory;
   final TextEditingController _searchController = TextEditingController();
 
+  // Stream subscriptions for real-time updates
+  StreamSubscription<ExpenseUpdateEvent>? _expenseUpdateSubscription;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadExpenses(reset: true);
+      _setupRealTimeListeners();
+    });
+  }
+
+  void _setupRealTimeListeners() {
+    _expenseUpdateSubscription = _realTimeService.expenseUpdates.listen((event) {
+      debugPrint('🔄 ExpenseList: Update received: ${event.type}');
+      
+      // Check if this update affects current screen
+      final currentRoomspaceId = widget.roomspaceId ?? 
+          Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+      
+      bool shouldRefresh = false;
+      
+      if (event.type == ExpenseUpdateType.clearCache) {
+        shouldRefresh = true;
+      } else if (widget.isPersonalExpenses && event.type == ExpenseUpdateType.personalCreated) {
+        shouldRefresh = true;
+      } else if (!widget.isPersonalExpenses && event.roomspaceId == currentRoomspaceId) {
+        shouldRefresh = true;
+      }
+      
+      if (shouldRefresh && mounted) {
+        debugPrint('🔄 ExpenseList: Refreshing data');
+        _loadExpenses(reset: true);
+      }
     });
   }
 
@@ -55,6 +88,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   void dispose() {
     _scrollController.dispose();
     _searchController.dispose();
+    _expenseUpdateSubscription?.cancel();
     super.dispose();
   }
 
@@ -237,10 +271,11 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
             return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator(strokeWidth: 2)));
           }
           final expense = _expenses[index];
-          return _ExpenseTile(
+          return EnhancedExpenseTile(
             expense: expense,
             themeColor: themeColor,
             isPersonal: widget.isPersonalExpenses,
+            onUpdated: () => _loadExpenses(reset: true),
           );
         },
       ),
@@ -396,7 +431,8 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       if (!mounted) return;
       AddExpenseDialog.show(context, roommates: roommates, roomspaceId: active.id, onSubmit: (ex) async {
         await _cachedApiService.createExpense(ExpenseCreateRequest.fromExpenseData(ex, active.id).toJson());
-        _loadExpenses(reset: true);
+        // Real-time service will automatically notify listeners
+        // No need to manually refresh here
       });
     } catch (_) {}
   }
@@ -404,7 +440,8 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   void _showPersonalExpenseDialog() {
     PersonalExpenseDialog.show(context, onSubmit: (ex) async {
       await _cachedApiService.createPersonalExpense(PersonalExpenseCreateRequest.fromExpenseData(ex).toJson());
-      _loadExpenses(reset: true);
+      // Real-time service will automatically notify listeners
+      // No need to manually refresh here
     });
   }
 }

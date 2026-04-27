@@ -114,16 +114,22 @@ class NotificationListenerService {
       final packageName = args['packageName'] as String?;
       final title = args['title'] as String?;
       final content = args['content'] as String?;
+      final appName = args['appName'] as String?; // New field from Android
+      final source = args['source'] as String? ?? 'notification';
 
       print('🔔 FLUTTER: Received notification from native');
       print('📱 Package: $packageName');
       print('📝 Title: $title');
       print('📄 Content: $content');
+      print('🏷️ App Name: $appName');
+      print('📡 Source: $source');
       
       log('🔔 FLUTTER: Received notification from native');
       log('📱 Package: $packageName');
       log('📝 Title: $title');
       log('📄 Content: $content');
+      log('🏷️ App Name: $appName');
+      log('📡 Source: $source');
 
       if (packageName == null) {
         print('❌ Package name is null, skipping');
@@ -131,14 +137,14 @@ class NotificationListenerService {
         return;
       }
 
-      print('🔍 Getting app name from package...');
-      final appName = _getAppNameFromPackage(packageName);
-      print('🏷️ Mapped app name: $appName');
-      log('🏷️ Mapped app name: $appName');
+      // Use provided app name or map from package
+      final finalAppName = appName ?? _getAppNameFromPackage(packageName);
+      print('🏷️ Final app name: $finalAppName');
+      log('🏷️ Final app name: $finalAppName');
       
-      if (appName == null) {
-        print('❌ App name not mapped, skipping');
-        log('❌ App name not mapped, skipping');
+      if (finalAppName == null) {
+        print('❌ App name not available, skipping');
+        log('❌ App name not available, skipping');
         return;
       }
 
@@ -153,9 +159,9 @@ class NotificationListenerService {
       log('🔍 Parsing notification text: $notificationText');
 
       final paymentNotification = PaymentParserService.parseNotification(
-        appName: appName,
+        appName: finalAppName,
         notificationText: notificationText,
-        source: 'notification',
+        source: source,
       );
 
       if (paymentNotification != null) {
@@ -198,6 +204,13 @@ class NotificationListenerService {
       'com.connectips.mobile': 'ConnectIPS',
       'com.fonepay.mobile': 'FonePay',
       'com.ipay.mobile': 'iPay',
+      
+      // SMS/Messaging apps (will be overridden by content detection)
+      'com.google.android.apps.messaging': 'SMS',
+      'com.android.mms': 'SMS',
+      'com.samsung.android.messaging': 'SMS',
+      'com.textra': 'SMS',
+      'com.microsoft.android.sms': 'SMS',
     };
 
     // Direct match

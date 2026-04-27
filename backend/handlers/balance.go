@@ -49,6 +49,7 @@ func (h *BalanceHandler) GetRoomspaceBalances(c *gin.Context) {
 	// Calculate balances
 	summary, err := h.balanceService.CalculateRoomspaceBalances(roomspaceID)
 	if err != nil {
+		fmt.Printf("❌ Error calculating balances for roomspace %s: %v\n", roomspaceID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to calculate balances",
 			"details": err.Error(),
@@ -56,9 +57,47 @@ func (h *BalanceHandler) GetRoomspaceBalances(c *gin.Context) {
 		return
 	}
 
+	// Debug: Print the entire summary
+	fmt.Printf("🏠 Balance Summary for roomspace %s:\n", roomspaceID)
+	fmt.Printf("📊 Total expenses: %.2f\n", summary.TotalExpenses)
+	fmt.Printf("📊 Expense count: %d\n", summary.ExpenseCount)
+	fmt.Printf("📊 User balances: %+v\n", summary.UserBalances)
+	fmt.Printf("📊 Members count: %d\n", len(summary.Members))
+
+	// Get current user's balance from the summary
+	currentUserBalance, exists := summary.UserBalances[userID.(string)]
+	if !exists {
+		fmt.Printf("⚠️  User %s not found in balance summary\n", userID.(string))
+		currentUserBalance = 0.0
+	}
+	
+	// Calculate you_owe and you_are_owed for the current user
+	youOwe := 0.0
+	youAreOwed := 0.0
+	
+	if currentUserBalance < 0 {
+		youOwe = -currentUserBalance // Convert negative to positive
+	} else if currentUserBalance > 0 {
+		youAreOwed = currentUserBalance
+	}
+
+	// Debug logging
+	fmt.Printf("🏠 Balance calculation for user %s in roomspace %s:\n", userID.(string), roomspaceID)
+	fmt.Printf("💰 Current user balance: %.2f\n", currentUserBalance)
+	fmt.Printf("💰 You owe: %.2f\n", youOwe)
+	fmt.Printf("💰 You are owed: %.2f\n", youAreOwed)
+
+	// Create response with both summary and current user's specific balance
+	responseData := map[string]interface{}{
+		"summary":       summary,
+		"you_owe":       youOwe,
+		"you_are_owed":  youAreOwed,
+		"your_balance":  currentUserBalance,
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    summary,
+		"data":    responseData,
 	})
 }
 

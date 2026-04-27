@@ -1,0 +1,36 @@
+meta {
+  name: Verify Session
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/auth/verify
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: session_id={{session_id}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.valid: eq true
+  res.body.user_id: isDefined
+  res.body.email: isDefined
+}
+
+tests {
+  test("Session verification successful", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.valid).to.equal(true);
+    expect(res.body).to.have.property('user_id');
+    expect(res.body).to.have.property('email');
+  });
+  
+  test("User data matches login", function() {
+    expect(res.body.user_id).to.equal(bru.getEnvVar("user_id"));
+    expect(res.body.email).to.equal(bru.getEnvVar("email"));
+  });
+}

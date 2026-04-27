@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"roomease/backend/config"
 	"roomease/backend/models"
 	"roomease/backend/services"
 	"strconv"
@@ -95,6 +96,18 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 		PaidBy:      paidBy,
 		SplitType:   req.SplitType,
 		Splits:      splits,
+		RecurringConfig: req.RecurringConfig,
+	}
+
+	// Debug: Log the expense details
+	fmt.Printf("🧾 Creating expense:\n")
+	fmt.Printf("  RoomspaceID: %s\n", expense.RoomspaceID)
+	fmt.Printf("  Title: %s\n", expense.Title)
+	fmt.Printf("  Amount: %.2f\n", expense.Amount)
+	fmt.Printf("  PaidBy: %s\n", expense.PaidBy)
+	fmt.Printf("  Splits count: %d\n", len(expense.Splits))
+	for i, split := range expense.Splits {
+		fmt.Printf("    Split %d: UserUID=%s, Amount=%.2f\n", i+1, split.UserUID, split.Amount)
 	}
 
 	// Debug: Log the final paidBy value
@@ -107,6 +120,14 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 			"details": err.Error(),
 		})
 		return
+	}
+
+	// Create recurring expense template if configured
+	if req.RecurringConfig != nil && req.RecurringConfig.IsRecurring {
+		if err := h.createRecurringExpenseTemplate(&req, userID.(string)); err != nil {
+			// Log error but don't fail the expense creation
+			fmt.Printf("Failed to create recurring expense template: %v\n", err)
+		}
 	}
 
 	// Send notifications to selected roommates (excluding the creator)
@@ -922,4 +943,29 @@ func (h *ExpenseHandler) parseDateFilters(c *gin.Context) (int, int) {
 	}
 	
 	return year, month
+}
+
+// createRecurringExpenseTemplate creates a recurring expense template from the request
+func (h *ExpenseHandler) createRecurringExpenseTemplate(req *models.CreateExpenseRequest, userID string) error {
+	template := &models.RecurringExpenseTemplate{
+		RoomspaceID:       req.RoomspaceID,
+		Title:             req.Title,
+		Description:       req.Description,
+		Amount:            req.Amount,
+		Category:          req.Category,
+		CreatedBy:         userID,
+		SelectedRoommates: models.StringArray(req.SelectedRoommates),
+		SplitType:         string(req.SplitType),
+		CustomSplits:      req.CustomSplits,
+		RecurringConfig:   *req.RecurringConfig,
+		IsActive:          true,
+	}
+
+	// Save to database
+	if err := config.DB.Create(template).Error; err != nil {
+		return fmt.Errorf("failed to create recurring expense template: %v", err)
+	}
+
+	fmt.Printf("Created recurring expense template %d for expense: %s\n", template.ID, req.Title)
+	return nil
 }

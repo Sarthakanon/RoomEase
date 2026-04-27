@@ -20,6 +20,8 @@ const (
 	NotificationTypePaymentClaim   NotificationType = "PAYMENT_CLAIM"
 	NotificationTypePaymentConfirmed NotificationType = "PAYMENT_CONFIRMED"
 	NotificationTypePaymentRejected NotificationType = "PAYMENT_REJECTED"
+	NotificationTypeOwnershipTransferred NotificationType = "OWNERSHIP_TRANSFERRED"
+	NotificationTypePaymentReceived NotificationType = "PAYMENT_RECEIVED"
 )
 
 // Notification represents a notification for a user

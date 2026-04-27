@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../models/payment_notification.dart';
 import '../../../services/payment_notification_service.dart';
 import '../../../services/payment_parser_service.dart';
+import '../../../services/sms_detection_service.dart';
 import '../../notifications/presentation/payment_history_screen.dart';
 
 class PaymentNotificationSettingsScreen extends StatefulWidget {
@@ -179,6 +180,69 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
         ),
       ),
     );
+  }
+
+  Future<void> _testSmsDetection() async {
+    try {
+      // Test your specific SMS format
+      const testSender = "9801234567";
+      const testMessage = "Your #282###32100 has been Debited by NPR 500.00 on 01/04/2026 19:24:56";
+      
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Testing SMS detection...'),
+            ],
+          ),
+        ),
+      );
+      
+      // Test the SMS detection
+      SmsDetectionService.testSmsDetection(testSender, testMessage);
+      
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+      
+      // Show result
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('SMS Test Result'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Sender: $testSender'),
+                const SizedBox(height: 8),
+                Text('Message: $testMessage'),
+                const SizedBox(height: 16),
+                const Text(
+                  'Check the console logs for detailed results. If the SMS detection is working, you should see a payment notification.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if open
+      if (mounted) Navigator.of(context).pop();
+      _showError('SMS test failed: $e');
+    }
   }
 
   Future<void> _testPaymentDetection() async {
@@ -519,124 +583,7 @@ class _PaymentNotificationSettingsScreenState extends State<PaymentNotificationS
     );
   }
 
-  Future<void> _testSmsDetection() async {
-    // Show dialog to enter SMS text
-    final controller = TextEditingController();
-    
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Test SMS Detection'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Paste your bank/eSewa SMS message here:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'e.g., Dear Customer, Rs. 500.00 has been debited from your account for payment to ABC Store via eSewa.',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Test'),
-          ),
-        ],
-      ),
-    );
 
-    if (result != null && result.isNotEmpty) {
-      try {
-        // Test the SMS parsing
-        final testNotification = PaymentNotification(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          source: 'sms_test',
-          appName: 'Test Bank',
-          rawText: result,
-          amount: _extractAmountFromText(result),
-          merchant: _extractMerchantFromText(result),
-          timestamp: DateTime.now(),
-          type: PaymentType.debit,
-        );
-
-        await _service.processPaymentNotification(testNotification);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('SMS test processed! Check notifications.'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('SMS test failed: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  double? _extractAmountFromText(String text) {
-    // Simple amount extraction for testing
-    final patterns = [
-      r'Rs\.?\s*([0-9,]+(?:\.[0-9]{2})?)',
-      r'([0-9,]+(?:\.[0-9]{2})?)\s*Rs',
-      r'NPR\s*([0-9,]+(?:\.[0-9]{2})?)',
-    ];
-
-    for (final pattern in patterns) {
-      final regex = RegExp(pattern, caseSensitive: false);
-      final match = regex.firstMatch(text);
-      
-      if (match != null) {
-        String amountStr = match.group(1)!;
-        amountStr = amountStr.replaceAll(',', '');
-        final amount = double.tryParse(amountStr);
-        if (amount != null && amount > 0) {
-          return amount;
-        }
-      }
-    }
-    return null;
-  }
-
-  String? _extractMerchantFromText(String text) {
-    // Simple merchant extraction for testing
-    final patterns = [
-      r'payment to (.+?)(?:\s|$|\.)',
-      r'to (.+?) via',
-      r'at (.+?)(?:\s|$|\.)',
-    ];
-
-    for (final pattern in patterns) {
-      final regex = RegExp(pattern, caseSensitive: false);
-      final match = regex.firstMatch(text);
-      
-      if (match != null) {
-        final merchant = match.group(1)?.trim();
-        if (merchant != null && merchant.length > 2) {
-          return merchant;
-        }
-      }
-    }
-    return null;
-  }
 
   Widget _buildStatsSection() {
     return Card(
