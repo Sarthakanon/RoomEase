@@ -80,7 +80,15 @@ class ApiService {
           // Check if response indicates user is banned
           if (response.data is Map<String, dynamic>) {
             final data = response.data as Map<String, dynamic>;
-            if (data['banned'] == true || 
+            
+            // Check for is_banned field (from ban-status endpoint)
+            if (data['is_banned'] == true) {
+              final reason = data['ban_reason']?.toString() ?? 'Your account has been suspended';
+              print('🚫 BAN DETECTED (is_banned field): $reason');
+              _handleBanResponse(reason);
+            }
+            // Check for banned field or error message
+            else if (data['banned'] == true || 
                 (data['error'] != null && 
                  (data['error'].toString().toLowerCase().contains('suspended') ||
                   data['error'].toString().toLowerCase().contains('banned')))) {
@@ -91,7 +99,7 @@ class ApiService {
           }
           handler.next(response);
         },
-        onError: (error, handler) {
+        onError: (error, handler) async {
           print('❌ API Error: ${error.response?.statusCode} - ${error.requestOptions.path}');
           print('❌ Error Data: ${error.response?.data}');
           print('❌ Error Type: ${error.type}');
@@ -106,6 +114,30 @@ class ApiService {
             print('   - Platform: ${Platform.operatingSystem}');
           }
           
+          // Handle 401 Unauthorized - Session expired or invalid
+          if (error.response?.statusCode == 401) {
+            print('🔒 401 Unauthorized detected - logging out user');
+            await _handleUnauthorizedError();
+            handler.next(error);
+            return;
+          }
+          
+          // Handle 403 Forbidden - User banned or access denied
+          if (error.response?.statusCode == 403) {
+            print('🚫 403 Forbidden detected - checking if user is banned');
+            final data = error.response?.data;
+            if (data is Map<String, dynamic>) {
+              final errorMsg = data['error']?.toString() ?? '';
+              if (errorMsg.toLowerCase().contains('banned') || 
+                  errorMsg.toLowerCase().contains('suspended')) {
+                print('🚫 User is banned - logging out');
+                await _handleBanResponse(errorMsg);
+                handler.next(error);
+                return;
+              }
+            }
+          }
+          
           // Check if error response indicates user is banned
           if (error.response?.data is Map<String, dynamic>) {
             final data = error.response!.data as Map<String, dynamic>;
@@ -115,13 +147,33 @@ class ApiService {
                   data['error'].toString().toLowerCase().contains('banned')))) {
               final reason = data['error']?.toString() ?? 'Account suspended';
               print('🚫 BAN DETECTED in error: $reason');
-              _handleBanResponse(reason);
+              await _handleBanResponse(reason);
             }
           }
           handler.next(error);
         },
       ),
     );
+  }
+
+  /// Handle 401 Unauthorized errors - auto logout
+  Future<void> _handleUnauthorizedError() async {
+    try {
+      print('🔒 Handling unauthorized error - logging out user');
+      
+      // Stop ban monitoring
+      BanMonitoringService().stopMonitoring();
+      
+      // Clear cookies
+      await clearCookies();
+      
+      // Sign out from Firebase
+      await FirebaseAuth.instance.signOut();
+      
+      print('✅ User logged out due to unauthorized access');
+    } catch (e) {
+      print('❌ Error handling unauthorized error: $e');
+    }
   }
 
   /// Initialize persistent cookie storage
@@ -206,10 +258,10 @@ class ApiService {
       // Stop ban monitoring
       BanMonitoringService().stopMonitoring();
       
-      // Trigger ban notification immediately
+      // Trigger ban notification immediately - this will show the dialog
       BanMonitoringService().notifyBanDetected(errorMessage);
       
-      print('🚫 Ban notification sent to UI');
+      print('🚫 Ban notification sent to UI - dialog should appear');
     } catch (e) {
       print('❌ Error handling ban response: $e');
     }
@@ -399,7 +451,7 @@ class ApiService {
     );
   }
 
-  Future<Map<String, dynamic>> leaveRoomspace(int roomspaceId) async {
+  Future<Map<String, dynamic>> leaveRoomspace(String roomspaceId) async {
     return await post('/api/roomspaces/$roomspaceId/leave');
   }
 
