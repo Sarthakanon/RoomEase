@@ -24,7 +24,11 @@ import 'services/performance_service.dart';
 import 'services/loading_service.dart';
 import 'providers/roomspace_provider.dart';
 import 'widgets/ban_listener_widget.dart';
+import 'widgets/auth_state_listener.dart';
 import 'dart:developer';
+
+// Global navigator key for navigation from anywhere in the app
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   // Set up global error handling to prevent app crashes
@@ -95,9 +99,11 @@ class RoomEaseApp extends StatelessWidget {
         ),
       ],
       child: BanListenerWidget(
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'RoomEase',
+        child: AuthStateListener(
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            debugShowCheckedModeBanner: false,
+            title: 'RoomEase',
           theme: ThemeData(
             primarySwatch: Colors.indigo,
             colorScheme: ColorScheme.fromSeed(
@@ -176,6 +182,7 @@ class RoomEaseApp extends StatelessWidget {
             '/expense-list': (context) => const ExpenseListScreen(),
             '/personal-expenses': (context) => const PersonalExpensesScreen(),
           },
+        ),
         ),
       ),
     );
