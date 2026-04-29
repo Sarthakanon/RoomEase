@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_state_service.dart';
 import '../services/api_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../main.dart' show navigatorKey;
 
 class BanCountdownDialog extends StatefulWidget {
   final String reason;
@@ -52,21 +53,23 @@ class _BanCountdownDialogState extends State<BanCountdownDialog> {
       await ApiService().clearCookies();
       await FirebaseAuth.instance.signOut();
       
-      if (mounted) {
+      // Use global navigator key to navigate
+      final navigator = navigatorKey.currentState;
+      if (navigator != null) {
         // Close dialog and navigate to login
-        Navigator.of(context).pop();
-        Navigator.pushNamedAndRemoveUntil(
-          context, 
+        navigator.pop(); // Close dialog
+        navigator.pushNamedAndRemoveUntil(
           '/login', 
           (route) => false,
         );
       }
     } catch (e) {
+      print('❌ Error during logout: $e');
       // Force navigation even if logout fails
-      if (mounted) {
-        Navigator.of(context).pop();
-        Navigator.pushNamedAndRemoveUntil(
-          context, 
+      final navigator = navigatorKey.currentState;
+      if (navigator != null) {
+        navigator.pop(); // Close dialog
+        navigator.pushNamedAndRemoveUntil(
           '/login', 
           (route) => false,
         );
