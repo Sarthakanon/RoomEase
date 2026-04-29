@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/mobile_scaffold.dart';
@@ -12,6 +11,8 @@ import '../../services/state_management_service.dart';
 import '../../services/balance_service.dart';
 import '../../services/payment_notification_service.dart';
 import '../../services/ocr_service.dart';
+import '../../services/real_time_data_service.dart';
+import 'dart:async';
 import '../../models/payment_notification.dart';
 import '../../models/expense_models.dart';
 import '../../providers/roomspace_provider.dart';
@@ -34,6 +35,7 @@ class _MobileDashboardState extends State<MobileDashboard>
   final SmartApiService _smartApi = SmartApiService();
   final StateManagementService _state = StateManagementService();
   final BalanceService _balanceService = BalanceService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
 
   @override
   bool get wantKeepAlive => true; // Keep state alive when switching tabs
@@ -50,6 +52,10 @@ class _MobileDashboardState extends State<MobileDashboard>
   // Add a flag to track if we're currently loading
   bool _isLoading = false;
   Future<Map<String, dynamic>>? _currentFuture;
+  
+  // Stream subscriptions for real-time updates
+  StreamSubscription<ExpenseUpdateEvent>? _expenseUpdateSubscription;
+  StreamSubscription<BalanceUpdateEvent>? _balanceUpdateSubscription;
 
   @override
   void initState() {
@@ -65,6 +71,53 @@ class _MobileDashboardState extends State<MobileDashboard>
       final roomspaceProvider =
           Provider.of<RoomspaceProvider>(context, listen: false);
       roomspaceProvider.addListener(_onRoomspaceChanged);
+      
+      // Set up real-time listeners for auto-refresh
+      _setupRealTimeListeners();
+    });
+  }
+  
+  void _setupRealTimeListeners() {
+    debugPrint('🔄 Dashboard: Setting up real-time listeners');
+    
+    // Listen for expense updates (both shared and personal)
+    _expenseUpdateSubscription = _realTimeService.expenseUpdates.listen((event) {
+      debugPrint('🔄 Dashboard: Expense update received: ${event.type}');
+      
+      // Check if this update affects current roomspace
+      final currentRoomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+      
+      if (event.type == ExpenseUpdateType.clearCache ||
+          event.roomspaceId == currentRoomspaceId ||
+          event.type == ExpenseUpdateType.personalCreated) {
+        // Clear cache and refresh dashboard
+        debugPrint('🔄 Dashboard: Clearing cache and refreshing');
+        _cachedDashboardData = null;
+        _lastDataLoad = null;
+        
+        if (mounted) {
+          setState(() {}); // Trigger rebuild with fresh data
+        }
+      }
+    });
+
+    // Listen for balance updates
+    _balanceUpdateSubscription = _realTimeService.balanceUpdates.listen((event) {
+      debugPrint('🔄 Dashboard: Balance update received: ${event.type}');
+      
+      final currentRoomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+      
+      if (event.type == BalanceUpdateType.clearCache ||
+          event.roomspaceId == currentRoomspaceId) {
+        // Clear cache and refresh dashboard
+        debugPrint('🔄 Dashboard: Clearing cache and refreshing balances');
+        _cachedDashboardData = null;
+        _lastDataLoad = null;
+        
+        if (mounted) {
+          setState(() {}); // Trigger rebuild
+        }
+      }
     });
   }
 
@@ -74,6 +127,11 @@ class _MobileDashboardState extends State<MobileDashboard>
     final roomspaceProvider =
         Provider.of<RoomspaceProvider>(context, listen: false);
     roomspaceProvider.removeListener(_onRoomspaceChanged);
+    
+    // Cancel real-time subscriptions
+    _expenseUpdateSubscription?.cancel();
+    _balanceUpdateSubscription?.cancel();
+    
     super.dispose();
   }
 
@@ -707,9 +765,6 @@ class _MobileDashboardState extends State<MobileDashboard>
     final hasRoomspace = dashboardData['hasRoomspace'] as bool? ?? false;
     final roomspaceId = dashboardData['roomspaceId'] as String?;
     
-    // Debug logging
-    debugPrint('🏠 Dashboard state: isPersonalSpace=$isPersonalSpace, hasRoomspace=$hasRoomspace, roomspaceId=$roomspaceId');
-    
     // Extract data with better null safety
     final notifications = dashboardData['notifications'] as Map<String, dynamic>? ?? {'data': []};
     final personalExpenses = dashboardData['personalExpenses'] as Map<String, dynamic>? ?? {'data': []};
@@ -771,23 +826,6 @@ class _MobileDashboardState extends State<MobileDashboard>
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: _buildNoRoomspaceCard(primaryColor),
             ),
-            // Debug info
-            if (kDebugMode)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Text(
-                    'DEBUG: hasRoomspace=$hasRoomspace, isPersonalSpace=$isPersonalSpace, roomspaceId=$roomspaceId',
-                    style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
-                  ),
-                ),
-              ),
           ],
 
           // ── Recent Activity ──
