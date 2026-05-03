@@ -5,7 +5,6 @@ import '../../../services/firebase_auth_service.dart';
 import '../../../services/api_service.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../../../models/roomspace_data.dart';
-import '../../../core/widgets/skeleton_loader.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/utils/subscription_helper.dart';
 import 'payment_notification_settings_screen.dart';
@@ -189,11 +188,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               try {
                 final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
                 await roomspaceProvider.leaveRoomspace(roomspace.id);
+                
+                // Reload roomspaces to update UI everywhere
+                await roomspaceProvider.loadRoomspaces(forceRefresh: true);
+                
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Left "${roomspace.name}"')));
-                  if (roomspaceProvider.roomspaceCount == 0) {
-                    Navigator.pushReplacementNamed(context, '/roomspace-selection');
-                  }
+                  
+                  // Navigate back to home - just pop back without clearing all routes
+                  Navigator.of(context).pop();
                 }
               } catch (e) {
                 if (mounted) {
@@ -364,7 +367,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildDropdown(RoomspaceProvider provider, Color primaryColor) {
     return DropdownButtonFormField<String>(
-      value: provider.activeRoomspace?.id,
+      initialValue: provider.activeRoomspace?.id,
       decoration: InputDecoration(
         filled: true,
         fillColor: const Color(0xFFF7F7FB),
@@ -476,7 +479,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SwitchListTile.adaptive(
       value: value,
       onChanged: onChanged,
-      activeColor: color,
+      activeTrackColor: color.withValues(alpha: 0.5),
       secondary: Icon(icon, size: 20, color: Colors.grey.shade600),
       title: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
