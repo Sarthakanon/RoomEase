@@ -2,7 +2,7 @@
 class AppConstants {
   // Backend Configuration
   // Use actual local IP address for better connectivity
-  static const String backendIp = '192.168.1.84'; // Your local IP address
+  static const String backendIp = '192.168.1.89'; // Your local IP address
   static const int backendPort = 8080; // HTTP port for local development
   
   // Default backend IP for fallback
