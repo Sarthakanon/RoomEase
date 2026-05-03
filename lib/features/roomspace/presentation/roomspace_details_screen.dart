@@ -32,6 +32,26 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
     super.initState();
     _currentUserUid = FirebaseAuth.instance.currentUser?.uid;
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadDetails());
+    
+    // Listen for roomspace changes to reload data
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+      provider.addListener(_onRoomspaceChanged);
+    });
+  }
+  
+  @override
+  void dispose() {
+    final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+    provider.removeListener(_onRoomspaceChanged);
+    super.dispose();
+  }
+  
+  void _onRoomspaceChanged() {
+    // Reload details when roomspace changes
+    if (mounted) {
+      _loadDetails();
+    }
   }
 
   Future<void> _loadDetails() async {
@@ -39,10 +59,20 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
     try {
       final provider = Provider.of<RoomspaceProvider>(context, listen: false);
       final activeId = provider.getActiveRoomspaceId();
+      
+      // If no active roomspace, check if user has any roomspaces at all
       if (activeId == null) {
-        if (mounted) Navigator.pushReplacementNamed(context, '/roomspace-selection');
+        // User is in Personal Space mode - this is valid, don't redirect
+        // Just show empty state in the UI
+        setState(() {
+          _roomspace = null;
+          _members = [];
+          _isCreator = false;
+          _isLoading = false;
+        });
         return;
       }
+      
       final res = await _apiService.getRoomspaces();
       if (res['success'] == true && res['data'] != null) {
         final list = res['data'] as List<dynamic>;
@@ -61,8 +91,14 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
           print('   Creator ID: ${_roomspace?['creator_id']}');
           print('   Is Creator: $_isCreator');
           print('   Roomspace Data: ${_roomspace?.keys}');
-        } else if (mounted) {
-          Navigator.pushReplacementNamed(context, '/roomspace-selection');
+        } else {
+          // Roomspace not found, show empty state
+          setState(() {
+            _roomspace = null;
+            _members = [];
+            _isCreator = false;
+            _isLoading = false;
+          });
         }
       }
     } catch (e) {
@@ -108,11 +144,24 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
   }
 
   Future<void> _leaveRoomspace() async {
+    print('🚪 _leaveRoomspace called');
     final roomspaceName = _roomspace?['name'] ?? 'this room';
     final roomspaceId = _roomspace?['id'];
     final isCreatorLeaving = _isCreator;
     
-    if (roomspaceId == null) return;
+    print('📊 Roomspace ID: $roomspaceId');
+    print('📊 Is Creator: $isCreatorLeaving');
+    print('📊 Roomspace Name: $roomspaceName');
+    
+    if (roomspaceId == null) {
+      print('❌ Roomspace ID is null, cannot leave');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot leave: Roomspace not found')),
+        );
+      }
+      return;
+    }
     
     // First, check if user has outstanding balances
     setState(() => _isLoading = true);
@@ -155,6 +204,7 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
     }
     
     // Show confirmation dialog
+    print('💬 Showing confirmation dialog');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -215,12 +265,22 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
       ),
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true) {
+      print('❌ User cancelled leave operation');
+      return;
+    }
 
+    print('✅ User confirmed, proceeding to leave roomspace');
     setState(() => _isLoading = true);
     try {
+      print('📡 Calling provider.leaveRoomspace with ID: $roomspaceId');
       final provider = Provider.of<RoomspaceProvider>(context, listen: false);
       await provider.leaveRoomspace(_roomspace?['id']);
+      
+      print('✅ Successfully left roomspace');
+      
+      // Reload roomspaces to update the UI everywhere
+      await provider.loadRoomspaces(forceRefresh: true);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -232,10 +292,13 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
             ),
           ),
         );
-        // Navigate back to roomspace selection or main screen
-        Navigator.pushReplacementNamed(context, '/roomspace-selection');
+        
+        // Navigate back to home - just pop all the way back to root
+        // Don't use pushNamedAndRemoveUntil as it might trigger logout
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } catch (e) {
+      print('❌ Error leaving roomspace: $e');
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -395,6 +458,11 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
   }
 
   Widget _buildContent(Color primary) {
+    // If no roomspace (Personal Space mode), show a special UI
+    if (_roomspace == null) {
+      return _buildPersonalSpaceUI(primary);
+    }
+    
     return CustomScrollView(
       slivers: [
         SliverAppBar(
@@ -424,6 +492,123 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
                 _buildSectionTitle('RESIDENTS (${_members.length})'),
                 const SizedBox(height: 12),
                 _buildMemberPanel(primary),
+                const SizedBox(height: 100),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPersonalSpaceUI(Color primary) {
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          pinned: true,
+          centerTitle: false,
+          title: const Text('Personal Space', style: TextStyle(color: Color(0xFF1A1A2E), fontWeight: FontWeight.w700, fontSize: 17)),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: GlobalRoomspaceSelector(onRoomspaceChanged: _loadDetails),
+            ),
+          ],
+          bottom: PreferredSize(preferredSize: const Size.fromHeight(1), child: Container(color: const Color(0xFFF0F0F0), height: 1)),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Personal Space Info
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F7FB),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFEEEEF2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.person_outline, color: primary, size: 24),
+                          ),
+                          const SizedBox(width: 14),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Personal Space',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF1A1A2E),
+                                  ),
+                                ),
+                                Text(
+                                  'Track your personal expenses',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                // Create/Join Room Actions
+                _buildSectionTitle('ROOM ACTIONS'),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _handleCreateRoom(context),
+                        icon: Icon(Icons.add_home_work_rounded, size: 18, color: primary),
+                        label: Text(
+                          "Create Room",
+                          style: TextStyle(color: primary, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(color: primary.withValues(alpha: 0.3)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _handleJoinRoom(context),
+                        icon: const Icon(Icons.group_add_rounded, size: 18),
+                        label: const Text("Join Room", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 100),
               ],
             ),

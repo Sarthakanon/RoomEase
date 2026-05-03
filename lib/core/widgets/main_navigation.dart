@@ -8,7 +8,6 @@ import '../../features/analytics/presentation/analytics_page.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../providers/roomspace_provider.dart';
 import '../../services/payment_dialog_service.dart';
-import '../../debug/esewa_test_widget.dart';
 
 /// Main navigation widget that maintains state across tab switches
 /// Uses IndexedStack to keep all screens alive and prevent reloading
@@ -110,9 +109,6 @@ class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObse
             children: _screens,
           ),
           bottomNavigationBar: _buildBottomNavigationBar(isPersonalSpace),
-          // Add eSewa test button for debugging
-          floatingActionButton: const EsewaTestWidget(),
-          floatingActionButtonLocation: FloatingActionButtonLocation.centerTop,
         );
       },
     );
