@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'advanced_cache_service.dart';
 import 'state_management_service.dart';
+import 'real_time_data_service.dart';
 import 'api_service.dart';
 
 /// Smart API service with advanced caching, state management, and offline support
@@ -12,6 +13,7 @@ class SmartApiService {
 
   final AdvancedCacheService _cache = AdvancedCacheService();
   final StateManagementService _state = StateManagementService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
   final ApiService _api = ApiService();
 
   // Expose dio for direct API calls when needed
@@ -177,6 +179,9 @@ class SmartApiService {
       _state.forceRefresh(ScreenKeys.roomspaceExpenses(roomspaceId));
       _state.forceRefresh(ScreenKeys.roomspaceBalances(roomspaceId));
       _state.forceRefresh(ScreenKeys.dashboard);
+      
+      // Trigger real-time update
+      _realTimeService.notifyExpenseCreated(roomspaceId, result['data'] ?? expenseData);
     }
     
     return result;
@@ -191,6 +196,9 @@ class SmartApiService {
     _state.forceRefresh(ScreenKeys.personalExpenses);
     _state.forceRefresh(ScreenKeys.dashboard);
     
+    // Trigger real-time update
+    _realTimeService.notifyPersonalExpenseCreated(result['data'] ?? expenseData);
+    
     return result;
   }
 
@@ -204,6 +212,14 @@ class SmartApiService {
       await _cache.invalidateExpenseRelated(roomspaceId);
       _state.forceRefresh(ScreenKeys.roomspaceExpenses(roomspaceId));
       _state.forceRefresh(ScreenKeys.roomspaceBalances(roomspaceId));
+      
+      // Trigger real-time update
+      final affectedUsers = (expenseData['splits'] as List?)
+          ?.map((split) => split['user_id']?.toString())
+          .where((id) => id != null)
+          .cast<String>()
+          .toList() ?? [];
+      _realTimeService.notifyExpenseUpdated(roomspaceId, result['data'] ?? expenseData, affectedUsers);
     }
     _state.forceRefresh(ScreenKeys.dashboard);
     
@@ -219,6 +235,9 @@ class SmartApiService {
     _state.forceRefresh(ScreenKeys.dashboard);
     _state.forceRefresh(ScreenKeys.expenses);
     _state.forceRefresh(ScreenKeys.personalExpenses);
+    
+    // Trigger real-time update (roomspace ID would need to be passed or extracted)
+    _realTimeService.clearAllData(); // Clear all caches to ensure consistency
     
     return result;
   }
@@ -344,7 +363,7 @@ class SmartApiService {
   Future<Map<String, dynamic>> getExpenses({String? roomspaceId, int? limit, int? offset}) => _api.getExpenses(roomspaceId: roomspaceId, limit: limit, offset: offset);
   Future<Map<String, dynamic>> getExpenseById(int expenseId) => _api.getExpenseById(expenseId);
   Future<Map<String, dynamic>> removeMemberFromRoomspace(int roomspaceId, String memberFirebaseUid) => _api.removeMemberFromRoomspace(roomspaceId, memberFirebaseUid);
-  Future<Map<String, dynamic>> leaveRoomspace(int roomspaceId) => _api.leaveRoomspace(roomspaceId);
+  Future<Map<String, dynamic>> leaveRoomspace(String roomspaceId) => _api.leaveRoomspace(roomspaceId);
   Future<Map<String, dynamic>> getSettlements({required String roomspaceId, int? limit, int? offset}) => _api.getSettlements(roomspaceId: roomspaceId, limit: limit, offset: offset);
   Future<Map<String, dynamic>> createPaymentNotification(Map<String, dynamic> notificationData) => _api.createPaymentNotification(notificationData);
   Future<Map<String, dynamic>> getPaymentNotifications({String? roomspaceId, int? limit, int? offset}) => _api.getPaymentNotifications(roomspaceId: roomspaceId, limit: limit, offset: offset);
