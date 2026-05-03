@@ -95,6 +95,9 @@ func main() {
 	// Initialize eSewa handler
 	esewaHandler := handlers.NewEsewaHandler(dbService)
 	
+	// Initialize subscription handler
+	subscriptionHandler := handlers.NewSubscriptionHandler(dbService)
+	
 	// Initialize admin handler
 	adminHandler := handlers.NewAdminHandler()
 
@@ -209,6 +212,11 @@ func main() {
 		protected.POST("/payments/settlement/verify", esewaHandler.VerifyBalanceSettlement)
 		protected.GET("/payments/history", esewaHandler.GetPaymentHistory)
 		protected.GET("/roomspaces/:id/settlements/history", middleware.ValidateRoomspaceMembership(), esewaHandler.GetSettlementHistory)
+		
+		// Subscription routes
+		protected.GET("/subscription/current", subscriptionHandler.GetCurrentSubscription)
+		protected.POST("/subscription/cancel", subscriptionHandler.CancelSubscription)
+		protected.GET("/subscription/history", subscriptionHandler.GetSubscriptionHistory)
 		
 		// Admin routes (moved to public section above)
 		// protected.GET("/admin/stats", adminHandler.GetSystemStats)
