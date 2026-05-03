@@ -10,6 +10,8 @@ import '../../../providers/roomspace_provider.dart';
 import '../../../widgets/smart_future_builder.dart';
 import '../../../widgets/enhanced_expense_tile.dart';
 import '../../../widgets/recurring_payment_details_sheet.dart';
+import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/utils/subscription_helper.dart';
 import '../widgets/month_selector.dart';
 import 'expense_list_screen.dart';
 import 'personal_expenses_screen.dart';
@@ -1026,15 +1028,32 @@ class _ExpenseScreenState extends State<ExpenseScreen>
           },
         ),
         const SizedBox(height: 12),
-        _ManagementActionCard(
-          title: 'Generate Report',
-          subtitle: 'Export expenses as professional PDF',
-          icon: Icons.picture_as_pdf_rounded,
-          color: Colors.red.shade700,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ReportOptionsScreen()),
+        Consumer<SubscriptionProvider>(
+          builder: (context, subscriptionProvider, child) {
+            final canExport = subscriptionProvider.currentLimits.exportFeatures;
+            
+            return _ManagementActionCard(
+              title: 'Generate Report',
+              subtitle: canExport 
+                  ? 'Export expenses as professional PDF'
+                  : '🔒 Pro feature - Upgrade to export',
+              icon: Icons.picture_as_pdf_rounded,
+              color: canExport ? Colors.red.shade700 : Colors.grey.shade400,
+              onTap: () {
+                if (canExport) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ReportOptionsScreen()),
+                  );
+                } else {
+                  // Show upgrade dialog
+                  SubscriptionHelper.showFeatureBlockedDialog(
+                    context,
+                    featureName: 'Export Reports',
+                    description: 'Export your expenses as professional PDF or Excel reports with detailed analytics.',
+                  );
+                }
+              },
             );
           },
         ),
