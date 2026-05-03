@@ -254,7 +254,7 @@ class SubscriptionStatusCard extends StatelessWidget {
               ],
             ],
 
-            // Upgrade button for free users
+            // Upgrade button for free users OR Cancel button for pro users
             if (subscription.isFree) ...[
               SizedBox(height: isTablet ? 16 : 12),
               SizedBox(
@@ -278,11 +278,179 @@ class SubscriptionStatusCard extends StatelessWidget {
                   ),
                 ),
               ),
+            ] else ...[
+              // Cancel subscription button for Pro users
+              SizedBox(height: isTablet ? 16 : 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => _showCancelConfirmationDialog(context, provider),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red.shade600,
+                    side: BorderSide(color: Colors.red.shade300),
+                    padding: EdgeInsets.symmetric(vertical: buttonPadding),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Cancel Subscription',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: isTablet ? 16 : 14,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ],
         ),
       ),
     );
+  }
+
+  void _showCancelConfirmationDialog(BuildContext context, SubscriptionProvider provider) {
+    final TextEditingController confirmController = TextEditingController();
+    bool isConfirmValid = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red.shade600, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                'Cancel Subscription',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Are you sure you want to cancel your subscription?',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Your subscription will remain active until the end of the current billing period. After that, you will be downgraded to the Free plan.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Type CONFIRM to proceed:',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: confirmController,
+                onChanged: (value) {
+                  setState(() {
+                    isConfirmValid = value.trim().toUpperCase() == 'CONFIRM';
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: 'CONFIRM',
+                  hintStyle: TextStyle(color: Colors.grey.shade400),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.red.shade600, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                confirmController.dispose();
+                Navigator.pop(dialogContext);
+              },
+              child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600)),
+            ),
+            ElevatedButton(
+              onPressed: isConfirmValid
+                  ? () async {
+                      confirmController.dispose();
+                      Navigator.pop(dialogContext);
+                      await _cancelSubscription(context, provider);
+                    }
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade300,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Cancel Subscription',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancelSubscription(BuildContext context, SubscriptionProvider provider) async {
+    // Store the navigator before showing dialog
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (loadingContext) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      final success = await provider.cancelSubscription();
+      
+      // Close loading dialog
+      navigator.pop();
+
+      if (success) {
+        // Show success message
+        messenger.showSnackBar(
+          SnackBar(
+            content: const Text('Subscription cancelled successfully. You will have access until the end of your billing period.'),
+            backgroundColor: Colors.green.shade600,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } else {
+        // Show error message
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(provider.error ?? 'Failed to cancel subscription'),
+            backgroundColor: Colors.red.shade600,
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog
+      navigator.pop();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
+    }
   }
 
   void _navigateToPlans(BuildContext context) {
