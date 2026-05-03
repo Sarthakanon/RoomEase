@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../services/api_service.dart';
+import '../../../providers/roomspace_provider.dart';
 import 'roomspace_details_screen.dart';
 import 'roomspace_selection_screen.dart';
 
@@ -66,12 +68,20 @@ class _RoomspaceRouterState extends State<RoomspaceRouter> {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
 
     if (_isLoading) {
       return Scaffold(
         backgroundColor: const Color(0xFFF8F9FA),
         body: Center(child: CircularProgressIndicator(color: primaryColor)),
       );
+    }
+
+    // If user is in Personal Space mode (intentionally not in a roomspace), show details
+    if (roomspaceProvider.isPersonalSpace && roomspaceProvider.roomspaces.isEmpty) {
+      // User has no roomspaces but is in Personal Space - this is valid
+      // Don't force them to create/join, they can use Personal Space
+      return const RoomspaceDetailsScreen();
     }
 
     if (_hasRoomspace) {
