@@ -30,6 +30,14 @@
           }
         },
         {
+          "client_id": "949338416443-epb9dv6sr3v5ri0eihrofqq8i7rqs4i2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.room_ease",
+            "certificate_hash": "f0b0a5db6fdf8466d4dd58c639681d8a7e01eb68"
+          }
+        },
+        {
           "client_id": "949338416443-a3b28845n1tg86fpmehckv6o97d22o5q.apps.googleusercontent.com",
           "client_type": 3
         }
