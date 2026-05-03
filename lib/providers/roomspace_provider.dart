@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/roomspace_data.dart';
 import '../services/smart_api_service.dart';
 
@@ -277,7 +276,8 @@ class RoomspaceProvider extends ChangeNotifier {
     
     try {
       // Call API to leave roomspace using new endpoint
-      await _smartApi.leaveRoomspace(int.parse(roomspaceId));
+      // Pass the UUID string directly, don't try to parse as int
+      await _smartApi.leaveRoomspace(roomspaceId);
       
       // Remove from local list
       _roomspaces.removeWhere((r) => r.id == roomspaceId);
@@ -285,20 +285,24 @@ class RoomspaceProvider extends ChangeNotifier {
       // Update cache
       await _cacheRoomspaces();
       
-      // If we left the active roomspace, switch to another one
+      // If we left the active roomspace, switch to another one or Personal Space
       if (_activeRoomspace?.id == roomspaceId) {
         if (_roomspaces.isNotEmpty) {
+          // Switch to the first available roomspace
           await setActiveRoomspace(_roomspaces.first.id);
+          print('✅ Switched to roomspace: ${_roomspaces.first.name}');
         } else {
+          // No roomspaces left - switch to Personal Space
           _activeRoomspace = null;
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove(_activeRoomspaceKey);
-          throw RoomspaceException(
-            'No roomspaces available. Please create or join a roomspace.',
-            RoomspaceErrorType.noRoomspaces,
-          );
+          print('✅ Switched to Personal Space (no roomspaces left)');
         }
       }
+      
+      _isLoading = false;
+      notifyListeners();
+      print('✅ Leave roomspace completed successfully');
     } on RoomspaceException catch (e) {
       _error = e.message;
       _errorType = e.type;
