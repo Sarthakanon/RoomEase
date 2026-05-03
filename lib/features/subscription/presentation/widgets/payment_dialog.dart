@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/subscription_models.dart';
 import '../../providers/subscription_provider.dart';
-import '../../../../services/esewa_direct_service.dart';
+import '../../../../services/esewa_sdk_service.dart';
 
 class PaymentDialog extends StatefulWidget {
   final SubscriptionPlanInfo planInfo;
@@ -23,7 +23,7 @@ class PaymentDialog extends StatefulWidget {
 class _PaymentDialogState extends State<PaymentDialog> {
   String _selectedPaymentMethod = 'esewa';
   bool _isProcessing = false;
-  final EsewaDirectService _esewaService = EsewaDirectService();
+  final EsewaSdkService _esewaService = EsewaSdkService();
 
   @override
   Widget build(BuildContext context) {
@@ -166,33 +166,69 @@ class _PaymentDialogState extends State<PaymentDialog> {
                       child: CircularProgressIndicator(),
                     ),
                   )
-                : SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => _processDirectPayment(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF60BB46),
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: buttonPadding),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.account_balance_wallet),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Pay ₹${price.toInt()} with eSewa',
-                            style: TextStyle(
-                              fontSize: isTablet ? 16 : 14,
-                              fontWeight: FontWeight.w600,
+                : Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => _processDirectPayment(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF60BB46),
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: buttonPadding),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                        ],
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.account_balance_wallet),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Pay ₹${price.toInt()} with eSewa',
+                                style: TextStyle(
+                                  fontSize: isTablet ? 16 : 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                      
+                      SizedBox(height: isTablet ? 12 : 8),
+                      
+                      // Test Mode: Skip Payment Button (for development)
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () => _skipPaymentTestMode(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.orange.shade700,
+                            side: BorderSide(color: Colors.orange.shade300),
+                            padding: EdgeInsets.symmetric(vertical: buttonPadding),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.science_outlined, size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Skip Payment (Test Mode)',
+                                style: TextStyle(
+                                  fontSize: isTablet ? 14 : 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
             
             SizedBox(height: isTablet ? 16 : 12),
@@ -290,7 +326,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
     try {
       final provider = context.read<SubscriptionProvider>();
       
-      // Process subscription upgrade through direct eSewa API
+      // Process subscription upgrade through eSewa Direct (POST form)
       final result = await _esewaService.processSubscriptionPayment(
         context: context,
         planId: widget.planInfo.plan.name,
@@ -304,7 +340,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
           plan: widget.planInfo.plan,
           isYearly: widget.isYearly,
           paymentDetails: {
-            'method': 'esewa_direct',
+            'method': 'esewa',
             'transaction_id': result.transactionId,
             'amount': result.amount,
           },
@@ -336,50 +372,80 @@ class _PaymentDialogState extends State<PaymentDialog> {
     }
   }
 
-  Future<void> _handlePaymentSuccess(String transactionData) async {
+  /// Test mode: Skip payment and activate subscription immediately
+  /// This is for development/testing purposes only
+  Future<void> _skipPaymentTestMode() async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.science_outlined, color: Colors.orange.shade700, size: 20),
+            const SizedBox(width: 8),
+            const Text('Test Mode', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: const Text(
+          'This will activate the Pro subscription without payment. This is for testing purposes only.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Activate Pro', style: TextStyle(color: Colors.orange.shade700, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
     setState(() => _isProcessing = true);
 
     try {
       final provider = context.read<SubscriptionProvider>();
       
-      // Process subscription upgrade through eSewa
-      final result = await _esewaService.processSubscriptionPayment(
-        context: context,
-        planId: widget.planInfo.plan.name,
-        amount: widget.isYearly ? widget.planInfo.yearlyPrice : widget.planInfo.monthlyPrice,
-        planName: widget.planInfo.name,
+      // Update subscription status in provider (test mode)
+      final success = await provider.upgradeSubscription(
+        plan: widget.planInfo.plan,
+        isYearly: widget.isYearly,
+        paymentDetails: {
+          'method': 'test_mode',
+          'transaction_id': 'TEST-${DateTime.now().millisecondsSinceEpoch}',
+          'amount': 0.0, // Free in test mode
+        },
       );
 
-      if (result.success) {
-        // Update subscription status in provider
-        final success = await provider.upgradeSubscription(
-          plan: widget.planInfo.plan,
-          isYearly: widget.isYearly,
-          paymentDetails: {
-            'method': 'esewa',
-            'transaction_id': result.transactionId,
-            'amount': result.amount,
-          },
-        );
-
-        if (success) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Subscription upgraded successfully!'),
-                backgroundColor: Colors.green,
+      if (success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.science_outlined, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Pro subscription activated (Test Mode)'),
+                  ),
+                ],
               ),
-            );
-          }
-          widget.onPaymentComplete(true);
-        } else {
-          _handlePaymentFailure(provider.error ?? 'Failed to update subscription');
+              backgroundColor: Colors.orange.shade700,
+            ),
+          );
+          Navigator.of(context).pop();
         }
+        widget.onPaymentComplete(true);
       } else {
-        _handlePaymentFailure(result.message);
+        _handlePaymentFailure(provider.error ?? 'Failed to activate subscription');
       }
     } catch (e) {
-      _handlePaymentFailure('Payment processing error: ${e.toString()}');
+      _handlePaymentFailure('Activation error: ${e.toString()}');
     } finally {
       if (mounted) {
         setState(() => _isProcessing = false);
