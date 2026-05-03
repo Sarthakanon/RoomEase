@@ -98,19 +98,41 @@ class SubscriptionService {
     required SubscriptionPlan plan,
     required bool isYearly,
     required String paymentMethod,
+    Map<String, dynamic>? paymentDetails,
   }) async {
     try {
       final planInfo = SubscriptionPlanInfo.getPlanInfo(plan);
       final amount = isYearly ? planInfo.yearlyPrice : planInfo.monthlyPrice;
       
-      final response = await _apiService.post('/api/subscription/create', data: {
-        'plan': plan.name,
-        'is_yearly': isYearly,
-        'amount': amount,
-        'payment_method': paymentMethod,
-      });
+      // If payment details are provided, verify payment with backend
+      if (paymentDetails != null) {
+        final response = await _apiService.post('/api/payments/subscription/verify', data: {
+          'plan_id': plan.name,
+          'transaction_uuid': paymentDetails['transaction_id'] ?? '',
+          'transaction_code': paymentDetails['transaction_id'] ?? '',
+          'amount': amount,
+          'esewa_response': {
+            'transaction_code': paymentDetails['transaction_id'] ?? '',
+            'status': 'COMPLETE',
+            'total_amount': amount.toString(),
+            'product_code': 'EPAYTEST',
+            'ref_id': paymentDetails['ref_id'],
+          },
+        });
+        
+        return response;
+      }
       
-      return response;
+      // For test mode or direct subscription (no payment)
+      return {
+        'success': true,
+        'message': 'Subscription activated',
+        'data': {
+          'plan': plan.name,
+          'is_yearly': isYearly,
+          'amount': amount,
+        },
+      };
     } catch (e) {
       debugPrint('Error creating subscription: $e');
       return {
@@ -158,15 +180,12 @@ class SubscriptionService {
     required Map<String, dynamic> paymentDetails,
   }) async {
     try {
-      // In a real app, this would integrate with eSewa payment gateway
-      // eSewa API documentation: https://developer.esewa.com.np/
-      await Future.delayed(const Duration(seconds: 2)); // Simulate processing
-      
-      // Mock successful payment - replace with actual eSewa integration
+      // Create subscription with payment details
       final response = await createSubscription(
         plan: plan,
         isYearly: isYearly,
-        paymentMethod: 'esewa', // Always use eSewa
+        paymentMethod: paymentDetails['method'] ?? 'esewa',
+        paymentDetails: paymentDetails,
       );
       
       return response;

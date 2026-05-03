@@ -1,6 +1,5 @@
 enum SubscriptionPlan {
   free,
-  premium,
   pro,
 }
 
@@ -18,6 +17,9 @@ class SubscriptionLimits {
   final bool prioritySupport;
   final bool customCategories;
   final bool exportFeatures;
+  final bool advancedReports;
+  final bool recurringExpenses;
+  final bool receiptScanning;
 
   const SubscriptionLimits({
     required this.maxRoomspaces,
@@ -26,33 +28,33 @@ class SubscriptionLimits {
     required this.prioritySupport,
     required this.customCategories,
     required this.exportFeatures,
+    required this.advancedReports,
+    required this.recurringExpenses,
+    required this.receiptScanning,
   });
 
   static const SubscriptionLimits free = SubscriptionLimits(
-    maxRoomspaces: 5,
+    maxRoomspaces: 2,
     maxMembersPerRoomspace: 10,
-    analyticsAccess: false,
+    analyticsAccess: true, // Basic analytics available
     prioritySupport: false,
-    customCategories: false,
-    exportFeatures: false,
-  );
-
-  static const SubscriptionLimits premium = SubscriptionLimits(
-    maxRoomspaces: 20,
-    maxMembersPerRoomspace: 50,
-    analyticsAccess: true,
-    prioritySupport: false,
-    customCategories: true,
-    exportFeatures: true,
+    customCategories: true, // Basic categories available
+    exportFeatures: false, // Export blocked in free plan
+    advancedReports: false, // Advanced reports blocked
+    recurringExpenses: true, // Available in free
+    receiptScanning: true, // Available in free
   );
 
   static const SubscriptionLimits pro = SubscriptionLimits(
-    maxRoomspaces: -1, // Unlimited
-    maxMembersPerRoomspace: -1, // Unlimited
+    maxRoomspaces: 10,
+    maxMembersPerRoomspace: 50,
     analyticsAccess: true,
     prioritySupport: true,
     customCategories: true,
-    exportFeatures: true,
+    exportFeatures: true, // Export available in pro
+    advancedReports: true, // Advanced reports available
+    recurringExpenses: true,
+    receiptScanning: true,
   );
 }
 
@@ -86,47 +88,31 @@ class SubscriptionPlanInfo {
       yearlyPrice: 0,
       limits: SubscriptionLimits.free,
       features: [
-        'Up to 5 roomspaces',
+        'Up to 2 roomspaces',
         'Up to 10 members per roomspace',
         'Basic expense tracking',
         'Split bills equally',
-        'Basic reports',
-      ],
-    ),
-    SubscriptionPlanInfo(
-      plan: SubscriptionPlan.premium,
-      name: 'Premium',
-      description: 'Great for active users',
-      monthlyPrice: 299,
-      yearlyPrice: 2999,
-      limits: SubscriptionLimits.premium,
-      features: [
-        'Up to 20 roomspaces',
-        'Up to 50 members per roomspace',
-        'Advanced analytics',
-        'Custom expense categories',
-        'Export to PDF/Excel',
-        'Custom split ratios',
+        'Basic analytics',
+        'Recurring expenses',
         'Receipt scanning',
       ],
-      badge: 'Popular',
     ),
     SubscriptionPlanInfo(
       plan: SubscriptionPlan.pro,
       name: 'Pro',
       description: 'For power users and teams',
-      monthlyPrice: 599,
-      yearlyPrice: 5999,
+      monthlyPrice: 499,
+      yearlyPrice: 4999,
       limits: SubscriptionLimits.pro,
       features: [
-        'Unlimited roomspaces',
-        'Unlimited members',
+        'Up to 10 roomspaces',
+        'Up to 50 members per roomspace',
         'Priority support',
         'Advanced analytics & insights',
-        'Custom branding',
-        'API access',
-        'Bulk operations',
+        'Export to PDF/Excel',
         'Advanced reporting',
+        'Custom split ratios',
+        'All Free features',
       ],
       badge: 'Best Value',
     ),
@@ -220,8 +206,6 @@ class UserSubscription {
     switch (plan) {
       case SubscriptionPlan.free:
         return SubscriptionLimits.free;
-      case SubscriptionPlan.premium:
-        return SubscriptionLimits.premium;
       case SubscriptionPlan.pro:
         return SubscriptionLimits.pro;
     }
