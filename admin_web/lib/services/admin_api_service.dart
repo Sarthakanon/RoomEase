@@ -7,7 +7,7 @@ class AdminApiService {
   late final Dio _dio;
   
   // Backend API URL
-  static const String baseUrl = 'http://192.168.1.84:8080';
+  static const String baseUrl = 'http://192.168.1.89:8080';
 
   AdminApiService._internal() {
     _dio = Dio(
