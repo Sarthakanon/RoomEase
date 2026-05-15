@@ -58,7 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _isLoading = false;
       });
-      print('Error loading stats: $e');
+      debugPrint('Error loading stats: $e');
     }
   }
 
@@ -227,7 +227,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+        color: isSelected ? Colors.white.withValues(alpha: 0.2) : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
@@ -280,6 +280,7 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
       });
     } catch (e) {
       setState(() => _isLoading = false);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading users: $e')),
       );
@@ -290,10 +291,12 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
     try {
       await _apiService.banUser(userId, reason);
       _loadUsers(); // Refresh list
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('User banned successfully')),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error banning user: $e')),
       );
@@ -304,10 +307,12 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
     try {
       await _apiService.unbanUser(userId);
       _loadUsers(); // Refresh list
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('User unbanned successfully')),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error unbanning user: $e')),
       );

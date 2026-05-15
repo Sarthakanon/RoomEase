@@ -1,0 +1,15 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart LR
+  U((User))
+  subgraph Notification Subsystem
+    UC1[Receive Notification]
+    UC2[Read Notification]
+    UC3[Send Payment Reminder]
+    UC4[Process Join Request]
+    UC5[View Join Requests]
+  end
+  U --> UC1
+  U --> UC2
+  U --> UC3
+  U --> UC4
+  U --> UC5

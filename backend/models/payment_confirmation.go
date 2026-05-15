@@ -24,29 +24,30 @@ const (
 
 // Validation errors
 var (
-	ErrSelfPayment       = errors.New("cannot record payment to yourself")
+	ErrSelfPayment          = errors.New("cannot record payment to yourself")
 	ErrInvalidPaymentAmount = errors.New("payment amount must be positive")
-	ErrAlreadyConfirmed  = errors.New("payment already confirmed")
-	ErrAlreadyRejected   = errors.New("payment already rejected")
-	ErrUnauthorized      = errors.New("only recipient can confirm/reject payment")
+	ErrAlreadyConfirmed     = errors.New("payment already confirmed")
+	ErrAlreadyRejected      = errors.New("payment already rejected")
+	ErrUnauthorized         = errors.New("only recipient can confirm/reject payment")
 )
 
 // PaymentConfirmation represents a payment claim between two users
 type PaymentConfirmation struct {
-	ID           uint            `gorm:"primaryKey" json:"id"`
-	RoomspaceID  string          `gorm:"type:uuid;not null;index:idx_roomspace_status" json:"roomspace_id"`
-	FromUserID   string          `gorm:"type:varchar(255);not null;index:idx_from_user" json:"from_user_id"` // User who paid
-	ToUserID     string          `gorm:"type:varchar(255);not null;index:idx_to_user" json:"to_user_id"`     // User who received
-	Amount       float64         `gorm:"type:decimal(10,2);not null;check:amount > 0" json:"amount"`
-	PaymentType  PaymentTypeEnum `gorm:"type:varchar(20);not null" json:"payment_type"`
-	Status       PaymentStatus   `gorm:"type:varchar(20);not null;default:'PENDING';index:idx_roomspace_status" json:"status"`
-	Notes        string          `gorm:"type:text" json:"notes,omitempty"`
-	PaymentDate  time.Time       `gorm:"not null" json:"payment_date"`
-	ConfirmedAt  *time.Time      `json:"confirmed_at,omitempty"`
-	ConfirmedBy  *string         `gorm:"type:varchar(255)" json:"confirmed_by,omitempty"`
-	RejectionReason string       `gorm:"type:text" json:"rejection_reason,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	ID              uint            `gorm:"primaryKey" json:"id"`
+	RoomspaceID     string          `gorm:"type:uuid;not null;index:idx_roomspace_status" json:"roomspace_id"`
+	FromUserID      string          `gorm:"type:varchar(255);not null;index:idx_from_user" json:"from_user_id"` // User who paid
+	ToUserID        string          `gorm:"type:varchar(255);not null;index:idx_to_user" json:"to_user_id"`     // User who received
+	Amount          float64         `gorm:"type:decimal(10,2);not null;check:amount > 0" json:"amount"`
+	PaymentType     PaymentTypeEnum `gorm:"type:varchar(20);not null" json:"payment_type"`
+	Status          PaymentStatus   `gorm:"type:varchar(20);not null;default:'PENDING';index:idx_roomspace_status" json:"status"`
+	Notes           string          `gorm:"type:text" json:"notes,omitempty"`
+	PaymentProofURL string          `gorm:"type:text" json:"payment_proof_url,omitempty"`
+	PaymentDate     time.Time       `gorm:"not null" json:"payment_date"`
+	ConfirmedAt     *time.Time      `json:"confirmed_at,omitempty"`
+	ConfirmedBy     *string         `gorm:"type:varchar(255)" json:"confirmed_by,omitempty"`
+	RejectionReason string          `gorm:"type:text" json:"rejection_reason,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 
 	// Relationships
 	Roomspace *Roomspace `gorm:"foreignKey:RoomspaceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"roomspace,omitempty"`
@@ -87,11 +88,12 @@ func (pc *PaymentConfirmation) Validate() error {
 
 // PaymentConfirmationRequest represents a request to create a payment confirmation
 type PaymentConfirmationRequest struct {
-	ToUserID    string          `json:"to_user_id" binding:"required"`
-	Amount      float64         `json:"amount" binding:"required,gt=0"`
-	PaymentType PaymentTypeEnum `json:"payment_type" binding:"required"`
-	Notes       string          `json:"notes"`
-	PaymentDate time.Time       `json:"payment_date" binding:"required"`
+	ToUserID        string          `json:"to_user_id" binding:"required"`
+	Amount          float64         `json:"amount" binding:"required,gt=0"`
+	PaymentType     PaymentTypeEnum `json:"payment_type" binding:"required"`
+	Notes           string          `json:"notes"`
+	PaymentProofURL string          `json:"payment_proof_url"`
+	PaymentDate     time.Time       `json:"payment_date" binding:"required"`
 }
 
 // PaymentConfirmationResponse represents the response for payment confirmation
@@ -106,6 +108,7 @@ type PaymentConfirmationResponse struct {
 	PaymentType     PaymentTypeEnum `json:"payment_type"`
 	Status          PaymentStatus   `json:"status"`
 	Notes           string          `json:"notes,omitempty"`
+	PaymentProofURL string          `json:"payment_proof_url,omitempty"`
 	PaymentDate     time.Time       `json:"payment_date"`
 	ConfirmedAt     *time.Time      `json:"confirmed_at,omitempty"`
 	RejectionReason string          `json:"rejection_reason,omitempty"`

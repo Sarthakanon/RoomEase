@@ -1,0 +1,6 @@
+classDiagram
+  class PaymentConfirmationHandler {+create(); +confirm(); +reject(); +history()}
+  class PaymentConfirmation {+id; +payerId; +payeeId; +amount; +status}
+  class PaymentHistoryEntry {+id; +paymentId; +action; +timestamp}
+  PaymentConfirmationHandler --> PaymentConfirmation
+  PaymentConfirmation --> PaymentHistoryEntry

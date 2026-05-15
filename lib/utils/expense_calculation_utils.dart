@@ -1,4 +1,3 @@
-import 'dart:math';
 import '../models/expense_models.dart';
 
 /// Utility class for expense calculation and validation logic
@@ -155,7 +154,7 @@ class ExpenseCalculationUtils {
     // Adjust for rounding differences by modifying the largest split
     final double difference = totalAmount - calculatedTotal;
     if (difference.abs() > 0.001 && largestSplitKey != null) {
-      amounts[largestSplitKey!] = _roundToCurrency(amounts[largestSplitKey!]! + difference);
+      amounts[largestSplitKey] = _roundToCurrency(amounts[largestSplitKey]! + difference);
     }
     
     return amounts;

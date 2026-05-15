@@ -1,0 +1,11 @@
+sequenceDiagram
+  actor R as Receiver
+  participant APP as Mobile App
+  participant API as Payment Confirmation API
+  participant DB as PostgreSQL
+  R->>APP: Approve payment
+  APP->>API: PUT /api/roomspaces/:id/payments/:paymentId/confirm
+  API->>DB: Update confirmation status
+  API->>DB: Update settlement/balance records
+  DB-->>API: Success
+  API-->>APP: Confirmation approved

@@ -1,0 +1,10 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart TB
+  S([Start]) --> A[Open pending join requests]
+  A --> B[Select request]
+  B --> C{Approve or Reject?}
+  C -->|Approve| D[Create roomspace membership]
+  C -->|Reject| E[Mark request rejected]
+  D --> F[Notify requester]
+  E --> F
+  F --> G([End])

@@ -4,6 +4,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -225,12 +227,47 @@ func (sa *StringArray) Scan(value interface{}) error {
 		return nil
 	}
 
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
+	var raw string
+	switch v := value.(type) {
+	case []byte:
+		raw = string(v)
+	case string:
+		raw = v
+	default:
+		return fmt.Errorf("unsupported StringArray scan type: %T", value)
 	}
 
-	return json.Unmarshal(bytes, sa)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		*sa = []string{}
+		return nil
+	}
+
+	// Preferred format: JSON array, e.g. ["uid1","uid2"].
+	if strings.HasPrefix(raw, "[") {
+		return json.Unmarshal([]byte(raw), sa)
+	}
+
+	// Backward-compat fallback: PostgreSQL text[] format, e.g. {uid1,uid2}.
+	if strings.HasPrefix(raw, "{") && strings.HasSuffix(raw, "}") {
+		inner := strings.TrimSuffix(strings.TrimPrefix(raw, "{"), "}")
+		if strings.TrimSpace(inner) == "" {
+			*sa = []string{}
+			return nil
+		}
+		parts := strings.Split(inner, ",")
+		out := make([]string, 0, len(parts))
+		for _, p := range parts {
+			item := strings.TrimSpace(strings.Trim(p, `"`))
+			if item != "" {
+				out = append(out, item)
+			}
+		}
+		*sa = out
+		return nil
+	}
+
+	return errors.New("invalid StringArray payload format")
 }
 
 // BeforeCreate hook for RecurringExpenseTemplate

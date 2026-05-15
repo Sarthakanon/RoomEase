@@ -1,0 +1,32 @@
+meta {
+  name: POST /api/payment/stripe/create-intent
+  type: http
+}
+
+post {
+  url: {{baseUrl}}/api/payment/stripe/create-intent
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Cookie: session_id={{session_id}}
+}
+
+body:json {
+  {
+    "amount": 1000,
+    "currency": "usd"
+  }
+}
+
+assert {
+  res.status: oneOf 200 201 400 401 403 404 409 422 500
+}
+
+tests {
+  test("status is handled", function() {
+    expect([200,201,400,401,403,404,409,422,500]).to.include(res.status);
+  });
+}

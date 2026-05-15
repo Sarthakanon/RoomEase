@@ -11,11 +11,15 @@ class RealTimeDataService {
   final StreamController<ExpenseUpdateEvent> _expenseUpdates = StreamController<ExpenseUpdateEvent>.broadcast();
   final StreamController<BalanceUpdateEvent> _balanceUpdates = StreamController<BalanceUpdateEvent>.broadcast();
   final StreamController<NotificationEvent> _notifications = StreamController<NotificationEvent>.broadcast();
+  final StreamController<MemberUpdateEvent> _memberUpdates = StreamController<MemberUpdateEvent>.broadcast();
+  final StreamController<JoinRequestUpdateEvent> _joinRequestUpdates = StreamController<JoinRequestUpdateEvent>.broadcast();
 
   // Getters for streams
   Stream<ExpenseUpdateEvent> get expenseUpdates => _expenseUpdates.stream;
   Stream<BalanceUpdateEvent> get balanceUpdates => _balanceUpdates.stream;
   Stream<NotificationEvent> get notifications => _notifications.stream;
+  Stream<MemberUpdateEvent> get memberUpdates => _memberUpdates.stream;
+  Stream<JoinRequestUpdateEvent> get joinRequestUpdates => _joinRequestUpdates.stream;
 
   /// Notify that an expense was created
   void notifyExpenseCreated(String roomspaceId, Map<String, dynamic> expenseData) {
@@ -96,6 +100,35 @@ class RealTimeDataService {
     ));
   }
 
+  /// Notify that a member was added to a roomspace
+  void notifyMemberAdded(String roomspaceId, String userId) {
+    debugPrint('🔄 RealTime: Member added to roomspace $roomspaceId');
+    _memberUpdates.add(MemberUpdateEvent(
+      type: MemberUpdateType.added,
+      roomspaceId: roomspaceId,
+      userId: userId,
+    ));
+  }
+
+  /// Notify that a member was removed from a roomspace
+  void notifyMemberRemoved(String roomspaceId, String userId) {
+    debugPrint('🔄 RealTime: Member removed from roomspace $roomspaceId');
+    _memberUpdates.add(MemberUpdateEvent(
+      type: MemberUpdateType.removed,
+      roomspaceId: roomspaceId,
+      userId: userId,
+    ));
+  }
+
+  /// Notify that a join request was processed
+  void notifyJoinRequestProcessed(String requestId, bool accepted) {
+    debugPrint('🔄 RealTime: Join request $requestId ${accepted ? "accepted" : "rejected"}');
+    _joinRequestUpdates.add(JoinRequestUpdateEvent(
+      type: accepted ? JoinRequestUpdateType.accepted : JoinRequestUpdateType.rejected,
+      requestId: requestId,
+    ));
+  }
+
   /// Send a notification to a specific user
   void sendNotification({
     required NotificationType type,
@@ -114,6 +147,24 @@ class RealTimeDataService {
     ));
   }
 
+  /// Notify listeners that notification read-status changed
+  void notifyNotificationsUpdated() {
+    _notifications.add(NotificationEvent(
+      type: NotificationType.notificationsUpdated,
+      userId: '',
+      message: 'Notifications updated',
+    ));
+  }
+
+  /// Notify listeners that user profile data changed (e.g., QR updated)
+  void notifyProfileUpdated() {
+    _notifications.add(NotificationEvent(
+      type: NotificationType.profileUpdated,
+      userId: '',
+      message: 'Profile updated',
+    ));
+  }
+
   /// Clear all cached data (useful for logout)
   void clearAllData() {
     debugPrint('🔄 RealTime: Clearing all cached data');
@@ -125,6 +176,8 @@ class RealTimeDataService {
     _expenseUpdates.close();
     _balanceUpdates.close();
     _notifications.close();
+    _memberUpdates.close();
+    _joinRequestUpdates.close();
   }
 }
 
@@ -150,6 +203,20 @@ enum NotificationType {
   expenseUpdated,
   paymentReceived,
   balanceChanged,
+  notificationsUpdated,
+  profileUpdated,
+}
+
+/// Event types for member updates
+enum MemberUpdateType {
+  added,
+  removed,
+}
+
+/// Event types for join request updates
+enum JoinRequestUpdateType {
+  accepted,
+  rejected,
 }
 
 /// Expense update event
@@ -194,5 +261,29 @@ class NotificationEvent {
     this.roomspaceId,
     required this.message,
     this.data,
+  });
+}
+
+/// Member update event
+class MemberUpdateEvent {
+  final MemberUpdateType type;
+  final String roomspaceId;
+  final String userId;
+
+  MemberUpdateEvent({
+    required this.type,
+    required this.roomspaceId,
+    required this.userId,
+  });
+}
+
+/// Join request update event
+class JoinRequestUpdateEvent {
+  final JoinRequestUpdateType type;
+  final String requestId;
+
+  JoinRequestUpdateEvent({
+    required this.type,
+    required this.requestId,
   });
 }

@@ -6,7 +6,6 @@ import 'package:room_ease/services/cached_api_service.dart';
 import 'package:room_ease/services/real_time_data_service.dart';
 import 'package:room_ease/providers/roomspace_provider.dart';
 import 'package:room_ease/core/widgets/skeleton_loader.dart';
-import 'package:room_ease/features/expenses/presentation/expense_details_screen.dart';
 import 'package:room_ease/features/home/widgets/add_expense_dialog.dart';
 import 'package:room_ease/features/home/widgets/personal_expense_dialog.dart';
 import 'package:room_ease/widgets/enhanced_expense_tile.dart';
@@ -143,8 +142,11 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       }
 
       setState(() {
-        if (reset) _expenses = expenses;
-        else _expenses.addAll(expenses);
+        if (reset) {
+          _expenses = expenses;
+        } else {
+          _expenses.addAll(expenses);
+        }
         _hasMoreData = expenses.length >= _pageSize;
         _isLoading = false;
         _isLoadingMore = false;
@@ -443,78 +445,5 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       // Real-time service will automatically notify listeners
       // No need to manually refresh here
     });
-  }
-}
-
-class _ExpenseTile extends StatelessWidget {
-  final ExpenseData expense;
-  final Color themeColor;
-  final bool isPersonal;
-
-  const _ExpenseTile({required this.expense, required this.themeColor, required this.isPersonal});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFEEEEF2)),
-      ),
-      child: InkWell(
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailsScreen(expense: expense))),
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                child: Icon(_getIcon(expense.category), color: themeColor, size: 20),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(expense.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Color(0xFF1A1A2E)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text(expense.category + (isPersonal ? '' : ' • ${expense.payerName ?? 'Self'}'), 
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('Rs. ${expense.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: themeColor)),
-                  if (expense.createdAt != null)
-                    Text(_formatDate(expense.createdAt!), style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _getIcon(String cat) {
-    switch (cat.toLowerCase()) {
-      case 'groceries': return Icons.shopping_basket_outlined;
-      case 'utilities': return Icons.bolt_rounded;
-      case 'rent': return Icons.home_outlined;
-      case 'food': return Icons.restaurant_rounded;
-      default: return Icons.receipt_long_outlined;
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    if (now.difference(date).inDays == 0) return 'Today';
-    if (now.difference(date).inDays == 1) return 'Yesterday';
-    return '${date.day}/${date.month}';
   }
 }

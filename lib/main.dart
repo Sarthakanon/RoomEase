@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'features/auth/presentation/splash_screen.dart';
@@ -50,6 +51,12 @@ void main() async {
   try {
     // Initialize Firebase
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+    // Initialize Stripe
+    Stripe.publishableKey = 'pk_test_51TU9vSHqZqdKUPbJu11tfIfeUWuwYxZvCfCQUMzAGWBXip0YbLbykzxIBUOqgVvu5KXBP6S8qo9EZe66ykmoqMpm00eZ5U1MGu';
+    await Stripe.instance.applySettings();
+    
+    debugPrint('✅ Stripe initialized');
 
     // Initialize persistent cookie storage for API service
     await ApiService().initializePersistentCookies();

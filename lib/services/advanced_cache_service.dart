@@ -16,7 +16,6 @@ class AdvancedCacheService {
   static const Duration _shortCache = Duration(minutes: 2);   // Balances, notifications
   static const Duration _mediumCache = Duration(minutes: 10); // Expenses, members
   static const Duration _longCache = Duration(hours: 1);      // Profile, roomspaces
-  static const Duration _veryLongCache = Duration(hours: 6);  // Static data
   
   // Cache keys
   static const String _userProfileKey = 'user_profile';

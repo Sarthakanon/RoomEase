@@ -317,7 +317,7 @@ class ExpenseDetailsDialog extends StatelessWidget {
               ],
             ],
           ),
-        )).toList(),
+        )),
       ],
     );
   }

@@ -2,7 +2,6 @@ import 'dart:developer';
 import 'package:flutter/services.dart';
 import 'payment_parser_service.dart';
 import 'payment_notification_service.dart';
-import '../models/payment_notification.dart';
 
 class NotificationListenerService {
   static const MethodChannel _channel = MethodChannel('payment_notification_channel');
@@ -251,33 +250,6 @@ class NotificationListenerService {
       log('Error checking notification listener status: $e');
       return false;
     }
-  }
-
-  /// Check if notification is payment-related
-  static bool _isPaymentNotification(String title, String text) {
-    final combinedText = '$title $text'.toLowerCase();
-    
-    // Payment success indicators
-    final paymentIndicators = [
-      'payment successful',
-      'transaction successful',
-      'paid npr',
-      'paid rs',
-      'payment complete',
-      'transaction complete',
-      'successfully transferred',
-      'successfully paid',
-      'payment of',
-      'transaction of',
-      'debited',
-      'credited',
-      'balance',
-      'amount',
-    ];
-
-    return paymentIndicators.any((indicator) =>
-        combinedText.contains(indicator.toLowerCase())
-    );
   }
 
   /// Get notification listening status

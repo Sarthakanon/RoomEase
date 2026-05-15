@@ -189,7 +189,7 @@ class _DeletionApprovalDialogState extends State<DeletionApprovalDialog> {
                           ),
                         ],
                       ),
-                    )).toList(),
+                    )),
                   ],
                 ),
               ),

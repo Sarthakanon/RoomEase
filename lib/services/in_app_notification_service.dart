@@ -46,6 +46,9 @@ class InAppNotificationService {
         backgroundColor = Colors.orange.shade600;
         icon = Icons.account_balance_wallet_rounded;
         break;
+      case NotificationType.notificationsUpdated:
+      case NotificationType.profileUpdated:
+        return;
     }
 
     messenger.showSnackBar(
@@ -98,6 +101,9 @@ class InAppNotificationService {
       case NotificationType.balanceChanged:
         // Could navigate to balance screen
         debugPrint('📱 Notification tapped: Balance changed');
+        break;
+      case NotificationType.notificationsUpdated:
+      case NotificationType.profileUpdated:
         break;
     }
   }

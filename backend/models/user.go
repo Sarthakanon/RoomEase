@@ -13,11 +13,12 @@ type User struct {
 	Email              string         `gorm:"not null" json:"email"`
 	Name               string         `json:"name"`
 	Phone              string         `json:"phone,omitempty"`
+	QRImageURL         string         `gorm:"column:qr_image_url" json:"qr_image_url,omitempty"`
 	IsBanned           bool           `gorm:"default:false" json:"is_banned"`
 	BanReason          *string        `json:"ban_reason,omitempty"`
 	BannedAt           *time.Time     `json:"banned_at,omitempty"`
-	SubscriptionPlan   string         `gorm:"default:'free'" json:"subscription_plan"`   // free, pro
-	SubscriptionExpiry *time.Time     `json:"subscription_expiry,omitempty"`             // null for free plan
+	SubscriptionPlan   string         `gorm:"default:'free'" json:"subscription_plan"` // free, pro
+	SubscriptionExpiry *time.Time     `json:"subscription_expiry,omitempty"`           // null for free plan
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
 	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
@@ -33,6 +34,7 @@ type CreateUserRequest struct {
 
 // UpdateUserRequest represents the request to update a user
 type UpdateUserRequest struct {
-	Name  string `json:"name,omitempty"`
-	Phone string `json:"phone,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Phone      string `json:"phone,omitempty"`
+	QRImageURL string `json:"qr_image_url,omitempty"`
 }

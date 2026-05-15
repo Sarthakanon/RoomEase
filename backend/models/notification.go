@@ -15,6 +15,7 @@ const (
 	NotificationTypeJoinRejected   NotificationType = "JOIN_REJECTED"
 	NotificationTypeExpenseAdded   NotificationType = "EXPENSE_ADDED"
 	NotificationTypeMemberRemoved  NotificationType = "MEMBER_REMOVED"
+	NotificationTypeMemberLeft     NotificationType = "MEMBER_LEFT"
 	NotificationTypeYouRemovedUser NotificationType = "YOU_REMOVED_USER"
 	NotificationTypePaymentReminder NotificationType = "PAYMENT_REMINDER"
 	NotificationTypePaymentClaim   NotificationType = "PAYMENT_CLAIM"
@@ -22,6 +23,9 @@ const (
 	NotificationTypePaymentRejected NotificationType = "PAYMENT_REJECTED"
 	NotificationTypeOwnershipTransferred NotificationType = "OWNERSHIP_TRANSFERRED"
 	NotificationTypePaymentReceived NotificationType = "PAYMENT_RECEIVED"
+	NotificationTypeExpenseDeletionRequest NotificationType = "EXPENSE_DELETION_REQUEST"
+	NotificationTypeExpenseDeletionApproved NotificationType = "EXPENSE_DELETION_APPROVED"
+	NotificationTypeExpenseDeletionRejected NotificationType = "EXPENSE_DELETION_REJECTED"
 )
 
 // Notification represents a notification for a user

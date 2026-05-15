@@ -17,7 +17,7 @@ class SubscriptionHelper {
     if (!canProceed) {
       _showUpgradeScreen(
         context,
-        reason: 'You\'ve reached your roomspace limit. Upgrade to ${action} more roomspaces.',
+        reason: 'You\'ve reached your roomspace limit. Upgrade to $action more roomspaces.',
       );
       return false;
     }

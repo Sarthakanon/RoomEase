@@ -1,0 +1,17 @@
+erDiagram
+  ROOMSPACES ||--o{ ANALYTICS_CACHE : has
+  USERS ||--o{ ANALYTICS_FEEDBACK : submits
+  ANALYTICS_CACHE {
+    int id PK
+    string roomspace_id FK
+    string cache_key
+    text payload
+    datetime expires_at
+  }
+  ANALYTICS_FEEDBACK {
+    int id PK
+    string user_id FK
+    string feedback_type
+    text comment
+    datetime created_at
+  }

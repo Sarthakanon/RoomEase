@@ -1,0 +1,142 @@
+erDiagram
+    USERS ||--o{ ROOMSPACES : creates
+    USERS ||--o{ ROOMSPACE_MEMBERS : joins
+    ROOMSPACES ||--o{ ROOMSPACE_MEMBERS : has
+
+    ROOMSPACES ||--o{ EXPENSES : contains
+    USERS ||--o{ EXPENSES : pays
+
+    EXPENSES ||--o{ EXPENSE_SPLITS : split_into
+    USERS ||--o{ EXPENSE_SPLITS : owes_share
+
+    ROOMSPACES ||--o{ SETTLEMENTS : has
+    USERS ||--o{ SETTLEMENTS : pays
+    USERS ||--o{ SETTLEMENTS : receives
+
+    ROOMSPACES ||--o{ PAYMENT_CONFIRMATIONS : has
+    USERS ||--o{ PAYMENT_CONFIRMATIONS : submits
+    USERS ||--o{ PAYMENT_CONFIRMATIONS : confirms
+
+    USERS ||--o{ PERSONAL_EXPENSES : owns
+
+    ROOMSPACES ||--o{ RECURRING_EXPENSE_TEMPLATES : has
+    RECURRING_EXPENSE_TEMPLATES ||--o{ RECURRING_NOTIFICATIONS : generates
+
+    USERS ||--o{ NOTIFICATIONS : receives
+    ROOMSPACES ||--o{ NOTIFICATIONS : related_to
+
+    USERS ||--o{ SUBSCRIPTIONS : has
+    USERS ||--o{ SUBSCRIPTION_PAYMENTS : makes
+
+    USERS {
+      string id PK
+      string email
+      string name
+      string subscription_plan
+      datetime created_at
+    }
+
+    ROOMSPACES {
+      string id PK
+      string name
+      string code
+      string creator_id FK
+      datetime created_at
+    }
+
+    ROOMSPACE_MEMBERS {
+      int id PK
+      string roomspace_id FK
+      string user_id FK
+      boolean is_active
+      datetime joined_at
+    }
+
+    EXPENSES {
+      int id PK
+      string roomspace_id FK
+      string title
+      decimal amount
+      string paid_by FK
+      string category
+      datetime created_at
+    }
+
+    EXPENSE_SPLITS {
+      int id PK
+      int expense_id FK
+      string user_id FK
+      decimal split_amount
+      string split_type
+    }
+
+    SETTLEMENTS {
+      int id PK
+      string roomspace_id FK
+      string payer_id FK
+      string payee_id FK
+      decimal amount
+      datetime settled_at
+    }
+
+    PAYMENT_CONFIRMATIONS {
+      int id PK
+      string roomspace_id FK
+      string payer_id FK
+      string payee_id FK
+      decimal amount
+      string status
+      datetime created_at
+    }
+
+    PERSONAL_EXPENSES {
+      int id PK
+      string user_id FK
+      string title
+      decimal amount
+      string category
+      datetime created_at
+    }
+
+    RECURRING_EXPENSE_TEMPLATES {
+      int id PK
+      string roomspace_id FK
+      string title
+      decimal amount
+      string frequency
+      boolean is_active
+    }
+
+    RECURRING_NOTIFICATIONS {
+      int id PK
+      int template_id FK
+      string roomspace_id FK
+      datetime due_date
+      string status
+    }
+
+    NOTIFICATIONS {
+      int id PK
+      string user_id FK
+      string roomspace_id FK
+      string type
+      string message
+      boolean is_read
+    }
+
+    SUBSCRIPTIONS {
+      int id PK
+      string user_id FK
+      string plan
+      string status
+      datetime started_at
+    }
+
+    SUBSCRIPTION_PAYMENTS {
+      int id PK
+      string user_id FK
+      decimal amount
+      string method
+      string status
+      datetime paid_at
+    }

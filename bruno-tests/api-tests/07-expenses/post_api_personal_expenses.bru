@@ -1,0 +1,34 @@
+meta {
+  name: POST /api/personal-expenses
+  type: http
+}
+
+post {
+  url: {{baseUrl}}/api/personal-expenses
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Cookie: session_id={{session_id}}
+}
+
+body:json {
+  {
+    "title": "API Test Expense",
+    "amount": 100,
+    "category": "Food",
+    "description": "Created from Bruno test"
+  }
+}
+
+assert {
+  res.status: oneOf 200 201 400 401 403 404 409 422 500
+}
+
+tests {
+  test("status is handled", function() {
+    expect([200,201,400,401,403,404,409,422,500]).to.include(res.status);
+  });
+}

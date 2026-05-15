@@ -39,7 +39,7 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen> w
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      _userId = (await AuthService().currentUser)?.uid;
+      _userId = (AuthService().currentUser)?.uid;
       final all = await _service.getPaymentHistory(roomspaceId: widget.roomspaceId, limit: 100);
       setState(() {
         _pending = all.where((p) => p.isPending).toList();

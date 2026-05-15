@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import '../models/balance_models.dart';
 import 'api_service.dart';
 
@@ -30,7 +29,13 @@ class BalanceService {
       );
 
       if (response['success'] == true && response['data'] != null) {
-        return BalanceSummary.fromJson(response['data']);
+        final data = response['data'];
+        if (data is Map<String, dynamic>) {
+          final summaryData = data['summary'] is Map<String, dynamic>
+              ? data['summary'] as Map<String, dynamic>
+              : data;
+          return BalanceSummary.fromJson(summaryData);
+        }
       }
       return null;
     } catch (e) {

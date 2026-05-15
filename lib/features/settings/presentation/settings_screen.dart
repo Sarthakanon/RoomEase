@@ -157,6 +157,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () async {
               Navigator.pop(dialogContext);
               try {
+                // Reset providers BEFORE logout
+                context.read<SubscriptionProvider>().reset();
+                await context.read<RoomspaceProvider>().clear();
+                
                 await _apiService.logout();
                 await _authService.signOut();
                 await _apiService.clearCookies();
@@ -215,8 +219,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return Consumer<RoomspaceProvider>(
-      builder: (context, roomspaceProvider, child) {
+    return Consumer2<RoomspaceProvider, SubscriptionProvider>(
+      builder: (context, roomspaceProvider, subscriptionProvider, child) {
+        final maxRoomspaces = subscriptionProvider.currentLimits.maxRoomspaces;
+        
         return Scaffold(
           backgroundColor: Colors.white,
           appBar: AppBar(
@@ -248,9 +254,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     if (roomspaceProvider.roomspaces.isEmpty)
                       _buildNoRoomCard(primaryColor)
                     else
-                      _buildRoomSelectorPanel(roomspaceProvider, primaryColor),
+                      _buildRoomSelectorPanel(roomspaceProvider, primaryColor, maxRoomspaces),
                     const SizedBox(height: 12),
-                    _buildRoomspaceActionButtons(roomspaceProvider, primaryColor),
+                    _buildRoomspaceActionButtons(roomspaceProvider, subscriptionProvider, primaryColor),
                     const SizedBox(height: 24),
                     _buildSectionTitle('ACCOUNT & APP'),
                     const SizedBox(height: 12),
@@ -308,7 +314,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildRoomSelectorPanel(RoomspaceProvider provider, Color primaryColor) {
+  Widget _buildRoomSelectorPanel(RoomspaceProvider provider, Color primaryColor, int maxRoomspaces) {
     final active = provider.activeRoomspace;
     return Container(
       decoration: BoxDecoration(
@@ -328,7 +334,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Icon(Icons.home_work_outlined, size: 16, color: Colors.grey.shade600),
                     const SizedBox(width: 8),
                     const Expanded(child: Text('Active Roomspace', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                    Text('${provider.roomspaceCount}/5', style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+                    Text('${provider.roomspaceCount}/$maxRoomspaces', style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -404,8 +410,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildRoomspaceActionButtons(RoomspaceProvider provider, Color primaryColor) {
-    final canJoin = provider.canJoinMore;
+  Widget _buildRoomspaceActionButtons(
+    RoomspaceProvider provider,
+    SubscriptionProvider subscriptionProvider,
+    Color primaryColor,
+  ) {
+    final maxRoomspaces = subscriptionProvider.currentLimits.maxRoomspaces;
+    final canJoin = provider.roomspaceCount < maxRoomspaces;
+    final limitLabel = 'Limit (${provider.roomspaceCount}/$maxRoomspaces)';
     return Row(
       children: [
         // Create Roomspace Button
@@ -428,7 +440,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: OutlinedButton.icon(
             onPressed: canJoin ? () => _handleJoinRoom(context) : null,
             icon: Icon(Icons.add_rounded, size: 20, color: canJoin ? primaryColor : Colors.grey.shade400),
-            label: Text(canJoin ? "Join Room" : "Limit (5/5)", 
+            label: Text(canJoin ? "Join Room" : limitLabel, 
                 style: TextStyle(color: canJoin ? primaryColor : Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.w600)),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),

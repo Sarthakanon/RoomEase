@@ -14,8 +14,6 @@ class EsewaTestWidget extends StatelessWidget {
   }
 
   void _showEsewaTestDialog(BuildContext context) {
-    final esewaService = EsewaDirectService();
-    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

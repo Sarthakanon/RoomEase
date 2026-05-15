@@ -222,7 +222,7 @@ class PaymentNotificationService {
       try {
         await PaymentDialogService.showPaymentDetected(notification);
         log('✅ Successfully showed in-app dialog');
-      } catch (e, stackTrace) {
+      } catch (e) {
         log('❌ In-app dialog failed (app in background): $e');
         // Fallback to system notification
         try {

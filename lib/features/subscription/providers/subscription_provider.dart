@@ -3,10 +3,7 @@ import '../models/subscription_models.dart';
 import '../services/subscription_service.dart';
 
 class SubscriptionProvider with ChangeNotifier {
-  static final SubscriptionProvider _instance = SubscriptionProvider._internal();
-  factory SubscriptionProvider() => _instance;
-  SubscriptionProvider._internal();
-
+  // REMOVED SINGLETON PATTERN - Each user gets their own instance
   final SubscriptionService _subscriptionService = SubscriptionService();
 
   UserSubscription? _currentSubscription;
@@ -33,7 +30,7 @@ class SubscriptionProvider with ChangeNotifier {
     _currentSubscription = _createDefaultFreeSubscription();
     _roomspaceUsage = {
       'current': 0,
-      'max': 5,
+      'max': 2,
       'canCreate': true,
       'percentage': 0.0,
     };
@@ -87,7 +84,7 @@ class SubscriptionProvider with ChangeNotifier {
       // Provide fallback usage data
       _roomspaceUsage ??= {
         'current': 0,
-        'max': 5,
+        'max': 2,
         'canCreate': true,
         'percentage': 0.0,
       };
@@ -155,19 +152,56 @@ class SubscriptionProvider with ChangeNotifier {
   Future<bool> cancelSubscription() async {
     try {
       _setLoading(true);
+      _error = null; // Clear previous errors
       
+      debugPrint('🔄 Provider: Cancelling subscription...');
       final result = await _subscriptionService.cancelSubscription();
+      debugPrint('📦 Provider: Cancel result: $result');
 
       if (result['success'] == true) {
+        debugPrint('✅ Provider: Subscription cancelled successfully');
         await loadCurrentSubscription(); // Refresh subscription data
         return true;
       } else {
-        _error = result['error'] ?? 'Cancellation failed';
+        final errorMsg = result['error'] ?? 'Cancellation failed';
+        _error = errorMsg;
+        debugPrint('❌ Provider: Cancellation failed: $errorMsg');
         return false;
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       _error = 'Cancellation failed: ${e.toString()}';
-      debugPrint(_error);
+      debugPrint('❌ Provider: Exception during cancellation: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Reactivate subscription
+  Future<bool> reactivateSubscription() async {
+    try {
+      _setLoading(true);
+      _error = null; // Clear previous errors
+      
+      debugPrint('🔄 Provider: Reactivating subscription...');
+      final result = await _subscriptionService.reactivateSubscription();
+      debugPrint('📦 Provider: Reactivate result: $result');
+
+      if (result['success'] == true) {
+        debugPrint('✅ Provider: Subscription reactivated successfully');
+        await loadCurrentSubscription(); // Refresh subscription data
+        return true;
+      } else {
+        final errorMsg = result['error'] ?? 'Reactivation failed';
+        _error = errorMsg;
+        debugPrint('❌ Provider: Reactivation failed: $errorMsg');
+        return false;
+      }
+    } catch (e, stackTrace) {
+      _error = 'Reactivation failed: ${e.toString()}';
+      debugPrint('❌ Provider: Exception during reactivation: $e');
+      debugPrint('Stack trace: $stackTrace');
       return false;
     } finally {
       _setLoading(false);
@@ -213,5 +247,20 @@ class SubscriptionProvider with ChangeNotifier {
   /// Refresh all data
   Future<void> refresh() async {
     await initialize();
+  }
+
+  /// Reset provider state (call on logout)
+  void reset() {
+    _currentSubscription = _createDefaultFreeSubscription();
+    _roomspaceUsage = {
+      'current': 0,
+      'max': 2,
+      'canCreate': true,
+      'percentage': 0.0,
+    };
+    _isLoading = false;
+    _error = null;
+    notifyListeners();
+    debugPrint('🔄 SubscriptionProvider: State reset for new user');
   }
 }

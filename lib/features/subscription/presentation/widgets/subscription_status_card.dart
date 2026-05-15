@@ -33,7 +33,7 @@ class SubscriptionStatusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -67,7 +67,7 @@ class SubscriptionStatusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -254,7 +254,61 @@ class SubscriptionStatusCard extends StatelessWidget {
               ],
             ],
 
-            // Upgrade button for free users OR Cancel button for pro users
+            // Show time remaining if subscription is set to expire
+            if (!subscription.isFree && subscription.endDate != null) ...[
+              SizedBox(height: isTablet ? 16 : 12),
+              Container(
+                padding: EdgeInsets.all(isTablet ? 14 : 12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.access_time_rounded,
+                      color: Colors.blue.shade700,
+                      size: isTablet ? 20 : 18,
+                    ),
+                    SizedBox(width: isTablet ? 10 : 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Access Until',
+                            style: TextStyle(
+                              fontSize: isTablet ? 12 : 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatExpiryDate(subscription.endDate!),
+                            style: TextStyle(
+                              fontSize: isTablet ? 14 : 13,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.blue.shade900,
+                            ),
+                          ),
+                          Text(
+                            _getTimeRemaining(subscription.endDate!),
+                            style: TextStyle(
+                              fontSize: isTablet ? 12 : 11,
+                              color: Colors.blue.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Upgrade button for free users OR Cancel/Reactivate button for pro users
             if (subscription.isFree) ...[
               SizedBox(height: isTablet ? 16 : 12),
               SizedBox(
@@ -279,29 +333,55 @@ class SubscriptionStatusCard extends StatelessWidget {
                 ),
               ),
             ] else ...[
-              // Cancel subscription button for Pro users
+              // Show Reactivate button if subscription is set to expire, otherwise show Cancel button
               SizedBox(height: isTablet ? 16 : 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => _showCancelConfirmationDialog(context, provider),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red.shade600,
-                    side: BorderSide(color: Colors.red.shade300),
-                    padding: EdgeInsets.symmetric(vertical: buttonPadding),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+              if (subscription.endDate != null) ...[
+                // Reactivate button (subscription is cancelled but still active)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _showReactivateConfirmationDialog(context, provider),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(vertical: buttonPadding),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    'Cancel Subscription',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: isTablet ? 16 : 14,
+                    child: Text(
+                      'Reactivate Subscription',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: isTablet ? 16 : 14,
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ] else ...[
+                // Cancel button (subscription is active and not set to expire)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => _showCancelConfirmationDialog(context, provider),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade600,
+                      side: BorderSide(color: Colors.red.shade300),
+                      padding: EdgeInsets.symmetric(vertical: buttonPadding),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel Subscription',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: isTablet ? 16 : 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ],
         ),
@@ -374,6 +454,9 @@ class SubscriptionStatusCard extends StatelessWidget {
                 confirmController.dispose();
                 Navigator.pop(dialogContext);
               },
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
               child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600)),
             ),
             ElevatedButton(
@@ -388,6 +471,7 @@ class SubscriptionStatusCard extends StatelessWidget {
                 backgroundColor: Colors.red.shade600,
                 foregroundColor: Colors.white,
                 disabledBackgroundColor: Colors.grey.shade300,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -404,7 +488,10 @@ class SubscriptionStatusCard extends StatelessWidget {
   }
 
   Future<void> _cancelSubscription(BuildContext context, SubscriptionProvider provider) async {
-    // Store the navigator before showing dialog
+    // Check if widget is still mounted
+    if (!context.mounted) return;
+    
+    // Store the navigator and messenger before async operations
     final navigator = Navigator.of(context, rootNavigator: true);
     final messenger = ScaffoldMessenger.of(context);
     
@@ -412,8 +499,23 @@ class SubscriptionStatusCard extends StatelessWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (loadingContext) => const Center(
-        child: CircularProgressIndicator(),
+      builder: (loadingContext) => PopScope(
+        canPop: false,
+        child: const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Cancelling subscription...'),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
 
@@ -421,7 +523,9 @@ class SubscriptionStatusCard extends StatelessWidget {
       final success = await provider.cancelSubscription();
       
       // Close loading dialog
-      navigator.pop();
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
 
       if (success) {
         // Show success message
@@ -438,16 +542,22 @@ class SubscriptionStatusCard extends StatelessWidget {
           SnackBar(
             content: Text(provider.error ?? 'Failed to cancel subscription'),
             backgroundColor: Colors.red.shade600,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
       // Close loading dialog
-      navigator.pop();
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
+      
+      // Show error message
       messenger.showSnackBar(
         SnackBar(
           content: Text('Error: ${e.toString()}'),
           backgroundColor: Colors.red.shade600,
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -459,5 +569,170 @@ class SubscriptionStatusCard extends StatelessWidget {
         builder: (context) => const SubscriptionPlansScreen(),
       ),
     );
+  }
+
+  String _formatExpiryDate(DateTime date) {
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  String _getTimeRemaining(DateTime expiryDate) {
+    final now = DateTime.now();
+    final difference = expiryDate.difference(now);
+    
+    if (difference.isNegative) {
+      return 'Expired';
+    }
+    
+    final days = difference.inDays;
+    final hours = difference.inHours % 24;
+    
+    if (days > 0) {
+      return '$days ${days == 1 ? 'day' : 'days'} remaining';
+    } else if (hours > 0) {
+      return '$hours ${hours == 1 ? 'hour' : 'hours'} remaining';
+    } else {
+      final minutes = difference.inMinutes;
+      return '$minutes ${minutes == 1 ? 'minute' : 'minutes'} remaining';
+    }
+  }
+
+  void _showReactivateConfirmationDialog(BuildContext context, SubscriptionProvider provider) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.refresh_rounded, color: Colors.green.shade600, size: 24),
+            const SizedBox(width: 8),
+            const Text(
+              'Reactivate Subscription',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Would you like to reactivate your subscription?',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Your subscription will continue beyond the current billing period and you will be charged for the next cycle.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _reactivateSubscription(context, provider);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'Reactivate',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reactivateSubscription(BuildContext context, SubscriptionProvider provider) async {
+    // Check if widget is still mounted
+    if (!context.mounted) return;
+    
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (loadingContext) => PopScope(
+        canPop: false,
+        child: const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Reactivating subscription...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final success = await provider.reactivateSubscription();
+      
+      // Close loading dialog
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
+
+      if (success) {
+        // Show success message
+        messenger.showSnackBar(
+          SnackBar(
+            content: const Text('Subscription reactivated successfully!'),
+            backgroundColor: Colors.green.shade600,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        // Show error message
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(provider.error ?? 'Failed to reactivate subscription'),
+            backgroundColor: Colors.red.shade600,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
+      
+      // Show error message
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red.shade600,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 }

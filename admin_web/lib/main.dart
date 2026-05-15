@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'screens/login_screen.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/enhanced_dashboard_screen.dart';
 import 'services/auth_service.dart';
 import 'providers/admin_provider.dart';
 
@@ -48,7 +48,7 @@ class AdminApp extends StatelessWidget {
         home: const AuthWrapper(),
         routes: {
           '/login': (context) => const LoginScreen(),
-          '/dashboard': (context) => const DashboardScreen(),
+          '/dashboard': (context) => const EnhancedDashboardScreen(),
         },
       ),
     );
@@ -74,7 +74,7 @@ class AuthWrapper extends StatelessWidget {
         }
         
         if (snapshot.hasData) {
-          return const DashboardScreen();
+          return const EnhancedDashboardScreen();
         }
         
         return const LoginScreen();

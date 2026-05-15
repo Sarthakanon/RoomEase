@@ -78,7 +78,7 @@ class SubscriptionService {
       
       return {
         'current': 0,
-        'max': 5,
+        'max': 2,
         'canCreate': true,
         'percentage': 0.0,
       };
@@ -86,7 +86,7 @@ class SubscriptionService {
       debugPrint('Error getting roomspace usage: $e');
       return {
         'current': 0,
-        'max': 5,
+        'max': 2,
         'canCreate': true,
         'percentage': 0.0,
       };
@@ -145,13 +145,31 @@ class SubscriptionService {
   /// Cancel subscription
   Future<Map<String, dynamic>> cancelSubscription() async {
     try {
+      debugPrint('🔄 Attempting to cancel subscription...');
       final response = await _apiService.post('/api/subscription/cancel', data: {});
+      debugPrint('✅ Cancel subscription response: $response');
       return response;
     } catch (e) {
-      debugPrint('Error cancelling subscription: $e');
+      debugPrint('❌ Error cancelling subscription: $e');
       return {
         'success': false,
         'error': 'Failed to cancel subscription: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Reactivate subscription
+  Future<Map<String, dynamic>> reactivateSubscription() async {
+    try {
+      debugPrint('🔄 Attempting to reactivate subscription...');
+      final response = await _apiService.post('/api/subscription/reactivate', data: {});
+      debugPrint('✅ Reactivate subscription response: $response');
+      return response;
+    } catch (e) {
+      debugPrint('❌ Error reactivating subscription: $e');
+      return {
+        'success': false,
+        'error': 'Failed to reactivate subscription: ${e.toString()}',
       };
     }
   }
@@ -173,27 +191,69 @@ class SubscriptionService {
     }
   }
 
-  /// Process payment (eSewa integration)
+  /// Process payment (Stripe or eSewa integration)
   Future<Map<String, dynamic>> processPayment({
     required SubscriptionPlan plan,
     required bool isYearly,
     required Map<String, dynamic> paymentDetails,
   }) async {
     try {
-      // Create subscription with payment details
-      final response = await createSubscription(
-        plan: plan,
-        isYearly: isYearly,
-        paymentMethod: paymentDetails['method'] ?? 'esewa',
-        paymentDetails: paymentDetails,
-      );
+      final planInfo = SubscriptionPlanInfo.getPlanInfo(plan);
+      final amount = isYearly ? planInfo.yearlyPrice : planInfo.monthlyPrice;
+      final paymentMethod = paymentDetails['method'] ?? 'esewa';
+      
+      // Handle Stripe payments
+      if (paymentMethod == 'stripe') {
+        final response = await _apiService.post('/api/payment/stripe/subscription/verify', data: {
+          'payment_intent_id': paymentDetails['payment_intent_id'] ?? '',
+          'plan_id': plan.name,
+          'amount': amount,
+        });
+        
+        // If Stripe verification successful, update subscription in backend
+        if (response['success'] == true) {
+          // Call the subscription update endpoint
+          final updateResponse = await _apiService.post('/api/payments/subscription/verify', data: {
+            'plan_id': plan.name,
+            'transaction_uuid': paymentDetails['transaction_id'] ?? '',
+            'transaction_code': paymentDetails['payment_intent_id'] ?? '',
+            'amount': amount,
+            'esewa_response': {
+              'transaction_code': paymentDetails['payment_intent_id'] ?? '',
+              'status': 'COMPLETE',
+              'total_amount': amount.toString(),
+              'product_code': 'STRIPE',
+              'ref_id': paymentDetails['payment_intent_id'],
+            },
+          });
+          
+          return updateResponse;
+        }
+        
+        return response;
+      }
+      
+      // Handle eSewa payments (existing logic)
+      final response = await _apiService.post('/api/payments/subscription/verify', data: {
+        'plan_id': plan.name,
+        'transaction_uuid': paymentDetails['transaction_id'] ?? '',
+        'transaction_code': paymentDetails['transaction_id'] ?? '',
+        'amount': amount,
+        'esewa_response': {
+          'transaction_code': paymentDetails['transaction_id'] ?? '',
+          'status': 'COMPLETE',
+          'total_amount': amount.toString(),
+          'product_code': 'EPAYTEST',
+          'ref_id': paymentDetails['ref_id'],
+        },
+      });
       
       return response;
     } catch (e) {
-      debugPrint('Error processing eSewa payment: $e');
+      debugPrint('Error processing payment: $e');
       return {
         'success': false,
-        'error': 'eSewa payment processing failed: ${e.toString()}',
+        'error': 'Payment processing failed: ${e.toString()}',
       };
     }
   }

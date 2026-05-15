@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../services/api_service.dart';
 import '../../../models/balance_models.dart';
 import '../../../providers/roomspace_provider.dart';
+import '../widgets/month_selector.dart';
 
 class SettlementsScreen extends StatefulWidget {
   final String? roomspaceId;
@@ -21,10 +22,13 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   List<Settlement> _settlements = [];
   bool _isLoading = true;
   String? _error;
+  late DateTime _selectedMonth;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _selectedMonth = DateTime(now.year, now.month, 1);
     _loadSettlements();
   }
 
@@ -90,10 +94,19 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
           ? Center(child: CircularProgressIndicator(color: primaryColor))
           : _error != null
               ? _buildErrorState()
-              : _settlements.isEmpty
+              : _filteredSettlements.isEmpty
                   ? _buildEmptyState()
                   : _buildSettlementsList(),
     );
+  }
+
+  List<Settlement> get _filteredSettlements {
+    return _settlements.where((settlement) {
+      final createdAt = settlement.createdAt;
+      if (createdAt == null) return false;
+      return createdAt.year == _selectedMonth.year &&
+          createdAt.month == _selectedMonth.month;
+    }).toList();
   }
 
   Widget _buildSettlementsList() {
@@ -101,9 +114,22 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       onRefresh: _loadSettlements,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _settlements.length,
+        itemCount: _filteredSettlements.length + 1,
         itemBuilder: (context, index) {
-          final settlement = _settlements[index];
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: MonthSelector(
+                selectedMonth: _selectedMonth,
+                onMonthChanged: (date) {
+                  setState(() {
+                    _selectedMonth = DateTime(date.year, date.month, 1);
+                  });
+                },
+              ),
+            );
+          }
+          final settlement = _filteredSettlements[index - 1];
           return _buildSettlementCard(settlement);
         },
       ),
@@ -423,6 +449,15 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            MonthSelector(
+              selectedMonth: _selectedMonth,
+              onMonthChanged: (date) {
+                setState(() {
+                  _selectedMonth = DateTime(date.year, date.month, 1);
+                });
+              },
+            ),
+            const SizedBox(height: 24),
             Icon(
               Icons.payments_outlined,
               size: 64,
@@ -430,7 +465,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'No Settlements Yet',
+              'No Settlements This Month',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -439,7 +474,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Settlements will appear here when\nroommates make payments',
+              'Try a different month using the arrows above',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,

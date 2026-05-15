@@ -290,3 +290,250 @@ func (h *AdminHandler) GetUserDetails(c *gin.Context) {
 		"data":    userDetails,
 	})
 }
+
+
+// GetAllRoomspaces returns all roomspaces with members
+// GET /api/admin/roomspaces
+func (h *AdminHandler) GetAllRoomspaces(c *gin.Context) {
+	// Parse pagination parameters
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	search := c.Query("search")
+
+	offset := (page - 1) * limit
+
+	// Build query
+	query := config.DB.Model(&models.Roomspace{})
+	
+	if search != "" {
+		query = query.Where("name ILIKE ?", "%"+search+"%")
+	}
+
+	// Get total count
+	var total int64
+	query.Count(&total)
+
+	// Get roomspaces with creator info
+	var roomspaces []models.Roomspace
+	result := query.
+		Preload("Creator").
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&roomspaces)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch roomspaces",
+		})
+		return
+	}
+
+	// Get member counts for each roomspace
+	type RoomspaceWithMembers struct {
+		models.Roomspace
+		MemberCount int `json:"member_count"`
+	}
+
+	roomspacesWithMembers := make([]RoomspaceWithMembers, 0, len(roomspaces))
+	for _, rs := range roomspaces {
+		var memberCount int64
+		config.DB.Model(&models.RoomspaceMember{}).
+			Where("roomspace_id = ? AND is_active = ?", rs.ID, true).
+			Count(&memberCount)
+
+		roomspacesWithMembers = append(roomspacesWithMembers, RoomspaceWithMembers{
+			Roomspace:   rs,
+			MemberCount: int(memberCount),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    roomspacesWithMembers,
+		"pagination": gin.H{
+			"page":  page,
+			"limit": limit,
+			"total": total,
+		},
+	})
+}
+
+// GetRoomspaceDetails returns detailed roomspace information
+// GET /api/admin/roomspaces/:roomspaceId
+func (h *AdminHandler) GetRoomspaceDetails(c *gin.Context) {
+	roomspaceId := c.Param("roomspaceId")
+
+	var roomspace models.Roomspace
+	result := config.DB.Preload("Creator").Where("id = ?", roomspaceId).First(&roomspace)
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Roomspace not found",
+		})
+		return
+	}
+
+	// Get members
+	var members []models.RoomspaceMember
+	config.DB.Preload("User").
+		Where("roomspace_id = ? AND is_active = ?", roomspaceId, true).
+		Find(&members)
+
+	// Get expenses count and total
+	var expenseCount int64
+	var totalExpenses float64
+	config.DB.Model(&models.Expense{}).
+		Where("roomspace_id = ?", roomspaceId).
+		Count(&expenseCount)
+	config.DB.Model(&models.Expense{}).
+		Where("roomspace_id = ?", roomspaceId).
+		Select("COALESCE(SUM(amount), 0)").
+		Scan(&totalExpenses)
+
+	roomspaceDetails := map[string]interface{}{
+		"roomspace":      roomspace,
+		"members":        members,
+		"member_count":   len(members),
+		"expense_count":  expenseCount,
+		"total_expenses": totalExpenses,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    roomspaceDetails,
+	})
+}
+
+// GetAllExpenses returns all expenses
+// GET /api/admin/expenses
+func (h *AdminHandler) GetAllExpenses(c *gin.Context) {
+	// Parse pagination parameters
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+
+	offset := (page - 1) * limit
+
+	// Get total count
+	var total int64
+	config.DB.Model(&models.Expense{}).Count(&total)
+
+	// Get expenses with related data
+	var expenses []models.Expense
+	result := config.DB.
+		Preload("Roomspace").
+		Preload("Payer").
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&expenses)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch expenses",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    expenses,
+		"pagination": gin.H{
+			"page":  page,
+			"limit": limit,
+			"total": total,
+		},
+	})
+}
+
+// GetAllPersonalExpenses returns all personal expenses
+// GET /api/admin/personal-expenses
+func (h *AdminHandler) GetAllPersonalExpenses(c *gin.Context) {
+	// Parse pagination parameters
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+
+	offset := (page - 1) * limit
+
+	// Get total count
+	var total int64
+	config.DB.Model(&models.PersonalExpense{}).Count(&total)
+
+	// Get personal expenses with user data
+	var expenses []models.PersonalExpense
+	result := config.DB.
+		Preload("User").
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&expenses)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch personal expenses",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    expenses,
+		"pagination": gin.H{
+			"page":  page,
+			"limit": limit,
+			"total": total,
+		},
+	})
+}
+
+// GetAnalyticsData returns analytics data
+// GET /api/admin/analytics
+func (h *AdminHandler) GetAnalyticsData(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// User growth (last 30 days)
+	var userGrowth []map[string]interface{}
+	config.DB.WithContext(ctx).
+		Model(&models.User{}).
+		Select("DATE(created_at) as date, COUNT(*) as count").
+		Where("created_at >= ?", time.Now().AddDate(0, 0, -30)).
+		Group("DATE(created_at)").
+		Order("date ASC").
+		Scan(&userGrowth)
+
+	// Expense categories breakdown
+	var categoryBreakdown []map[string]interface{}
+	config.DB.WithContext(ctx).
+		Model(&models.Expense{}).
+		Select("category, COUNT(*) as count, SUM(amount) as total").
+		Group("category").
+		Order("total DESC").
+		Scan(&categoryBreakdown)
+
+	// Subscription distribution
+	var subscriptionDist []map[string]interface{}
+	config.DB.WithContext(ctx).
+		Model(&models.User{}).
+		Select("subscription_plan, COUNT(*) as count").
+		Group("subscription_plan").
+		Scan(&subscriptionDist)
+
+	// Active roomspaces (with recent activity)
+	var activeRoomspaces int64
+	config.DB.WithContext(ctx).
+		Model(&models.Expense{}).
+		Where("created_at >= ?", time.Now().AddDate(0, 0, -7)).
+		Distinct("roomspace_id").
+		Count(&activeRoomspaces)
+
+	analytics := map[string]interface{}{
+		"user_growth":          userGrowth,
+		"category_breakdown":   categoryBreakdown,
+		"subscription_dist":    subscriptionDist,
+		"active_roomspaces_7d": activeRoomspaces,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    analytics,
+	})
+}

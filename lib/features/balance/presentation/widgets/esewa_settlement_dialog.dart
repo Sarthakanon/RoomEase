@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../services/esewa_direct_service.dart';
-import '../../../../services/api_service.dart';
 
 class EsewaSettlementDialog extends StatefulWidget {
   final String roomspaceId;
@@ -27,7 +25,6 @@ class _EsewaSettlementDialogState extends State<EsewaSettlementDialog> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
   final EsewaDirectService _esewaService = EsewaDirectService();
-  final ApiService _apiService = ApiService();
   bool _isProcessing = false;
 
   @override
@@ -338,54 +335,6 @@ class _EsewaSettlementDialogState extends State<EsewaSettlementDialog> {
   }
 
   Future<void> _processDirectPayment() async {
-    final amount = double.tryParse(_amountController.text);
-    if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid amount'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isProcessing = true);
-
-    try {
-      final result = await _esewaService.processBalanceSettlement(
-        context: context,
-        roomspaceId: widget.roomspaceId,
-        recipientUserId: widget.recipientUserId,
-        amount: amount,
-        description: _noteController.text.trim().isEmpty 
-            ? 'Balance settlement to ${widget.recipientName}'
-            : _noteController.text.trim(),
-      );
-
-      if (result.success) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Payment of ₹${amount.toStringAsFixed(2)} sent successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.of(context).pop();
-        }
-        widget.onSettlementComplete(true);
-      } else {
-        _processPaymentFailure(result.message);
-      }
-    } catch (e) {
-      _processPaymentFailure('Payment error: ${e.toString()}');
-    } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
-    }
-  }
-
-  Future<void> _processPaymentSuccess(String transactionData) async {
     final amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(

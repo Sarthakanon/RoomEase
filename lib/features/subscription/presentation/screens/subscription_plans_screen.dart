@@ -385,7 +385,6 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           _buildFeatureRow('Advanced analytics', 'Detailed spending insights', isTablet),
           _buildFeatureRow('Custom categories', 'Organize expenses your way', isTablet),
           _buildFeatureRow('Export reports', 'PDF and Excel downloads', isTablet),
-          _buildFeatureRow('Priority support', 'Get help when you need it', isTablet),
         ],
       ),
     );

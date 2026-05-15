@@ -1,0 +1,8 @@
+classDiagram
+  class AuthHandler {+login(); +verify(); +refresh(); +logout()}
+  class AuthMiddleware {+validateToken()}
+  class SessionStore {+create(); +get(); +delete()}
+  class User {+id; +email; +name}
+  AuthHandler --> SessionStore
+  AuthHandler --> User
+  AuthMiddleware --> SessionStore

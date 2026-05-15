@@ -43,7 +43,11 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
       final data = res['data'] as List?;
       final List<PersonalExpenseData> fetched = data?.map((json) => PersonalExpenseData.fromJson(json)).where((e) => _searchQuery.isEmpty || e.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList() ?? [];
       setState(() {
-        if (reset) _expenses = fetched; else _expenses.addAll(fetched);
+        if (reset) {
+          _expenses = fetched;
+        } else {
+          _expenses.addAll(fetched);
+        }
         _hasMoreData = fetched.length >= _pageSize;
         _isLoading = false;
         _isLoadingMore = false;

@@ -1,0 +1,10 @@
+classDiagram
+  class ExpenseHandler {+create(); +list(); +update(); +delete()}
+  class Expense {+id; +roomspaceId; +amount; +paidBy}
+  class ExpenseSplit {+expenseId; +userId; +splitAmount}
+  class BalanceService {+calculate(); +suggest(); +refreshCache()}
+  class Settlement {+id; +payerId; +payeeId; +amount}
+  ExpenseHandler --> Expense
+  Expense --> ExpenseSplit
+  BalanceService --> Expense
+  BalanceService --> Settlement

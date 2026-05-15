@@ -253,23 +253,6 @@ class _NavBarItem extends StatelessWidget {
               color: isActive ? primaryColor : Colors.grey[400],
               size: iconSize,
             ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: isActive ? (screenWidth < 360 ? 4 : 8) : 0,
-            ),
-            if (isActive)
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
-                  ),
-                ),
-              ),
           ],
         ),
       ),

@@ -37,7 +37,6 @@ class _AuthStateListenerState extends State<AuthStateListener> {
   void _setupAuthListener() {
     // Get initial user state
     _previousUser = FirebaseAuth.instance.currentUser;
-    _isInitialized = true;
 
     // Listen to auth state changes
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((User? user) {
@@ -51,6 +50,7 @@ class _AuthStateListenerState extends State<AuthStateListener> {
       }
 
       // If user was logged in and now is logged out, navigate to login
+      // BUT: Don't navigate if the user just signed up and hasn't verified email yet
       if (_previousUser != null && user == null) {
         print('🔒 Auth state changed: User logged out - navigating to login');
         _navigateToLogin();

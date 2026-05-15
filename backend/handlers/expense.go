@@ -122,6 +122,12 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 		return
 	}
 
+	// Log expense creation to history
+	if err := h.dbService.LogExpenseCreated(expense.RoomspaceID, expense, userID.(string)); err != nil {
+		// Log error but don't fail the expense creation
+		fmt.Printf("Failed to log expense creation to history: %v\n", err)
+	}
+
 	// Create recurring expense template if configured
 	if req.RecurringConfig != nil && req.RecurringConfig.IsRecurring {
 		if err := h.createRecurringExpenseTemplate(&req, userID.(string)); err != nil {
@@ -483,6 +489,12 @@ func (h *ExpenseHandler) UpdateExpense(c *gin.Context) {
 		return
 	}
 
+	// Log expense edit to history
+	if err := h.dbService.LogExpenseEdited(existingExpense.RoomspaceID, existingExpense, userID.(string)); err != nil {
+		// Log error but don't fail the expense update
+		fmt.Printf("Failed to log expense edit to history: %v\n", err)
+	}
+
 	// Convert to response format
 	response := h.convertToExpenseResponse(existingExpense)
 
@@ -531,6 +543,11 @@ func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 		return
 	}
 
+	// Store expense details for history logging before deletion
+	roomspaceID := existingExpense.RoomspaceID
+	expenseTitle := existingExpense.Title
+	expenseAmount := existingExpense.Amount
+
 	// Delete expense (soft delete)
 	if err := h.dbService.DeleteExpense(uint(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -538,6 +555,12 @@ func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 			"details": err.Error(),
 		})
 		return
+	}
+
+	// Log expense deletion to history
+	if err := h.dbService.LogExpenseDeleted(roomspaceID, uint(id), expenseTitle, expenseAmount, userID.(string)); err != nil {
+		// Log error but don't fail the expense deletion
+		fmt.Printf("Failed to log expense deletion to history: %v\n", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -673,14 +696,33 @@ func (h *ExpenseHandler) verifyRoomspaceMembership(roomspaceID string, userUID s
 func (h *ExpenseHandler) calculateSplits(req *models.CreateExpenseRequest, payerUID string) ([]models.ExpenseSplit, error) {
 	var splits []models.ExpenseSplit
 
+	// Build a unique participant list and ensure payer is included.
+	// This matches the UX expectation that "split with" participants + payer
+	// define the full sharing group for the expense.
+	participants := make([]string, 0, len(req.SelectedRoommates)+1)
+	seen := make(map[string]bool)
+	for _, uid := range req.SelectedRoommates {
+		if uid == "" || seen[uid] {
+			continue
+		}
+		seen[uid] = true
+		participants = append(participants, uid)
+	}
+	if payerUID != "" && !seen[payerUID] {
+		participants = append(participants, payerUID)
+	}
+
 	switch req.SplitType {
 	case models.SplitTypeEqual:
-		// Equal split among selected roommates
-		splitAmount := req.Amount / float64(len(req.SelectedRoommates))
+		// Equal split among all participants (including payer)
+		if len(participants) == 0 {
+			return nil, fmt.Errorf("no participants provided for equal split")
+		}
+		splitAmount := req.Amount / float64(len(participants))
 		// Handle rounding by giving the remainder to the first person
-		remainder := req.Amount - (splitAmount * float64(len(req.SelectedRoommates)))
+		remainder := req.Amount - (splitAmount * float64(len(participants)))
 		
-		for i, roommateUID := range req.SelectedRoommates {
+		for i, roommateUID := range participants {
 			amount := splitAmount
 			if i == 0 {
 				amount += remainder

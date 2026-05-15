@@ -5,6 +5,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import 'ban_monitoring_service.dart';
 import 'real_time_data_service.dart';
@@ -19,6 +20,7 @@ class ApiService {
   late final Dio _dio;
   late CookieJar _cookieJar;
   bool _initialized = false;
+  String? _webSessionId; // Store session ID for web platform
 
   // Backend server IP address - update in lib/core/constants.dart
   static const String _backendIp = AppConstants.backendIp;
@@ -26,7 +28,8 @@ class ApiService {
 
   static String get baseUrl {
     if (kIsWeb) {
-      return 'http://localhost:$_backendPort';
+      // For web, use the configured backend IP
+      return 'http://$_backendIp:$_backendPort';
     }
 
     // Use machine IP for physical Android devices
@@ -52,6 +55,10 @@ class ApiService {
           'Accept': 'application/json',
           'Connection': 'keep-alive', // Keep connections alive
         },
+        // Enable credentials for web (cookies)
+        extra: {
+          'withCredentials': true,
+        },
       ),
     );
 
@@ -59,6 +66,28 @@ class ApiService {
     if (!kIsWeb) {
       _cookieJar = CookieJar();
       _dio.interceptors.add(CookieManager(_cookieJar));
+    } else {
+      // For web, manually manage session ID in Cookie header
+      _dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) async {
+            // Load session ID from storage if not already loaded
+            if (_webSessionId == null) {
+              await _loadWebSessionId();
+            }
+            
+            // Add session ID to Cookie header if available
+            if (_webSessionId != null) {
+              options.headers['Cookie'] = 'session_id=$_webSessionId';
+              print('🍪 Web: Adding session cookie to request: ${options.path}');
+            } else {
+              print('⚠️ Web: No session ID available for request: ${options.path}');
+            }
+            
+            handler.next(options);
+          },
+        ),
+      );
     }
 
     _dio.interceptors.add(
@@ -111,7 +140,9 @@ class ApiService {
             print('   - Base URL: ${_dio.options.baseUrl}');
             print('   - Request URL: ${error.requestOptions.uri}');
             print('   - Timeout: ${_dio.options.connectTimeout}');
-            print('   - Platform: ${Platform.operatingSystem}');
+            if (!kIsWeb) {
+              print('   - Platform: ${Platform.operatingSystem}');
+            }
           }
           
           // Handle 401 Unauthorized - Session expired or invalid
@@ -206,6 +237,54 @@ class ApiService {
     // Clear all cookies from the cookie jar (only on non-web platforms)
     if (!kIsWeb) {
       await _cookieJar.deleteAll();
+    } else {
+      // Clear web session ID
+      await _clearWebSessionId();
+    }
+  }
+
+  /// Save session ID to local storage (web only)
+  Future<void> _saveWebSessionId(String sessionId) async {
+    if (!kIsWeb) return;
+    
+    try {
+      _webSessionId = sessionId;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('web_session_id', sessionId);
+      print('✅ Web: Session ID saved to localStorage');
+    } catch (e) {
+      print('❌ Web: Failed to save session ID: $e');
+    }
+  }
+
+  /// Load session ID from local storage (web only)
+  Future<void> _loadWebSessionId() async {
+    if (!kIsWeb) return;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _webSessionId = prefs.getString('web_session_id');
+      if (_webSessionId != null) {
+        print('✅ Web: Session ID loaded from localStorage: $_webSessionId');
+      } else {
+        print('⚠️ Web: No session ID found in localStorage');
+      }
+    } catch (e) {
+      print('❌ Web: Failed to load session ID: $e');
+    }
+  }
+
+  /// Clear session ID from local storage (web only)
+  Future<void> _clearWebSessionId() async {
+    if (!kIsWeb) return;
+    
+    try {
+      _webSessionId = null;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('web_session_id');
+      print('✅ Web: Session ID cleared from localStorage');
+    } catch (e) {
+      print('❌ Web: Failed to clear session ID: $e');
     }
   }
 
@@ -215,6 +294,17 @@ class ApiService {
         '/api/auth/login',
         data: {'firebase_token': firebaseToken},
       );
+      
+      // Extract and save session ID for web platform
+      if (kIsWeb && response.data is Map<String, dynamic>) {
+        final sessionId = response.data['session_id'] as String?;
+        if (sessionId != null) {
+          print('🔑 Web: Extracted session_id from login response: $sessionId');
+          await _saveWebSessionId(sessionId);
+        } else {
+          print('⚠️ Web: No session_id found in login response');
+        }
+      }
       
       // After successful login, check if user is banned
       final user = FirebaseAuth.instance.currentUser;
@@ -373,6 +463,7 @@ class ApiService {
   Future<Map<String, dynamic>> updateUserProfile({
     String? name,
     String? phone,
+    String? qrImageUrl,
   }) async {
     final data = <String, dynamic>{};
     if (name != null) {
@@ -380,6 +471,9 @@ class ApiService {
     }
     if (phone != null) {
       data['phone'] = phone;
+    }
+    if (qrImageUrl != null) {
+      data['qr_image_url'] = qrImageUrl;
     }
     return await put('/api/user/profile', data: data);
   }
@@ -442,7 +536,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> removeMemberFromRoomspace(
-    int roomspaceId,
+    String roomspaceId,
     String memberFirebaseUid,
   ) async {
     return await delete(
@@ -654,6 +748,14 @@ class ApiService {
     try {
       final response = await delete('/api/expenses/$expenseId');
       return response;
+    } on DioException catch (e) {
+      // Extract error message from response
+      if (e.response?.data is Map<String, dynamic>) {
+        final errorData = e.response!.data as Map<String, dynamic>;
+        final errorMessage = errorData['error'] ?? 'Failed to delete expense';
+        throw Exception(errorMessage);
+      }
+      throw Exception('Failed to delete expense: ${e.message}');
     } catch (e) {
       throw Exception('Failed to delete expense: ${e.toString()}');
     }

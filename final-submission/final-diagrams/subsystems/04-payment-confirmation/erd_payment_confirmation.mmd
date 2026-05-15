@@ -1,0 +1,13 @@
+erDiagram
+  ROOMSPACES ||--o{ PAYMENT_CONFIRMATIONS : has
+  USERS ||--o{ PAYMENT_CONFIRMATIONS : payer
+  USERS ||--o{ PAYMENT_CONFIRMATIONS : payee
+  PAYMENT_CONFIRMATIONS {
+    int id PK
+    string roomspace_id FK
+    string payer_id FK
+    string payee_id FK
+    decimal amount
+    string status
+    datetime created_at
+  }

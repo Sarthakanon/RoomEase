@@ -1,0 +1,25 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant APP as Mobile App
+    participant OFS as OfflineExpenseService
+    participant API as Backend API
+    participant DB as PostgreSQL
+
+    U->>APP: Add expense
+    APP->>OFS: createExpense(request)
+    OFS->>OFS: check connectivity
+
+    alt Online
+      OFS->>API: POST /api/expenses
+      API->>DB: Insert expense + splits
+      DB-->>API: Success
+      API-->>OFS: Created expense
+      OFS-->>APP: Return success
+      APP-->>U: Show expense added
+    else Offline
+      OFS->>OFS: Save locally
+      OFS->>OFS: Queue sync operation
+      OFS-->>APP: Return offline success
+      APP-->>U: Saved offline, will sync later
+    end

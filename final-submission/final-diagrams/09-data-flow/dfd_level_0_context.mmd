@@ -1,0 +1,16 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart LR
+    U[Roommate User]
+    A[Admin User]
+    P[Payment Provider APIs]
+
+    SYS((RoomEase System))
+
+    U -->|Login, expenses, confirmations, requests| SYS
+    SYS -->|Balances, notifications, analytics, status| U
+
+    A -->|Admin queries and actions| SYS
+    SYS -->|Admin stats and monitoring data| A
+
+    SYS -->|Subscription and payment verification requests| P
+    P -->|Verification responses| SYS

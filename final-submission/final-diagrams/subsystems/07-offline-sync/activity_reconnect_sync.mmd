@@ -1,0 +1,16 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart TB
+  S([Start]) --> A[Detect internet restored]
+  A --> B[Load offline queue]
+  B --> C{Queue empty?}
+  C -->|Yes| D[Set status idle]
+  C -->|No| E[Process queued operation]
+  E --> F{Operation success?}
+  F -->|Yes| G[Mark synced]
+  F -->|No| H[Keep for retry]
+  G --> I{More operations?}
+  I -->|Yes| E
+  I -->|No| J[Refresh local cache]
+  H --> J
+  J --> D
+  D --> K([End])

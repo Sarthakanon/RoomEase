@@ -1,0 +1,9 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart TB
+  S([Start]) --> A[Load roomspace expenses]
+  A --> B[Compute each member contribution]
+  B --> C[Compute each member share]
+  C --> D[Net owed or receivable]
+  D --> E[Generate suggestions]
+  E --> F[Return balance summary]
+  F --> G([End])

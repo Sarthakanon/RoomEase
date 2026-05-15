@@ -1,9 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 
 class FirebaseAuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  
+  // Initialize GoogleSignIn with web client ID for web platform
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId: kIsWeb 
+        ? '949338416443-a3b28845n1tg86fpmehckv6o97d22o5q.apps.googleusercontent.com'
+        : null, // null for mobile (uses google-services.json)
+  );
 
   // Get current user
   User? get currentUser => _auth.currentUser;
@@ -125,17 +132,24 @@ class FirebaseAuthService {
   // Sign in with Google
   Future<UserCredential?> signInWithGoogle() async {
     try {
+      debugPrint('🔵 Starting Google Sign-In...');
+      
       // Trigger the authentication flow
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
         // User canceled the sign-in
+        debugPrint('⚪ User canceled Google Sign-In');
         return null;
       }
+
+      debugPrint('🔵 Google user obtained: ${googleUser.email}');
 
       // Obtain the auth details from the request
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
+
+      debugPrint('🔵 Google auth obtained - idToken: ${googleAuth.idToken != null}, accessToken: ${googleAuth.accessToken != null}');
 
       // Create a new credential
       final credential = GoogleAuthProvider.credential(
@@ -143,11 +157,20 @@ class FirebaseAuthService {
         idToken: googleAuth.idToken,
       );
 
+      debugPrint('🔵 Firebase credential created, signing in...');
+
       // Sign in to Firebase with the Google credential
-      return await _auth.signInWithCredential(credential);
+      final userCredential = await _auth.signInWithCredential(credential);
+      
+      debugPrint('✅ Firebase sign-in successful: ${userCredential.user?.email}');
+      
+      return userCredential;
     } on FirebaseAuthException catch (e) {
+      debugPrint('❌ Firebase Auth Exception: ${e.code} - ${e.message}');
       throw _handleAuthException(e);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('❌ Google Sign-In Error: $e');
+      debugPrint('Stack trace: $stackTrace');
       throw 'Failed to sign in with Google. Please try again.';
     }
   }
@@ -155,7 +178,10 @@ class FirebaseAuthService {
   // Sign out
   Future<void> signOut() async {
     try {
-      await _auth.signOut();
+      await Future.wait([
+        _auth.signOut(),
+        _googleSignIn.signOut(),
+      ]);
     } catch (e) {
       throw 'Failed to sign out. Please try again.';
     }

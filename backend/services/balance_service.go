@@ -22,21 +22,21 @@ func NewBalanceService() *BalanceService {
 // Returns a BalanceSummary with aggregated balance information
 func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models.BalanceSummary, error) {
 	fmt.Printf("🔍 Starting balance calculation for roomspace: %s\n", roomspaceID)
-	
+
 	// Get all expenses for the roomspace
 	var expenses []models.Expense
 	result := config.DB.
 		Preload("Splits").
 		Where("roomspace_id = ?", roomspaceID).
 		Find(&expenses)
-	
+
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to fetch expenses: %w", result.Error)
 	}
 
 	fmt.Printf("📋 Found %d expenses for roomspace %s\n", len(expenses), roomspaceID)
 	for i, expense := range expenses {
-		fmt.Printf("  Expense %d: ID=%s, Amount=%.2f, PaidBy=%s, Splits=%d\n", 
+		fmt.Printf("  Expense %d: ID=%s, Amount=%.2f, PaidBy=%s, Splits=%d\n",
 			i+1, expense.ID, expense.Amount, expense.PaidBy, len(expense.Splits))
 	}
 
@@ -46,14 +46,14 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 		Preload("User").
 		Where("roomspace_id = ? AND is_active = ?", roomspaceID, true).
 		Find(&members)
-	
+
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to fetch members: %w", result.Error)
 	}
 
 	fmt.Printf("👥 Found %d active members for roomspace %s\n", len(members), roomspaceID)
 	for i, member := range members {
-		fmt.Printf("  Member %d: UserID=%s, Name=%s\n", 
+		fmt.Printf("  Member %d: UserID=%s, Name=%s\n",
 			i+1, member.UserID, member.User.Name)
 	}
 
@@ -68,35 +68,35 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 	// Calculate balances from expenses
 	totalExpenses := 0.0
 	for i, expense := range expenses {
-		fmt.Printf("🧮 Processing expense %d: ID=%s, Amount=%.2f, PaidBy=%s\n", 
+		fmt.Printf("🧮 Processing expense %d: ID=%s, Amount=%.2f, PaidBy=%s\n",
 			i+1, expense.ID, expense.Amount, expense.PaidBy)
-		
+
 		totalExpenses += expense.Amount
-		
+
 		// Payer gets credit for the full amount
 		if _, exists := userBalances[expense.PaidBy]; exists {
 			userBalances[expense.PaidBy] += expense.Amount
-			fmt.Printf("  ✅ Added %.2f to payer %s, new balance: %.2f\n", 
+			fmt.Printf("  ✅ Added %.2f to payer %s, new balance: %.2f\n",
 				expense.Amount, expense.PaidBy, userBalances[expense.PaidBy])
 		} else {
 			fmt.Printf("  ⚠️  Payer %s not found in members list\n", expense.PaidBy)
 		}
-		
+
 		// Each split member gets debited for their share
 		fmt.Printf("  📊 Processing %d splits:\n", len(expense.Splits))
 		for j, split := range expense.Splits {
-			fmt.Printf("    Split %d: UserUID=%s, Amount=%.2f\n", 
+			fmt.Printf("    Split %d: UserUID=%s, Amount=%.2f\n",
 				j+1, split.UserUID, split.Amount)
-			
+
 			if _, exists := userBalances[split.UserUID]; exists {
 				userBalances[split.UserUID] -= split.Amount
-				fmt.Printf("    ✅ Subtracted %.2f from %s, new balance: %.2f\n", 
+				fmt.Printf("    ✅ Subtracted %.2f from %s, new balance: %.2f\n",
 					split.Amount, split.UserUID, userBalances[split.UserUID])
 			} else {
 				fmt.Printf("    ⚠️  Split user %s not found in members list\n", split.UserUID)
 			}
 		}
-		
+
 		fmt.Printf("  💰 Balances after expense %d: %+v\n", i+1, userBalances)
 	}
 
@@ -107,7 +107,7 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 	result = config.DB.
 		Where("roomspace_id = ?", roomspaceID).
 		Find(&settlements)
-	
+
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to fetch settlements: %w", result.Error)
 	}
@@ -124,11 +124,12 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 	memberInterfaces := make([]interface{}, len(members))
 	for i, member := range members {
 		memberInterfaces[i] = map[string]interface{}{
-			"user_id":   member.UserID,
-			"user_name": member.User.Name,
-			"name":      member.User.Name, // Add 'name' field for frontend compatibility
-			"role":      member.Role,
-			"balance":   userBalances[member.UserID], // Include the calculated balance
+			"user_id":      member.UserID,
+			"user_name":    member.User.Name,
+			"name":         member.User.Name, // Add 'name' field for frontend compatibility
+			"role":         member.Role,
+			"balance":      userBalances[member.UserID], // Include the calculated balance
+			"qr_image_url": member.User.QRImageURL,
 		}
 	}
 
@@ -152,7 +153,7 @@ func (s *BalanceService) GetUserBalance(roomspaceID, userID string) (*models.Use
 	result := config.DB.
 		Where("roomspace_id = ? AND user_id = ? AND is_active = ?", roomspaceID, userID, true).
 		First(&member)
-	
+
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.New("user is not a member of this roomspace")
@@ -165,7 +166,7 @@ func (s *BalanceService) GetUserBalance(roomspaceID, userID string) (*models.Use
 	result = config.DB.
 		Where("roomspace_id = ? AND paid_by = ?", roomspaceID, userID).
 		Find(&paidExpenses)
-	
+
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to fetch paid expenses: %w", result.Error)
 	}
@@ -182,7 +183,7 @@ func (s *BalanceService) GetUserBalance(roomspaceID, userID string) (*models.Use
 		Joins("JOIN expenses ON expenses.id = expense_splits.expense_id").
 		Where("expenses.roomspace_id = ? AND expense_splits.user_uid = ?", roomspaceID, userID).
 		Find(&splits)
-	
+
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to fetch expense splits: %w", result.Error)
 	}
@@ -203,7 +204,7 @@ func (s *BalanceService) GetUserBalance(roomspaceID, userID string) (*models.Use
 	result = config.DB.
 		Where("roomspace_id = ? AND from_user_id = ?", roomspaceID, userID).
 		Find(&settlementsFrom)
-	
+
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to fetch settlements from user: %w", result.Error)
 	}
@@ -217,7 +218,7 @@ func (s *BalanceService) GetUserBalance(roomspaceID, userID string) (*models.Use
 	result = config.DB.
 		Where("roomspace_id = ? AND to_user_id = ?", roomspaceID, userID).
 		Find(&settlementsTo)
-	
+
 	if result.Error != nil {
 		return nil, fmt.Errorf("failed to fetch settlements to user: %w", result.Error)
 	}
@@ -247,7 +248,7 @@ func (s *BalanceService) UpdateBalanceCache(roomspaceID string) error {
 	result := config.DB.
 		Where("roomspace_id = ? AND is_active = ?", roomspaceID, true).
 		Find(&members)
-	
+
 	if result.Error != nil {
 		return fmt.Errorf("failed to fetch members: %w", result.Error)
 	}
@@ -310,13 +311,13 @@ func (s *BalanceService) GetCachedBalance(roomspaceID, userID string) (*models.U
 			if err != nil {
 				return nil, err
 			}
-			
+
 			// Cache the result
 			if err := s.upsertBalanceRecord(calculated); err != nil {
 				// Log error but return calculated balance anyway
 				fmt.Printf("Warning: failed to cache balance: %v\n", err)
 			}
-			
+
 			return calculated, nil
 		}
 		return nil, result.Error
@@ -330,11 +331,11 @@ func (s *BalanceService) GetCachedBalance(roomspaceID, userID string) (*models.U
 			// Return stale cache on error
 			return &balance, nil
 		}
-		
+
 		if err := s.upsertBalanceRecord(calculated); err != nil {
 			fmt.Printf("Warning: failed to update cache: %v\n", err)
 		}
-		
+
 		return calculated, nil
 	}
 
@@ -348,7 +349,7 @@ func (s *BalanceService) CreateSettlement(settlement *models.Settlement) error {
 	if settlement.FromUserID == settlement.ToUserID {
 		return errors.New("cannot settle with yourself")
 	}
-	
+
 	if settlement.Amount <= 0 {
 		return errors.New("settlement amount must be positive")
 	}
@@ -356,19 +357,19 @@ func (s *BalanceService) CreateSettlement(settlement *models.Settlement) error {
 	// Verify both users are members of the roomspace
 	var fromMember, toMember models.RoomspaceMember
 	result := config.DB.
-		Where("roomspace_id = ? AND user_id = ? AND is_active = ?", 
+		Where("roomspace_id = ? AND user_id = ? AND is_active = ?",
 			settlement.RoomspaceID, settlement.FromUserID, true).
 		First(&fromMember)
-	
+
 	if result.Error != nil {
 		return errors.New("from_user is not a member of this roomspace")
 	}
 
 	result = config.DB.
-		Where("roomspace_id = ? AND user_id = ? AND is_active = ?", 
+		Where("roomspace_id = ? AND user_id = ? AND is_active = ?",
 			settlement.RoomspaceID, settlement.ToUserID, true).
 		First(&toMember)
-	
+
 	if result.Error != nil {
 		return errors.New("to_user is not a member of this roomspace")
 	}

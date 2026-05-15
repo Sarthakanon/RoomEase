@@ -1,0 +1,10 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart TB
+  S([Start]) --> A[Enter credentials]
+  A --> B[Send login request]
+  B --> C{Valid token?}
+  C -->|Yes| D[Create session]
+  C -->|No| E[Show error]
+  D --> F[Load dashboard]
+  E --> G([End])
+  F --> G

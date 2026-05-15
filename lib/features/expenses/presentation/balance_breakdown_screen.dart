@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/api_service.dart';
-import '../../../services/balance_service.dart';
+import '../../../services/smart_api_service.dart';
 import '../../../models/expense_models.dart';
 import '../../../models/balance_models.dart';
 
@@ -19,7 +19,7 @@ class BalanceBreakdownScreen extends StatefulWidget {
 
 class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
   final ApiService _apiService = ApiService();
-  final BalanceService _balanceService = BalanceService();
+  final SmartApiService _smartApi = SmartApiService();
   bool _isLoading = true;
   String? _error;
   
@@ -27,8 +27,11 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
   List<Settlement> _settlements = [];
   String? _currentUserId;
   
-  // Use backend calculated values
-  UserBalance? _userBalance;
+  // Use backend calculated values from the same endpoint as dashboard
+  double _youOwe = 0.0;
+  double _youAreOwed = 0.0;
+  double _yourBalance = 0.0;
+  double _totalPaid = 0.0;
   double _settlementsReceived = 0.0;
   double _settlementsPaid = 0.0;
 
@@ -46,11 +49,12 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
     });
 
     try {
-      // Load user balance from backend (already calculated correctly)
-      _userBalance = await _balanceService.getUserBalance(
-        widget.roomspaceId,
-        _currentUserId!,
-      );
+      // Load balances from the same endpoint used by dashboard
+      final balanceResponse = await _smartApi.getRoomspaceBalances(widget.roomspaceId);
+      final balanceData = balanceResponse['data'] as Map<String, dynamic>? ?? {};
+      _youOwe = (balanceData['you_owe'] as num?)?.toDouble() ?? 0.0;
+      _youAreOwed = (balanceData['you_are_owed'] as num?)?.toDouble() ?? 0.0;
+      _yourBalance = (balanceData['your_balance'] as num?)?.toDouble() ?? (_youAreOwed - _youOwe);
 
       // Load expenses for display
       final expensesResponse = await _apiService.getRecentExpenses(
@@ -90,6 +94,7 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
   void _calculateSettlementTotals() {
     _settlementsReceived = 0.0;
     _settlementsPaid = 0.0;
+    _totalPaid = 0.0;
 
     // Calculate settlement totals for display
     for (final settlement in _settlements) {
@@ -99,14 +104,21 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
         _settlementsPaid += settlement.amount;
       }
     }
+
+    for (final expense in _allExpenses) {
+      if (expense.paidBy == _currentUserId) {
+        _totalPaid += expense.amount;
+      }
+    }
     
     // Debug logging
-    print('=== BALANCE BREAKDOWN (Backend Calculated) ===');
-    print('Total Paid: ${_userBalance?.totalPaid ?? 0}');
-    print('Total Owed: ${_userBalance?.totalOwed ?? 0}');
+    print('=== BALANCE BREAKDOWN (Dashboard-aligned) ===');
+    print('you_owe: $_youOwe');
+    print('you_are_owed: $_youAreOwed');
+    print('your_balance: $_yourBalance');
+    print('Total Paid (from expenses): $_totalPaid');
     print('Settlements Paid: $_settlementsPaid');
     print('Settlements Received: $_settlementsReceived');
-    print('Final Balance (from backend): ${_userBalance?.balance ?? 0}');
     print('==============================================');
   }
 
@@ -146,6 +158,8 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
         children: [
           _buildFinalBalanceCard(),
           const SizedBox(height: 24),
+          _buildNetAdjustmentCard(),
+          const SizedBox(height: 24),
           _buildCalculationSteps(),
           const SizedBox(height: 24),
           _buildExpensesList(),
@@ -158,18 +172,70 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
     );
   }
 
+  Widget _buildNetAdjustmentCard() {
+    final netPayable = (_youOwe - _youAreOwed).clamp(0.0, double.infinity);
+    final netReceivable = (_youAreOwed - _youOwe).clamp(0.0, double.infinity);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F7FB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Mutual Adjustment (Overall)',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildCalculationStep(
+            'You Owe (raw total)',
+            _youOwe,
+            Colors.red.shade700,
+            Icons.remove_circle_outline,
+            isPositive: false,
+          ),
+          _buildCalculationStep(
+            'You Are Owed (raw total)',
+            _youAreOwed,
+            Colors.green.shade700,
+            Icons.add_circle_outline,
+            isPositive: true,
+          ),
+          const SizedBox(height: 10),
+          Divider(color: Colors.grey.shade300),
+          const SizedBox(height: 10),
+          Text(
+            netPayable > 0
+                ? 'Final payable after adjustment: Rs. ${netPayable.toStringAsFixed(0)}'
+                : 'Final receivable after adjustment: Rs. ${netReceivable.toStringAsFixed(0)}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: netPayable > 0 ? const Color(0xFFC62828) : const Color(0xFF2E7D32),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFinalBalanceCard() {
-    final balance = _userBalance?.balance ?? 0.0;
-    final isPositive = balance >= 0;
-    final color = isPositive ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    final amountToPay = (_youOwe - _youAreOwed).clamp(0.0, double.infinity);
+    final color = const Color(0xFFC62828);
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: isPositive
-              ? [Colors.green.shade50, Colors.green.shade100]
-              : [Colors.red.shade50, Colors.red.shade100],
+          colors: [Colors.red.shade50, Colors.red.shade100],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -179,7 +245,7 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
       child: Column(
         children: [
           Text(
-            isPositive ? 'You\'ll Get Back' : 'You Need to Pay',
+            'You Need to Pay',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -192,7 +258,7 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
             children: [
               Icon(Icons.currency_rupee, color: color, size: 32),
               Text(
-                balance.abs().toStringAsFixed(2),
+                amountToPay.toStringAsFixed(2),
                 style: TextStyle(
                   fontSize: 40,
                   fontWeight: FontWeight.w900,
@@ -203,7 +269,7 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Final Balance',
+            'Net after mutual adjustment',
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey.shade600,
@@ -215,9 +281,8 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
   }
 
   Widget _buildCalculationSteps() {
-    final totalPaid = _userBalance?.totalPaid ?? 0.0;
-    final totalOwed = _userBalance?.totalOwed ?? 0.0;
-    final balance = _userBalance?.balance ?? 0.0;
+    final totalPaid = _totalPaid;
+    final totalOwed = _youOwe;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -278,33 +343,6 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
               Icons.remove_circle_outline,
               isPositive: false,
             ),
-          const SizedBox(height: 12),
-          Divider(color: Colors.grey.shade300),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Final Balance',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A2E),
-                ),
-              ),
-              Flexible(
-                child: Text(
-                  'Rs. ${balance.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: balance >= 0 ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );

@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
 import '../../../services/api_service.dart';
 import '../../../services/payment_notification_service.dart';
+import '../../../services/real_time_data_service.dart';
 import '../../../models/payment_notification.dart';
 import '../../../models/expense_models.dart';
 import '../../home/widgets/add_expense_dialog.dart';
 import '../../home/widgets/personal_expense_dialog.dart';
+import '../../expenses/presentation/payment_confirmation_screen.dart';
+import '../../expenses/presentation/who_owes_who_screen.dart';
+import '../../expenses/presentation/expense_history_screen.dart';
+import '../../expenses/presentation/deletion_history_screen.dart';
+import '../../../providers/roomspace_provider.dart';
+import 'package:provider/provider.dart';
+import 'dart:async';
+import 'dart:convert';
 
 /// Notification screen — unified view for join requests, payment detections, and system alerts.
 class NotificationScreen extends StatefulWidget {
@@ -16,15 +25,33 @@ class NotificationScreen extends StatefulWidget {
 
 class _NotificationScreenState extends State<NotificationScreen> {
   final ApiService _apiService = ApiService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
   bool _isLoading = true;
   List<dynamic> _notifications = [];
   List<dynamic> _joinRequests = [];
   List<PaymentNotification> _paymentNotifications = [];
+  StreamSubscription<JoinRequestUpdateEvent>? _joinRequestSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _setupRealTimeListeners();
+  }
+
+  @override
+  void dispose() {
+    _joinRequestSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupRealTimeListeners() {
+    // Listen for join request updates
+    _joinRequestSubscription = _realTimeService.joinRequestUpdates.listen((event) {
+      debugPrint('🔄 NotificationScreen: Join request update received');
+      // Reload data when join request is processed
+      _loadData();
+    });
   }
 
   Future<void> _loadData() async {
@@ -57,7 +84,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
     String name,
   ) async {
     try {
+      // Mark as processing
+      setState(() {
+        final index = _joinRequests.indexWhere((r) => r['id'].toString() == requestId);
+        if (index != -1) {
+          _joinRequests[index]['_isProcessing'] = true;
+        }
+      });
+
       await _apiService.processJoinRequest(requestId, accept);
+      
+      // Notify real-time service
+      _realTimeService.notifyJoinRequestProcessed(requestId, accept);
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -66,9 +105,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
             ),
           ),
         );
-        _loadData();
+        // Reload data to remove the processed request
+        await _loadData();
       }
     } catch (e) {
+      // Remove processing state on error
+      setState(() {
+        final index = _joinRequests.indexWhere((r) => r['id'].toString() == requestId);
+        if (index != -1) {
+          _joinRequests[index]['_isProcessing'] = false;
+        }
+      });
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
@@ -80,6 +128,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Future<void> _markAsRead(int notificationId) async {
     try {
       await _apiService.markNotificationAsRead(notificationId);
+      _realTimeService.notifyNotificationsUpdated();
       _loadData();
     } catch (_) {}
   }
@@ -99,6 +148,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         }
       }
     }
+    _realTimeService.notifyNotificationsUpdated();
     _loadData();
   }
 
@@ -221,6 +271,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final requester = request['requester'];
     final name = requester?['name'] ?? requester?['email'] ?? 'Unknown';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final requestId = request['id'].toString();
+    final isProcessing = request['_isProcessing'] == true;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -274,26 +326,38 @@ class _NotificationScreenState extends State<NotificationScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => _processJoinRequest(request['id'].toString(), false, name),
+                  onPressed: isProcessing ? null : () => _processJoinRequest(requestId, false, name),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFFC62828),
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Reject', style: TextStyle(fontSize: 13)),
+                  child: isProcessing 
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Reject', style: TextStyle(fontSize: 13)),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () => _processJoinRequest(request['id'].toString(), true, name),
+                  onPressed: isProcessing ? null : () => _processJoinRequest(requestId, true, name),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2E7D32),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Accept', style: TextStyle(fontSize: 13)),
+                  child: isProcessing
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Accept', style: TextStyle(fontSize: 13)),
                 ),
               ),
             ],
@@ -339,7 +403,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
 
     return GestureDetector(
-      onTap: isRead ? null : () => _markAsRead(notification['id'] is int ? notification['id'] : int.tryParse(notification['id'].toString()) ?? 0),
+      onTap: () => _handleNotificationTap(notification),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
@@ -389,6 +453,97 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleNotificationTap(dynamic notification) async {
+    final notificationId = notification['id'] is int
+        ? notification['id'] as int
+        : int.tryParse(notification['id'].toString());
+    if (notificationId != null && notification['is_read'] != true) {
+      await _markAsRead(notificationId);
+    }
+
+    final type = (notification['type'] ?? '').toString();
+    final data = _parseNotificationData(notification['data']);
+    final roomspaceId = (data['roomspace_id'] ?? '').toString();
+    if (roomspaceId.isNotEmpty) {
+      await _setActiveRoomspaceIfAvailable(roomspaceId);
+    }
+
+    if (!mounted) return;
+
+    switch (type) {
+      case 'PAYMENT_CLAIM':
+      case 'PAYMENT_CONFIRMED':
+      case 'PAYMENT_REJECTED':
+      case 'PAYMENT_REMINDER':
+      case 'PAYMENT_RECEIVED':
+        if (roomspaceId.isNotEmpty) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PaymentConfirmationScreen(roomspaceId: roomspaceId),
+            ),
+          );
+        }
+        return;
+      case 'EXPENSE_ADDED':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ExpenseHistoryScreen(
+              roomspaceId: roomspaceId.isNotEmpty ? roomspaceId : null,
+            ),
+          ),
+        );
+        return;
+      case 'EXPENSE_DELETION_REQUEST':
+      case 'EXPENSE_DELETION_APPROVED':
+      case 'EXPENSE_DELETION_REJECTED':
+        if (roomspaceId.isNotEmpty) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DeletionHistoryScreen(roomspaceId: roomspaceId),
+            ),
+          );
+        }
+        return;
+      case 'JOIN_ACCEPTED':
+      case 'JOIN_REJECTED':
+      case 'MEMBER_REMOVED':
+      case 'YOU_REMOVED_USER':
+      case 'OWNERSHIP_TRANSFERRED':
+        if (roomspaceId.isNotEmpty) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => WhoOwesWhoScreen(roomspaceId: roomspaceId),
+            ),
+          );
+        }
+        return;
+      default:
+        return;
+    }
+  }
+
+  Map<String, dynamic> _parseNotificationData(dynamic rawData) {
+    if (rawData is Map<String, dynamic>) return rawData;
+    if (rawData is String && rawData.isNotEmpty) {
+      try {
+        final parsed = jsonDecode(rawData);
+        if (parsed is Map<String, dynamic>) return parsed;
+      } catch (_) {}
+    }
+    return {};
+  }
+
+  Future<void> _setActiveRoomspaceIfAvailable(String roomspaceId) async {
+    try {
+      final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+      await provider.setActiveRoomspace(roomspaceId);
+    } catch (_) {}
   }
 
   Widget _buildPaymentNotificationCard(PaymentNotification payment, Color primaryColor) {

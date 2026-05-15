@@ -1,7 +1,6 @@
 import 'dart:developer';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../models/payment_notification.dart';
 import 'payment_notification_service.dart';
 import 'payment_parser_service.dart';
 

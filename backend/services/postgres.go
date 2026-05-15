@@ -1,14 +1,17 @@
 package services
 
 import (
+	"encoding/json"
 	"crypto/rand"
 	"errors"
 	"fmt"
 	"math/big"
 	"roomease/backend/config"
 	"roomease/backend/models"
+	"strings"
 	"time"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -39,17 +42,17 @@ func (s *PostgresService) GetUserByFirebaseUID(firebaseUID string) (*models.User
 	if config.DB == nil {
 		return nil, errors.New("database connection not available")
 	}
-	
+
 	var user models.User
 	result := config.DB.Where("firebase_uid = ?", firebaseUID).First(&user)
-	
+
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.New("user not found")
 		}
 		return nil, result.Error
 	}
-	
+
 	return &user, nil
 }
 
@@ -62,26 +65,32 @@ func (s *PostgresService) CreateUser(user *models.User) error {
 // UpdateUser updates an existing user
 func (s *PostgresService) UpdateUser(firebaseUID string, update *models.UpdateUserRequest) error {
 	updates := make(map[string]interface{})
-	
+
 	if update.Name != "" {
 		updates["name"] = update.Name
 	}
 	if update.Phone != "" {
 		updates["phone"] = update.Phone
 	}
-	
+	if update.QRImageURL != "" {
+		updates["qr_image_url"] = update.QRImageURL
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+
 	result := config.DB.Model(&models.User{}).
 		Where("firebase_uid = ?", firebaseUID).
 		Updates(updates)
-	
+
 	if result.Error != nil {
 		return result.Error
 	}
-	
+
 	if result.RowsAffected == 0 {
 		return errors.New("user not found")
 	}
-	
+
 	return nil
 }
 
@@ -91,14 +100,14 @@ func (s *PostgresService) UpdateUser(firebaseUID string, update *models.UpdateUs
 func (s *PostgresService) GetRoomspaceByID(id string) (*models.Roomspace, error) {
 	var roomspace models.Roomspace
 	result := config.DB.Preload("Members").Preload("Members.User").Where("id = ?", id).First(&roomspace)
-	
+
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.New("roomspace not found")
 		}
 		return nil, result.Error
 	}
-	
+
 	return &roomspace, nil
 }
 
@@ -110,7 +119,7 @@ func (s *PostgresService) CreateRoomspace(roomspace *models.Roomspace) error {
 			return err
 		}
 	}
-	
+
 	// Start a transaction
 	return config.DB.Transaction(func(tx *gorm.DB) error {
 		// Generate unique invite code
@@ -130,7 +139,7 @@ func (s *PostgresService) CreateRoomspace(roomspace *models.Roomspace) error {
 		if err := tx.Create(roomspace).Error; err != nil {
 			return err
 		}
-		
+
 		// Add creator as a member
 		member := models.RoomspaceMember{
 			RoomspaceID: roomspace.ID,
@@ -138,11 +147,11 @@ func (s *PostgresService) CreateRoomspace(roomspace *models.Roomspace) error {
 			Role:        models.RoleCreator,
 			JoinedAt:    time.Now(),
 		}
-		
+
 		if err := tx.Create(&member).Error; err != nil {
 			return err
 		}
-		
+
 		return nil
 	})
 }
@@ -150,20 +159,28 @@ func (s *PostgresService) CreateRoomspace(roomspace *models.Roomspace) error {
 // GetUserRoomspaces retrieves all roomspaces for a user
 func (s *PostgresService) GetUserRoomspaces(firebaseUID string) ([]models.Roomspace, error) {
 	var roomspaces []models.Roomspace
-	
+
 	result := config.DB.
 		Joins("JOIN roomspace_members ON roomspace_members.roomspace_id = roomspaces.id").
-		Where("roomspace_members.user_id = ?", firebaseUID).
+		Where("roomspace_members.user_id = ? AND roomspace_members.is_active = ?", firebaseUID, true).
 		Preload("Members", func(db *gorm.DB) *gorm.DB {
-			return db.Preload("User")
+			return db.Where("is_active = ?", true).Preload("User")
 		}).
+		Distinct("roomspaces.*").
 		Find(&roomspaces)
-	
+
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	return roomspaces, nil
+}
+
+func getRoomspaceLimitForPlan(plan string) int64 {
+	if strings.EqualFold(plan, "pro") {
+		return 10
+	}
+	return 2
 }
 
 // GetUserRoomspaceCount retrieves the count of active roomspaces for a user
@@ -172,11 +189,11 @@ func (s *PostgresService) GetUserRoomspaceCount(firebaseUID string) (int64, erro
 	err := config.DB.Model(&models.RoomspaceMember{}).
 		Where("user_id = ? AND is_active = ?", firebaseUID, true).
 		Count(&count).Error
-	
+
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return count, nil
 }
 
@@ -184,14 +201,14 @@ func (s *PostgresService) GetUserRoomspaceCount(firebaseUID string) (int64, erro
 func (s *PostgresService) GetRoomspaceByInviteCode(inviteCode string) (*models.Roomspace, error) {
 	var roomspace models.Roomspace
 	result := config.DB.Preload("Members").Preload("Members.User").Where("invite_code = ?", inviteCode).First(&roomspace)
-	
+
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.New("roomspace not found")
 		}
 		return nil, result.Error
 	}
-	
+
 	return &roomspace, nil
 }
 
@@ -252,12 +269,18 @@ func (s *PostgresService) LeaveRoomspace(roomspaceID string, userUID string) (*L
 
 	// Check if user is a member of this roomspace
 	var member models.RoomspaceMember
-	if err := config.DB.Where("roomspace_id = ? AND user_id = ? AND is_active = ?", 
+	if err := config.DB.Where("roomspace_id = ? AND user_id = ? AND is_active = ?",
 		roomspaceID, userUID, true).First(&member).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("you are not a member of this roomspace")
 		}
 		return nil, err
+	}
+
+	// Get leaving user's display name for member notifications
+	leavingUserName := "A member"
+	if leavingUser, err := s.GetUserByFirebaseUID(userUID); err == nil && leavingUser != nil && leavingUser.Name != "" {
+		leavingUserName = leavingUser.Name
 	}
 
 	// Check if user is the creator
@@ -279,6 +302,7 @@ func (s *PostgresService) LeaveRoomspace(roomspaceID string, userUID string) (*L
 	}()
 
 	result := &LeaveRoomspaceResult{}
+	var membersToNotify []string
 
 	if isCreator {
 		// Creator is leaving - need to handle ownership transfer
@@ -288,7 +312,7 @@ func (s *PostgresService) LeaveRoomspace(roomspaceID string, userUID string) (*L
 				tx.Rollback()
 				return nil, err
 			}
-			
+
 			// Remove all members (should just be the creator)
 			if err := tx.Where("roomspace_id = ?", roomspaceID).Delete(&models.RoomspaceMember{}).Error; err != nil {
 				tx.Rollback()
@@ -319,45 +343,114 @@ func (s *PostgresService) LeaveRoomspace(roomspaceID string, userUID string) (*L
 			}
 
 			// Update the new creator's role to creator
-			if err := tx.Model(&models.RoomspaceMember{}).
-				Where("roomspace_id = ? AND user_id = ?", roomspaceID, newCreator.UserID).
-				Update("role", "creator").Error; err != nil {
+			roleUpdate := tx.Model(&models.RoomspaceMember{}).
+				Where("roomspace_id = ? AND user_id = ? AND is_active = ?", roomspaceID, newCreator.UserID, true).
+				Update("role", "creator")
+			if roleUpdate.Error != nil {
 				tx.Rollback()
-				return nil, err
+				return nil, roleUpdate.Error
 			}
 
-			// Remove the old creator
-			if err := tx.Where("roomspace_id = ? AND user_id = ?", roomspaceID, userUID).
-				Delete(&models.RoomspaceMember{}).Error; err != nil {
+			// Remove old creator membership deterministically.
+			deactivateCreator := tx.Exec(
+				"DELETE FROM roomspace_members WHERE roomspace_id = ? AND user_id = ?",
+				roomspaceID,
+				userUID,
+			)
+			if deactivateCreator.Error != nil {
 				tx.Rollback()
-				return nil, err
+				return nil, deactivateCreator.Error
 			}
 
 			result.Message = "Left roomspace and transferred ownership"
 			result.OwnershipTransferred = true
 			result.NewCreatorID = &newCreator.UserID
+			for _, m := range allMembers {
+				if m.UserID != userUID {
+					membersToNotify = append(membersToNotify, m.UserID)
+				}
+			}
 
 			// Create notification for the new creator
 			newCreatorUser, _ := s.GetUserByFirebaseUID(newCreator.UserID)
 			if newCreatorUser != nil {
+				ownershipData, _ := json.Marshal(map[string]string{
+					"roomspace_id": roomspaceID,
+				})
 				notification := &models.Notification{
 					RecipientUID: newCreator.UserID,
 					Type:         models.NotificationTypeOwnershipTransferred,
 					Title:        "You're now the host",
 					Message:      "You are now the host of " + roomspace.Name,
+					Data:         string(ownershipData),
 				}
 				tx.Create(notification)
 			}
 		}
 	} else {
-		// Regular member leaving - just remove them
-		if err := tx.Where("roomspace_id = ? AND user_id = ?", roomspaceID, userUID).
-			Delete(&models.RoomspaceMember{}).Error; err != nil {
+		// Regular member leaving - remove membership deterministically.
+		deactivateMember := tx.Exec(
+			"DELETE FROM roomspace_members WHERE roomspace_id = ? AND user_id = ?",
+			roomspaceID,
+			userUID,
+		)
+		if deactivateMember.Error != nil {
+			tx.Rollback()
+			return nil, deactivateMember.Error
+		}
+
+		result.Message = "Successfully left roomspace"
+		for _, m := range allMembers {
+			if m.UserID != userUID {
+				membersToNotify = append(membersToNotify, m.UserID)
+			}
+		}
+	}
+
+	// Notify all remaining members that someone left (for activity visibility).
+	if len(membersToNotify) > 0 && !result.RoomspaceDeleted {
+		leftData, _ := json.Marshal(map[string]string{
+			"roomspace_id":  roomspaceID,
+			"left_user_uid": userUID,
+		})
+		for _, recipientUID := range membersToNotify {
+			notification := &models.Notification{
+				RecipientUID: recipientUID,
+				Type:         models.NotificationTypeMemberLeft,
+				Title:        "Member Left Roomspace",
+				Message:      leavingUserName + " left " + roomspace.Name,
+				Data:         string(leftData),
+			}
+			if err := tx.Create(notification).Error; err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+		}
+	}
+
+	// Final safety check: never report success if membership is still active.
+	if !result.RoomspaceDeleted {
+		// Defensive cleanup for legacy duplicate rows or inconsistent state.
+		if err := tx.Exec(
+			"DELETE FROM roomspace_members WHERE roomspace_id = ? AND user_id = ?",
+			roomspaceID,
+			userUID,
+		).Error; err != nil {
 			tx.Rollback()
 			return nil, err
 		}
 
-		result.Message = "Successfully left roomspace"
+		var activeMembershipCount int64
+		if err := tx.Model(&models.RoomspaceMember{}).
+			Where("roomspace_id = ? AND user_id = ? AND is_active = ?", roomspaceID, userUID, true).
+			Count(&activeMembershipCount).Error; err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+		if activeMembershipCount > 0 {
+			tx.Rollback()
+			return nil, errors.New("leave operation did not persist on server")
+		}
 	}
 
 	// Commit transaction
@@ -370,17 +463,24 @@ func (s *PostgresService) LeaveRoomspace(roomspaceID string, userUID string) (*L
 
 // CheckRoomspaceLimit verifies user hasn't exceeded 5 roomspace limit
 func (s *PostgresService) CheckRoomspaceLimit(userUID string) error {
-	var count int64
-	err := config.DB.Model(&models.RoomspaceMember{}).
-		Where("user_id = ? AND is_active = ?", userUID, true).
-		Count(&count).Error
-	
+	user, err := s.GetUserByFirebaseUID(userUID)
 	if err != nil {
 		return err
 	}
-	
-	if count >= 5 {
-		return errors.New("maximum roomspace limit (5) reached")
+
+	limit := getRoomspaceLimitForPlan(user.SubscriptionPlan)
+
+	var count int64
+	err = config.DB.Model(&models.RoomspaceMember{}).
+		Where("user_id = ? AND is_active = ?", userUID, true).
+		Count(&count).Error
+
+	if err != nil {
+		return err
+	}
+
+	if count >= limit {
+		return fmt.Errorf("maximum roomspace limit (%d) reached", limit)
 	}
 	return nil
 }
@@ -388,9 +488,9 @@ func (s *PostgresService) CheckRoomspaceLimit(userUID string) error {
 // ValidateRoomspaceMembership checks if user is member of requested roomspace
 func (s *PostgresService) ValidateRoomspaceMembership(userUID, roomspaceID string) error {
 	var member models.RoomspaceMember
-	err := config.DB.Where("user_id = ? AND roomspace_id = ? AND is_active = ?", 
+	err := config.DB.Where("user_id = ? AND roomspace_id = ? AND is_active = ?",
 		userUID, roomspaceID, true).First(&member).Error
-	
+
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("user is not a member of this roomspace")
@@ -406,7 +506,7 @@ func (s *PostgresService) AddMemberToRoomspace(roomspaceID string, firebaseUID s
 	if err := s.CheckRoomspaceLimit(firebaseUID); err != nil {
 		return err
 	}
-	
+
 	// Check if roomspace exists
 	var roomspace models.Roomspace
 	if err := config.DB.Where("id = ?", roomspaceID).First(&roomspace).Error; err != nil {
@@ -415,16 +515,16 @@ func (s *PostgresService) AddMemberToRoomspace(roomspaceID string, firebaseUID s
 		}
 		return err
 	}
-	
+
 	// Check if user is already a member
 	var existingMember models.RoomspaceMember
 	result := config.DB.Where("roomspace_id = ? AND user_id = ?", roomspaceID, firebaseUID).
 		First(&existingMember)
-	
+
 	if result.Error == nil {
 		return errors.New("user is already a member")
 	}
-	
+
 	// Add new member
 	member := models.RoomspaceMember{
 		RoomspaceID: roomspace.ID,
@@ -433,7 +533,7 @@ func (s *PostgresService) AddMemberToRoomspace(roomspaceID string, firebaseUID s
 		JoinedAt:    time.Now(),
 		IsActive:    true,
 	}
-	
+
 	return config.DB.Create(&member).Error
 }
 
@@ -445,7 +545,7 @@ func (s *PostgresService) CreateJoinRequest(roomspaceID string, requesterUID str
 	if err := s.CheckRoomspaceLimit(requesterUID); err != nil {
 		return nil, err
 	}
-	
+
 	// Check if roomspace exists
 	var roomspace models.Roomspace
 	if err := config.DB.Where("id = ?", roomspaceID).First(&roomspace).Error; err != nil {
@@ -454,25 +554,25 @@ func (s *PostgresService) CreateJoinRequest(roomspaceID string, requesterUID str
 		}
 		return nil, err
 	}
-	
+
 	// Check if user is already a member
 	var existingMember models.RoomspaceMember
 	result := config.DB.Where("roomspace_id = ? AND user_id = ?", roomspaceID, requesterUID).
 		First(&existingMember)
-	
+
 	if result.Error == nil {
 		return nil, errors.New("user is already a member")
 	}
-	
+
 	// Check if there's already a pending request
 	var existingRequest models.JoinRequest
-	result = config.DB.Where("roomspace_id = ? AND requester_id = ? AND status = ?", 
+	result = config.DB.Where("roomspace_id = ? AND requester_id = ? AND status = ?",
 		roomspaceID, requesterUID, models.StatusPending).First(&existingRequest)
-	
+
 	if result.Error == nil {
 		return nil, errors.New("user already has a pending join request")
 	}
-	
+
 	// Create new join request
 	joinRequest := models.JoinRequest{
 		RoomspaceID: roomspace.ID,
@@ -481,15 +581,15 @@ func (s *PostgresService) CreateJoinRequest(roomspaceID string, requesterUID str
 		RequestedAt: time.Now(),
 		ExpiresAt:   time.Now().Add(7 * 24 * time.Hour), // 7 days
 	}
-	
+
 	if message != "" {
 		joinRequest.Message = &message
 	}
-	
+
 	if err := config.DB.Create(&joinRequest).Error; err != nil {
 		return nil, err
 	}
-	
+
 	return &joinRequest, nil
 }
 
@@ -499,14 +599,14 @@ func (s *PostgresService) GetPendingJoinRequest(requesterUID string) (*models.Jo
 	result := config.DB.Preload("Roomspace").
 		Where("requester_id = ? AND status = ?", requesterUID, models.StatusPending).
 		First(&request)
-	
+
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.New("no pending join request found")
 		}
 		return nil, result.Error
 	}
-	
+
 	return &request, nil
 }
 
@@ -599,28 +699,31 @@ func (s *PostgresService) AutoMigrate() error {
 	// RoomspaceMember depends on both User and Roomspace
 	// JoinRequest depends on User and Roomspace
 	// Notification depends on User
-	
+
 	err := config.DB.AutoMigrate(
-		&models.User{},           // No dependencies
-		&models.Notification{},   // Depends on User (by UID string, no FK)
-		&models.Roomspace{},      // No dependencies (Members loaded via separate query)
-		&models.RoomspaceMember{}, // Depends on User and Roomspace
-		&models.JoinRequest{},    // Depends on User and Roomspace
-		&models.Expense{},        // Depends on Roomspace and User
-		&models.ExpenseSplit{},   // Depends on Expense and User
-		&models.PersonalExpense{}, // Depends on User only
-		&models.PaymentNotification{}, // Depends on User only
-		&models.AnalyticsCache{}, // Depends on User
-		&models.RecommendationFeedback{}, // Depends on User
-		&models.AnomalyAcknowledgment{}, // Depends on User and Expense
-		&models.MLModel{},        // No dependencies
-		&models.UserBalance{},    // Depends on User and Roomspace
-		&models.Settlement{},     // Depends on User and Roomspace
-		&models.PaymentConfirmation{}, // Depends on User and Roomspace
-		&models.RecurringExpenseTemplate{}, // Depends on Roomspace and User
+		&models.User{},                         // No dependencies
+		&models.Notification{},                 // Depends on User (by UID string, no FK)
+		&models.Roomspace{},                    // No dependencies (Members loaded via separate query)
+		&models.RoomspaceMember{},              // Depends on User and Roomspace
+		&models.JoinRequest{},                  // Depends on User and Roomspace
+		&models.Expense{},                      // Depends on Roomspace and User
+		&models.ExpenseSplit{},                 // Depends on Expense and User
+		&models.PersonalExpense{},              // Depends on User only
+		&models.PaymentNotification{},          // Depends on User only
+		&models.AnalyticsCache{},               // Depends on User
+		&models.RecommendationFeedback{},       // Depends on User
+		&models.AnomalyAcknowledgment{},        // Depends on User and Expense
+		&models.MLModel{},                      // No dependencies
+		&models.UserBalance{},                  // Depends on User and Roomspace
+		&models.Settlement{},                   // Depends on User and Roomspace
+		&models.PaymentConfirmation{},          // Depends on User and Roomspace
+		&models.RecurringExpenseTemplate{},     // Depends on Roomspace and User
 		&models.RecurringExpenseNotification{}, // Depends on RecurringExpenseTemplate
-		&models.SubscriptionPayment{}, // eSewa subscription payments
-		&models.BalanceSettlement{}, // eSewa balance settlements
+		&models.SubscriptionPayment{},          // eSewa subscription payments
+		&models.BalanceSettlement{},            // eSewa balance settlements
+		&models.ExpenseDeletionRequest{},       // Depends on Expense and User
+		&models.ExpenseDeletionApproval{},      // Depends on ExpenseDeletionRequest and User
+		&models.ExpenseHistory{},               // Depends on Roomspace and User
 	)
 	if err != nil {
 		return err
@@ -642,21 +745,43 @@ func (s *PostgresService) AutoMigrate() error {
 		}
 	}
 
+	// Ensure QR image URL column exists and backfill from legacy column names if present
+	if err := config.DB.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS qr_image_url TEXT`).Error; err != nil {
+		return err
+	}
+	if err := config.DB.Exec(`
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_name = 'users' AND column_name = 'q_r_image_url'
+	) THEN
+		UPDATE users
+		SET qr_image_url = COALESCE(NULLIF(qr_image_url, ''), q_r_image_url)
+		WHERE COALESCE(qr_image_url, '') = '' AND COALESCE(q_r_image_url, '') <> '';
+	END IF;
+END $$;
+`).Error; err != nil {
+		return err
+	}
+
 	return nil
 }
+
 // GetJoinRequestByID gets a join request by ID
 func (s *PostgresService) GetJoinRequestByID(id string) (*models.JoinRequest, error) {
 	var request models.JoinRequest
 	result := config.DB.Preload("Roomspace").Preload("Requester").
 		Where("id = ?", id).First(&request)
-	
+
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.New("join request not found")
 		}
 		return nil, result.Error
 	}
-	
+
 	return &request, nil
 }
 
@@ -670,7 +795,7 @@ func (s *PostgresService) CreateExpense(expense *models.Expense) error {
 	fmt.Printf("  Amount: %.2f\n", expense.Amount)
 	fmt.Printf("  PaidBy: %s\n", expense.PaidBy)
 	fmt.Printf("  Splits count: %d\n", len(expense.Splits))
-	
+
 	tx := config.DB.Begin()
 	if tx.Error != nil {
 		return fmt.Errorf("failed to begin transaction: %v", tx.Error)
@@ -687,23 +812,23 @@ func (s *PostgresService) CreateExpense(expense *models.Expense) error {
 		fmt.Printf("❌ Failed to create expense: %v\n", err)
 		return fmt.Errorf("failed to create expense: %v", err)
 	}
-	
+
 	fmt.Printf("✅ Expense created with ID: %s\n", expense.ID)
 
 	// Create the expense splits
 	for i := range expense.Splits {
-		expense.Splits[i].ID = 0  // Ensure ID is 0 for auto-increment
+		expense.Splits[i].ID = 0 // Ensure ID is 0 for auto-increment
 		expense.Splits[i].ExpenseID = expense.ID
-		
-		fmt.Printf("💰 Creating split %d: UserUID=%s, Amount=%.2f, ExpenseID=%s\n", 
+
+		fmt.Printf("💰 Creating split %d: UserUID=%s, Amount=%.2f, ExpenseID=%s\n",
 			i+1, expense.Splits[i].UserUID, expense.Splits[i].Amount, expense.Splits[i].ExpenseID)
-		
+
 		if err := tx.Create(&expense.Splits[i]).Error; err != nil {
 			tx.Rollback()
 			fmt.Printf("❌ Failed to create expense split %d: %v\n", i+1, err)
 			return fmt.Errorf("failed to create expense split: %v", err)
 		}
-		
+
 		fmt.Printf("✅ Split %d created with ID: %d\n", i+1, expense.Splits[i].ID)
 	}
 
@@ -719,13 +844,13 @@ func (s *PostgresService) CreateExpense(expense *models.Expense) error {
 // GetUserExpenses gets expenses for a user with proper roomspace filtering
 func (s *PostgresService) GetUserExpenses(userID string, roomspaceID string, limit, offset int) ([]models.Expense, error) {
 	var expenses []models.Expense
-	
+
 	// If roomspace_id is provided, validate user membership first
 	if roomspaceID != "" {
 		if err := s.ValidateRoomspaceMembership(userID, roomspaceID); err != nil {
 			return nil, fmt.Errorf("access denied: %v", err)
 		}
-		
+
 		// Get expenses for the specific roomspace where user is involved
 		query := config.DB.Preload("Payer").
 			Preload("Splits").
@@ -733,41 +858,41 @@ func (s *PostgresService) GetUserExpenses(userID string, roomspaceID string, lim
 			Where("roomspace_id = ?", roomspaceID).
 			Where("paid_by = ? OR id IN (SELECT expense_id FROM expense_splits WHERE user_uid = ?)", userID, userID).
 			Order("created_at DESC")
-		
+
 		if limit > 0 {
 			query = query.Limit(limit)
 		}
-		
+
 		if offset > 0 {
 			query = query.Offset(offset)
 		}
-		
+
 		err := query.Find(&expenses).Error
 		if err != nil {
 			return nil, fmt.Errorf("failed to get user expenses: %v", err)
 		}
-		
+
 		return expenses, nil
 	}
-	
+
 	// If no roomspace_id provided, get expenses from all user's roomspaces
 	// First, get all roomspaces the user is a member of
 	var memberRecords []models.RoomspaceMember
 	if err := config.DB.Where("user_id = ? AND is_active = ?", userID, true).Find(&memberRecords).Error; err != nil {
 		return nil, fmt.Errorf("failed to get user roomspaces: %v", err)
 	}
-	
+
 	// Extract roomspace IDs
 	var roomspaceIDs []string
 	for _, member := range memberRecords {
 		roomspaceIDs = append(roomspaceIDs, member.RoomspaceID.String())
 	}
-	
+
 	// If user has no roomspaces, return empty list
 	if len(roomspaceIDs) == 0 {
 		return []models.Expense{}, nil
 	}
-	
+
 	// Get expenses from user's roomspaces where user is involved
 	query := config.DB.Preload("Payer").
 		Preload("Splits").
@@ -775,40 +900,40 @@ func (s *PostgresService) GetUserExpenses(userID string, roomspaceID string, lim
 		Where("roomspace_id IN ?", roomspaceIDs).
 		Where("paid_by = ? OR id IN (SELECT expense_id FROM expense_splits WHERE user_uid = ?)", userID, userID).
 		Order("created_at DESC")
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	if offset > 0 {
 		query = query.Offset(offset)
 	}
-	
+
 	err := query.Find(&expenses).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user expenses: %v", err)
 	}
-	
+
 	return expenses, nil
 }
 
 // GetExpenseByID gets an expense by ID
 func (s *PostgresService) GetExpenseByID(id uint) (*models.Expense, error) {
 	var expense models.Expense
-	
+
 	err := config.DB.Where("id = ?", id).
 		Preload("Payer").
 		Preload("Splits").
 		Preload("Splits.User").
 		First(&expense).Error
-	
+
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("expense not found")
 		}
 		return nil, fmt.Errorf("failed to get expense: %v", err)
 	}
-	
+
 	return &expense, nil
 }
 
@@ -817,9 +942,9 @@ func (s *PostgresService) GetExpenseByID(id uint) (*models.Expense, error) {
 // Optional month/year filtering: if year and month are provided (> 0), filters by that month
 func (s *PostgresService) GetRoomspaceExpenses(roomspaceID string, limit, offset int, year, month int) ([]models.Expense, error) {
 	var expenses []models.Expense
-	
+
 	query := config.DB.Where("roomspace_id = ?", roomspaceID)
-	
+
 	// Add month/year filtering if provided
 	if year > 0 && month > 0 {
 		// Filter by year and month using EXTRACT
@@ -828,25 +953,25 @@ func (s *PostgresService) GetRoomspaceExpenses(roomspaceID string, limit, offset
 		// Filter by year only
 		query = query.Where("EXTRACT(YEAR FROM created_at) = ?", year)
 	}
-	
+
 	query = query.Preload("Payer").
 		Preload("Splits").
 		Preload("Splits.User").
 		Order("created_at DESC")
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	if offset > 0 {
 		query = query.Offset(offset)
 	}
-	
+
 	err := query.Find(&expenses).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to get roomspace expenses: %v", err)
 	}
-	
+
 	return expenses, nil
 }
 
@@ -855,27 +980,27 @@ func (s *PostgresService) GetRoomspaceExpenses(roomspaceID string, limit, offset
 // Optional month/year filtering: if year and month are provided (> 0), filters by that month
 func (s *PostgresService) GetRecentExpenses(roomspaceID string, limit int, year, month int) ([]models.Expense, error) {
 	var expenses []models.Expense
-	
+
 	query := config.DB.Where("roomspace_id = ?", roomspaceID)
-	
+
 	// Add month/year filtering if provided
 	if year > 0 && month > 0 {
 		query = query.Where("EXTRACT(YEAR FROM created_at) = ? AND EXTRACT(MONTH FROM created_at) = ?", year, month)
 	} else if year > 0 {
 		query = query.Where("EXTRACT(YEAR FROM created_at) = ?", year)
 	}
-	
+
 	err := query.Preload("Payer").
 		Preload("Splits").
 		Preload("Splits.User").
 		Order("created_at DESC").
 		Limit(limit).
 		Find(&expenses).Error
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recent expenses: %v", err)
 	}
-	
+
 	return expenses, nil
 }
 
@@ -885,7 +1010,7 @@ func (s *PostgresService) GetExpensesByRoomspaceWithValidation(userID, roomspace
 	if err := s.ValidateRoomspaceMembership(userID, roomspaceID); err != nil {
 		return nil, fmt.Errorf("access denied: %v", err)
 	}
-	
+
 	// Get expenses for the roomspace
 	return s.GetRoomspaceExpenses(roomspaceID, limit, offset, year, month)
 }
@@ -916,9 +1041,9 @@ func (s *PostgresService) UpdateExpense(expense *models.Expense) error {
 
 	// Create new splits
 	for i := range expense.Splits {
-		expense.Splits[i].ID = 0  // Ensure ID is 0 for auto-increment
+		expense.Splits[i].ID = 0 // Ensure ID is 0 for auto-increment
 		expense.Splits[i].ExpenseID = expense.ID
-		
+
 		if err := tx.Create(&expense.Splits[i]).Error; err != nil {
 			tx.Rollback()
 			return fmt.Errorf("failed to create expense split: %v", err)
@@ -973,44 +1098,44 @@ func (s *PostgresService) CreatePersonalExpense(expense *models.PersonalExpense)
 // Optional month/year filtering: if year and month are provided (> 0), filters by that month
 func (s *PostgresService) GetPersonalExpenses(userUID string, limit, offset int, year, month int) ([]models.PersonalExpense, error) {
 	var expenses []models.PersonalExpense
-	
+
 	query := config.DB.Where("user_uid = ?", userUID)
-	
+
 	// Add month/year filtering if provided
 	if year > 0 && month > 0 {
 		query = query.Where("EXTRACT(YEAR FROM created_at) = ? AND EXTRACT(MONTH FROM created_at) = ?", year, month)
 	} else if year > 0 {
 		query = query.Where("EXTRACT(YEAR FROM created_at) = ?", year)
 	}
-	
+
 	query = query.Order("created_at DESC")
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	if offset > 0 {
 		query = query.Offset(offset)
 	}
-	
+
 	if err := query.Find(&expenses).Error; err != nil {
 		return nil, fmt.Errorf("failed to get personal expenses: %v", err)
 	}
-	
+
 	return expenses, nil
 }
 
 // GetPersonalExpenseByID gets a personal expense by ID
 func (s *PostgresService) GetPersonalExpenseByID(id uint) (*models.PersonalExpense, error) {
 	var expense models.PersonalExpense
-	
+
 	if err := config.DB.First(&expense, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("personal expense not found")
 		}
 		return nil, fmt.Errorf("failed to get personal expense: %v", err)
 	}
-	
+
 	return &expense, nil
 }
 
@@ -1019,17 +1144,17 @@ func (s *PostgresService) DeletePersonalExpense(id uint) error {
 	if err := config.DB.Delete(&models.PersonalExpense{}, id).Error; err != nil {
 		return fmt.Errorf("failed to delete personal expense: %v", err)
 	}
-	
+
 	return nil
 }
 
 // ManualSchemaFix fixes schema inconsistencies between database and models
 func (s *PostgresService) ManualSchemaFix() error {
 	fmt.Println("Running manual schema fixes...")
-	
+
 	// Check if created_by column exists and creator_id doesn't
 	var createdByExists, creatorIdExists bool
-	
+
 	config.DB.Raw(`
 		SELECT EXISTS (
 			SELECT 1 FROM information_schema.columns 
@@ -1037,7 +1162,7 @@ func (s *PostgresService) ManualSchemaFix() error {
 			AND column_name = 'created_by'
 		)
 	`).Row().Scan(&createdByExists)
-	
+
 	config.DB.Raw(`
 		SELECT EXISTS (
 			SELECT 1 FROM information_schema.columns 
@@ -1045,7 +1170,7 @@ func (s *PostgresService) ManualSchemaFix() error {
 			AND column_name = 'creator_id'
 		)
 	`).Row().Scan(&creatorIdExists)
-	
+
 	if createdByExists && !creatorIdExists {
 		fmt.Println("Renaming created_by to creator_id in roomspaces table...")
 		if err := config.DB.Exec("ALTER TABLE roomspaces RENAME COLUMN created_by TO creator_id").Error; err != nil {
@@ -1053,10 +1178,10 @@ func (s *PostgresService) ManualSchemaFix() error {
 		}
 		fmt.Println("Successfully renamed created_by to creator_id")
 	}
-	
+
 	// Check if roomspace_members table has firebase_uid instead of user_id
 	var firebaseUidExists, userIdExists bool
-	
+
 	config.DB.Raw(`
 		SELECT EXISTS (
 			SELECT 1 FROM information_schema.columns 
@@ -1064,7 +1189,7 @@ func (s *PostgresService) ManualSchemaFix() error {
 			AND column_name = 'firebase_uid'
 		)
 	`).Row().Scan(&firebaseUidExists)
-	
+
 	config.DB.Raw(`
 		SELECT EXISTS (
 			SELECT 1 FROM information_schema.columns 
@@ -1072,7 +1197,7 @@ func (s *PostgresService) ManualSchemaFix() error {
 			AND column_name = 'user_id'
 		)
 	`).Row().Scan(&userIdExists)
-	
+
 	if firebaseUidExists && !userIdExists {
 		fmt.Println("Renaming firebase_uid to user_id in roomspace_members table...")
 		if err := config.DB.Exec("ALTER TABLE roomspace_members RENAME COLUMN firebase_uid TO user_id").Error; err != nil {
@@ -1080,10 +1205,11 @@ func (s *PostgresService) ManualSchemaFix() error {
 		}
 		fmt.Println("Successfully renamed firebase_uid to user_id")
 	}
-	
+
 	fmt.Println("Manual schema fixes completed")
 	return nil
 }
+
 // Payment Notification Operations
 
 // CreatePaymentNotification creates a new payment notification
@@ -1097,36 +1223,36 @@ func (s *PostgresService) CreatePaymentNotification(notification *models.Payment
 // GetPaymentNotifications gets payment notifications for a user
 func (s *PostgresService) GetPaymentNotifications(userUID string, limit, offset int) ([]models.PaymentNotification, error) {
 	var notifications []models.PaymentNotification
-	
+
 	query := config.DB.Where("user_uid = ?", userUID).
 		Order("timestamp DESC")
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	if offset > 0 {
 		query = query.Offset(offset)
 	}
-	
+
 	if err := query.Find(&notifications).Error; err != nil {
 		return nil, fmt.Errorf("failed to get payment notifications: %v", err)
 	}
-	
+
 	return notifications, nil
 }
 
 // GetPaymentNotificationByID gets a payment notification by ID
 func (s *PostgresService) GetPaymentNotificationByID(id uint) (*models.PaymentNotification, error) {
 	var notification models.PaymentNotification
-	
+
 	if err := config.DB.First(&notification, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("payment notification not found")
 		}
 		return nil, fmt.Errorf("failed to get payment notification: %v", err)
 	}
-	
+
 	return &notification, nil
 }
 
@@ -1135,15 +1261,15 @@ func (s *PostgresService) UpdatePaymentNotification(id uint, updates map[string]
 	result := config.DB.Model(&models.PaymentNotification{}).
 		Where("id = ?", id).
 		Updates(updates)
-	
+
 	if result.Error != nil {
 		return fmt.Errorf("failed to update payment notification: %v", result.Error)
 	}
-	
+
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("payment notification not found")
 	}
-	
+
 	return nil
 }
 
@@ -1152,7 +1278,7 @@ func (s *PostgresService) DeletePaymentNotification(id uint) error {
 	if err := config.DB.Delete(&models.PaymentNotification{}, id).Error; err != nil {
 		return fmt.Errorf("failed to delete payment notification: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -1161,11 +1287,11 @@ func (s *PostgresService) MarkPaymentNotificationAsProcessed(id uint, expenseID 
 	updates := map[string]interface{}{
 		"is_processed": true,
 	}
-	
+
 	if expenseID != nil {
 		updates["expense_id"] = *expenseID
 	}
-	
+
 	return s.UpdatePaymentNotification(id, updates)
 }
 
@@ -1223,7 +1349,7 @@ func (s *PostgresService) UpdateUserSubscription(userID, planID string) error {
 		Updates(map[string]interface{}{
 			"subscription_plan":   planID,
 			"subscription_expiry": expiryDate,
-			"updated_at":         time.Now(),
+			"updated_at":          time.Now(),
 		})
 
 	if result.Error != nil {
@@ -1417,4 +1543,303 @@ func (s *PostgresService) IsUserMemberOfRoomspace(userID, roomspaceID string) (b
 		Count(&count).Error
 
 	return count > 0, err
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// EXPENSE DELETION REQUEST OPERATIONS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// CreateDeletionRequest creates a new expense deletion request
+func (s *PostgresService) CreateDeletionRequest(request *models.ExpenseDeletionRequest) error {
+	if config.DB == nil {
+		return errors.New("database connection not available")
+	}
+
+	result := config.DB.Create(request)
+	return result.Error
+}
+
+// GetDeletionRequestByID gets a deletion request by ID
+func (s *PostgresService) GetDeletionRequestByID(id uint) (*models.ExpenseDeletionRequest, error) {
+	if config.DB == nil {
+		return nil, errors.New("database connection not available")
+	}
+
+	var request models.ExpenseDeletionRequest
+	err := config.DB.Preload("Expense").
+		Preload("Expense.Payer").
+		Preload("Expense.Splits").
+		Preload("Expense.Splits.User").
+		Preload("Requester").
+		Preload("Approvals").
+		Preload("Approvals.User").
+		Where("id = ?", id).
+		First(&request).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("deletion request not found")
+		}
+		return nil, err
+	}
+
+	return &request, nil
+}
+
+// GetPendingDeletionRequest gets a pending deletion request for an expense
+func (s *PostgresService) GetPendingDeletionRequest(expenseID uint) (*models.ExpenseDeletionRequest, error) {
+	if config.DB == nil {
+		return nil, errors.New("database connection not available")
+	}
+
+	var request models.ExpenseDeletionRequest
+	err := config.DB.Preload("Expense").
+		Preload("Expense.Payer").
+		Preload("Expense.Splits").
+		Preload("Expense.Splits.User").
+		Preload("Requester").
+		Preload("Approvals").
+		Preload("Approvals.User").
+		Where("expense_id = ? AND status = ?", expenseID, "pending").
+		First(&request).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil // No pending request found
+		}
+		return nil, err
+	}
+
+	return &request, nil
+}
+
+// GetPendingDeletionRequestsForUser gets all pending deletion requests where user needs to respond
+func (s *PostgresService) GetPendingDeletionRequestsForUser(userUID string) ([]models.ExpenseDeletionRequest, error) {
+	if config.DB == nil {
+		return nil, errors.New("database connection not available")
+	}
+
+	var requests []models.ExpenseDeletionRequest
+
+	// Get all pending deletion requests where:
+	// 1. User is part of the expense (paid or in splits)
+	// 2. User hasn't responded yet
+	err := config.DB.Preload("Expense").
+		Preload("Expense.Payer").
+		Preload("Expense.Splits").
+		Preload("Expense.Splits.User").
+		Preload("Requester").
+		Preload("Approvals").
+		Preload("Approvals.User").
+		Where("status = ?", "pending").
+		Where("id IN (?", config.DB.Table("expense_deletion_requests").
+			Select("expense_deletion_requests.id").
+			Joins("JOIN expenses ON expenses.id = expense_deletion_requests.expense_id").
+			Joins("LEFT JOIN expense_splits ON expense_splits.expense_id = expenses.id").
+			Where("expenses.paid_by = ? OR expense_splits.user_uid = ?", userUID, userUID).
+			Where("expense_deletion_requests.id NOT IN (?", config.DB.Table("expense_deletion_approvals").
+				Select("deletion_request_id").
+				Where("user_uid = ?", userUID),
+			),
+		).
+		Order("created_at DESC").
+		Find(&requests).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return requests, nil
+}
+
+// CreateDeletionApproval creates a new deletion approval/rejection
+func (s *PostgresService) CreateDeletionApproval(approval *models.ExpenseDeletionApproval) error {
+	if config.DB == nil {
+		return errors.New("database connection not available")
+	}
+
+	approval.RespondedAt = time.Now()
+	result := config.DB.Create(approval)
+	return result.Error
+}
+
+// GetDeletionApprovals gets all approvals for a deletion request
+func (s *PostgresService) GetDeletionApprovals(requestID uint) ([]models.ExpenseDeletionApproval, error) {
+	if config.DB == nil {
+		return nil, errors.New("database connection not available")
+	}
+
+	var approvals []models.ExpenseDeletionApproval
+	err := config.DB.Preload("User").
+		Where("deletion_request_id = ?", requestID).
+		Order("responded_at ASC").
+		Find(&approvals).Error
+
+	return approvals, err
+}
+
+// HasUserRespondedToDeletion checks if a user has already responded to a deletion request
+func (s *PostgresService) HasUserRespondedToDeletion(requestID uint, userUID string) (bool, error) {
+	if config.DB == nil {
+		return false, errors.New("database connection not available")
+	}
+
+	var count int64
+	err := config.DB.Model(&models.ExpenseDeletionApproval{}).
+		Where("deletion_request_id = ? AND user_uid = ?", requestID, userUID).
+		Count(&count).Error
+
+	return count > 0, err
+}
+
+// UpdateDeletionRequest updates a deletion request
+func (s *PostgresService) UpdateDeletionRequest(request *models.ExpenseDeletionRequest) error {
+	if config.DB == nil {
+		return errors.New("database connection not available")
+	}
+
+	result := config.DB.Save(request)
+	return result.Error
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+// EXPENSE HISTORY OPERATIONS
+// ═══════════════════════════════════════════════════════════════════════════════════
+
+// CreateExpenseHistory creates a new expense history entry
+func (s *PostgresService) CreateExpenseHistory(history *models.ExpenseHistory) error {
+	if config.DB == nil {
+		return errors.New("database connection not available")
+	}
+
+	// Get user name if not provided
+	if history.PerformedByName == "" {
+		user, err := s.GetUserByFirebaseUID(history.PerformedBy)
+		if err == nil && user != nil {
+			history.PerformedByName = user.Name
+		}
+	}
+
+	result := config.DB.Create(history)
+	return result.Error
+}
+
+// GetRoomspaceHistory retrieves expense history for a roomspace
+func (s *PostgresService) GetRoomspaceHistory(roomspaceID string, limit, offset int) ([]models.ExpenseHistory, error) {
+	if config.DB == nil {
+		return nil, errors.New("database connection not available")
+	}
+
+	var history []models.ExpenseHistory
+
+	query := config.DB.Where("roomspace_id = ?", roomspaceID).
+		Order("timestamp DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+
+	err := query.Find(&history).Error
+	return history, err
+}
+
+// GetRecentHistory retrieves recent history entries
+func (s *PostgresService) GetRecentHistory(roomspaceID string, limit int) ([]models.ExpenseHistory, error) {
+	return s.GetRoomspaceHistory(roomspaceID, limit, 0)
+}
+
+// LogExpenseCreated logs expense creation to history
+func (s *PostgresService) LogExpenseCreated(roomspaceID string, expense *models.Expense, createdBy string) error {
+	history := &models.ExpenseHistory{
+		RoomspaceID: roomspaceID,
+		Type:        models.HistoryTypeExpenseCreated,
+		Title:       expense.Title,
+		Description: fmt.Sprintf("Created expense \"%s\" for Rs. %.2f", expense.Title, expense.Amount),
+		PerformedBy: createdBy,
+		Amount:      &expense.Amount,
+		Metadata: datatypes.JSONMap{
+			"expense_id": expense.ID,
+		},
+		Timestamp: time.Now(),
+	}
+
+	return s.CreateExpenseHistory(history)
+}
+
+// LogExpenseEdited logs expense edit to history
+func (s *PostgresService) LogExpenseEdited(roomspaceID string, expense *models.Expense, editedBy string) error {
+	history := &models.ExpenseHistory{
+		RoomspaceID: roomspaceID,
+		Type:        models.HistoryTypeExpenseEdited,
+		Title:       expense.Title,
+		Description: fmt.Sprintf("Edited expense \"%s\"", expense.Title),
+		PerformedBy: editedBy,
+		Amount:      &expense.Amount,
+		Metadata: datatypes.JSONMap{
+			"expense_id": expense.ID,
+		},
+		Timestamp: time.Now(),
+	}
+
+	return s.CreateExpenseHistory(history)
+}
+
+// LogExpenseDeleted logs expense deletion to history
+func (s *PostgresService) LogExpenseDeleted(roomspaceID string, expenseID uint, title string, amount float64, deletedBy string) error {
+	history := &models.ExpenseHistory{
+		RoomspaceID: roomspaceID,
+		Type:        models.HistoryTypeExpenseDeleted,
+		Title:       title,
+		Description: fmt.Sprintf("Deleted expense \"%s\" (Rs. %.2f)", title, amount),
+		PerformedBy: deletedBy,
+		Amount:      &amount,
+		Metadata: datatypes.JSONMap{
+			"expense_id": expenseID,
+		},
+		Timestamp: time.Now(),
+	}
+
+	return s.CreateExpenseHistory(history)
+}
+
+// LogPaymentConfirmed logs payment confirmation to history
+func (s *PostgresService) LogPaymentConfirmed(roomspaceID, fromUser, toUser string, amount float64, confirmedBy string) error {
+	history := &models.ExpenseHistory{
+		RoomspaceID: roomspaceID,
+		Type:        models.HistoryTypePaymentConfirmed,
+		Title:       "Payment Confirmed",
+		Description: fmt.Sprintf("Payment of Rs. %.2f confirmed", amount),
+		PerformedBy: confirmedBy,
+		Amount:      &amount,
+		Metadata: datatypes.JSONMap{
+			"from_user": fromUser,
+			"to_user":   toUser,
+		},
+		Timestamp: time.Now(),
+	}
+
+	return s.CreateExpenseHistory(history)
+}
+
+// LogSettlement logs settlement to history
+func (s *PostgresService) LogSettlement(roomspaceID, fromUser, toUser string, amount float64, settledBy string) error {
+	history := &models.ExpenseHistory{
+		RoomspaceID: roomspaceID,
+		Type:        models.HistoryTypeSettlementMade,
+		Title:       "Settlement Made",
+		Description: fmt.Sprintf("Settled Rs. %.2f", amount),
+		PerformedBy: settledBy,
+		Amount:      &amount,
+		Metadata: datatypes.JSONMap{
+			"from_user": fromUser,
+			"to_user":   toUser,
+		},
+		Timestamp: time.Now(),
+	}
+
+	return s.CreateExpenseHistory(history)
 }

@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../../services/api_service.dart';
+import '../../../services/real_time_data_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
 import '../../../core/widgets/global_roomspace_selector.dart';
 import '../../../core/mixins/auto_refresh_mixin.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/utils/subscription_helper.dart';
+import 'dart:async';
 
 /// Roomspace Details screen — view and manage members, share invite codes, and see room metadata.
 class RoomspaceDetailsScreen extends StatefulWidget {
@@ -20,36 +22,64 @@ class RoomspaceDetailsScreen extends StatefulWidget {
 
 class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with AutoRefreshMixin {
   final ApiService _apiService = ApiService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
   bool _isLoading = true;
   Map<String, dynamic>? _roomspace;
   List<dynamic> _members = [];
+  List<dynamic> _joinRequests = [];
   String? _error;
   String? _currentUserUid;
   bool _isCreator = false;
+  StreamSubscription<JoinRequestUpdateEvent>? _joinRequestSubscription;
+  StreamSubscription<MemberUpdateEvent>? _memberUpdateSubscription;
+  String? _lastActiveRoomspaceId;
 
   @override
   void initState() {
     super.initState();
     _currentUserUid = FirebaseAuth.instance.currentUser?.uid;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDetails());
-    
-    // Listen for roomspace changes to reload data
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadDetails();
+      // Store the initial active roomspace ID
       final provider = Provider.of<RoomspaceProvider>(context, listen: false);
-      provider.addListener(_onRoomspaceChanged);
+      _lastActiveRoomspaceId = provider.getActiveRoomspaceId();
+    });
+
+    _setupRealTimeListeners();
+  }
+  
+  void _setupRealTimeListeners() {
+    // Listen for join request updates
+    _joinRequestSubscription = _realTimeService.joinRequestUpdates.listen((event) {
+      debugPrint('🔄 RoomspaceDetails: Join request update received');
+      _loadDetails();
+    });
+    
+    // Listen for member updates
+    _memberUpdateSubscription = _realTimeService.memberUpdates.listen((event) {
+      debugPrint('🔄 RoomspaceDetails: Member update received');
+      final currentRoomspaceId = _roomspace?['id']?.toString();
+      if (currentRoomspaceId == event.roomspaceId) {
+        _loadDetails();
+      }
     });
   }
   
   @override
   void dispose() {
-    final provider = Provider.of<RoomspaceProvider>(context, listen: false);
-    provider.removeListener(_onRoomspaceChanged);
+    _joinRequestSubscription?.cancel();
+    _memberUpdateSubscription?.cancel();
     super.dispose();
   }
   
-  void _onRoomspaceChanged() {
-    // Reload details when roomspace changes
-    if (mounted) {
+  // Check if active roomspace changed and reload if needed
+  void _checkActiveRoomspaceChanged() {
+    final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final newActiveId = provider.getActiveRoomspaceId();
+    
+    if (newActiveId != _lastActiveRoomspaceId) {
+      debugPrint('🔄 RoomspaceDetails: Active roomspace changed from $_lastActiveRoomspaceId to $newActiveId');
+      _lastActiveRoomspaceId = newActiveId;
       _loadDetails();
     }
   }
@@ -58,29 +88,45 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
     setState(() => _isLoading = true);
     try {
       final provider = Provider.of<RoomspaceProvider>(context, listen: false);
-      final activeId = provider.getActiveRoomspaceId();
-      
-      // If no active roomspace, check if user has any roomspaces at all
-      if (activeId == null) {
-        // User is in Personal Space mode - this is valid, don't redirect
-        // Just show empty state in the UI
+      await provider.loadRoomspaces(forceRefresh: true);
+
+      if (provider.roomspaces.isEmpty) {
         setState(() {
           _roomspace = null;
           _members = [];
+          _joinRequests = [];
           _isCreator = false;
           _isLoading = false;
         });
         return;
       }
-      
-      final res = await _apiService.getRoomspaces();
-      if (res['success'] == true && res['data'] != null) {
-        final list = res['data'] as List<dynamic>;
-        final active = list.firstWhere((rs) => rs['id'] == activeId, orElse: () => list.isNotEmpty ? list[0] : null);
-        if (active != null) {
+
+      String? activeId = provider.getActiveRoomspaceId();
+      if (activeId == null) {
+        activeId = provider.roomspaces.first.id;
+        await provider.setActiveRoomspace(activeId);
+      }
+
+      final detailsRes = await _apiService.get('/api/roomspaces/$activeId');
+      if (detailsRes['success'] == true && detailsRes['data'] != null) {
+        final active = detailsRes['data'] as Map<String, dynamic>;
+        if (active.isNotEmpty) {
+          // Load join requests for this roomspace
+          List<dynamic> joinRequests = [];
+          try {
+            final joinRequestsRes = await _apiService.getJoinRequests();
+            if (joinRequestsRes['success'] == true && joinRequestsRes['data'] != null) {
+              joinRequests = joinRequestsRes['data'] as List<dynamic>;
+            }
+          } catch (e) {
+            print('Error loading join requests: $e');
+            // Continue even if join requests fail to load
+          }
+          
           setState(() {
             _roomspace = active;
             _members = _roomspace?['members'] ?? [];
+            _joinRequests = joinRequests;
             _isCreator = _roomspace?['creator_id'] == _currentUserUid;
             _isLoading = false;
           });
@@ -90,16 +136,17 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
           print('   Current User UID: $_currentUserUid');
           print('   Creator ID: ${_roomspace?['creator_id']}');
           print('   Is Creator: $_isCreator');
+          print('   Join Requests: ${_joinRequests.length}');
           print('   Roomspace Data: ${_roomspace?.keys}');
-        } else {
-          // Roomspace not found, show empty state
-          setState(() {
-            _roomspace = null;
-            _members = [];
-            _isCreator = false;
-            _isLoading = false;
-          });
         }
+      } else {
+        setState(() {
+          _roomspace = null;
+          _members = [];
+          _joinRequests = [];
+          _isCreator = false;
+          _isLoading = false;
+        });
       }
     } catch (e) {
       setState(() { _error = e.toString(); _isLoading = false; });
@@ -123,11 +170,50 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
     
     await performOperationWithRefresh(
       () async {
-        await _apiService.removeMemberFromRoomspace(_roomspace?['id'], uid);
+        final roomspaceId = _roomspace?['id']?.toString();
+        if (roomspaceId == null) {
+          throw Exception('Roomspace ID not found');
+        }
+        await _apiService.removeMemberFromRoomspace(roomspaceId, uid);
+        
+        // Force reload roomspaces in provider to update member count
+        final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+        await provider.loadRoomspaces(forceRefresh: true);
       },
       successMessage: 'Removed $name from the room',
       errorMessage: 'Failed to remove member',
     );
+  }
+
+  Future<void> _processJoinRequest(String requestId, bool accept, String name) async {
+    try {
+      await _apiService.processJoinRequest(requestId, accept);
+      
+      // Notify real-time service
+      _realTimeService.notifyJoinRequestProcessed(requestId, accept);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              accept ? '$name has been added!' : 'Request rejected',
+            ),
+          ),
+        );
+        // Reload details to update join requests and members
+        await _loadDetails();
+        
+        // Also reload roomspaces in provider to update member count
+        final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+        await provider.loadRoomspaces(forceRefresh: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -273,16 +359,27 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
     print('✅ User confirmed, proceeding to leave roomspace');
     setState(() => _isLoading = true);
     try {
-      print('📡 Calling provider.leaveRoomspace with ID: $roomspaceId');
+      final roomspaceIdStr = roomspaceId.toString();
+      print('📡 Calling provider.leaveRoomspace with ID: $roomspaceIdStr');
       final provider = Provider.of<RoomspaceProvider>(context, listen: false);
-      await provider.leaveRoomspace(_roomspace?['id']);
+      await provider.leaveRoomspace(roomspaceIdStr);
       
       print('✅ Successfully left roomspace');
       
       // Reload roomspaces to update the UI everywhere
       await provider.loadRoomspaces(forceRefresh: true);
+      final stillMember = provider.roomspaces.any((r) => r.id == roomspaceIdStr);
+      if (stillMember) {
+        throw Exception('Leave operation did not persist on server. Please try again.');
+      }
+
+      // Ensure we are no longer bound to the old active roomspace context.
+      if (provider.getActiveRoomspaceId() == roomspaceIdStr) {
+        await provider.switchToPersonalSpace();
+      }
       
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -293,9 +390,22 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
           ),
         );
         
-        // Navigate back to home - just pop all the way back to root
-        // Don't use pushNamedAndRemoveUntil as it might trigger logout
+        // Navigate back to home first
         Navigator.of(context).popUntil((route) => route.isFirst);
+        
+        // If there's a new active roomspace, navigate to its details
+        // Use a small delay to ensure the home screen is fully loaded
+        final newActiveRoomspace = provider.activeRoomspace;
+        if (newActiveRoomspace != null) {
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              Navigator.of(context).pushReplacementNamed(
+                '/roomspace-details',
+                arguments: {'id': newActiveRoomspace.id},
+              );
+            }
+          });
+        }
       }
     } catch (e) {
       print('❌ Error leaving roomspace: $e');
@@ -367,7 +477,7 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
                         ),
                       ],
                     ),
-                  )).toList(),
+                  )),
                   if (debts.length > 1) ...[
                     const Divider(height: 16),
                     Row(
@@ -436,15 +546,24 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return MobileScaffold(
-      currentIndex: 1,
-      showAppBar: false,
-      showBottomNav: false, // Hide bottom nav since MainNavigation handles it
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: primaryColor))
-          : _error != null
-              ? _buildError()
-              : _buildContent(primaryColor),
+    return Consumer<RoomspaceProvider>(
+      builder: (context, provider, child) {
+        // Check if active roomspace changed
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _checkActiveRoomspaceChanged();
+        });
+        
+        return MobileScaffold(
+          currentIndex: 1,
+          showAppBar: false,
+          showBottomNav: false, // Hide bottom nav since MainNavigation handles it
+          body: _isLoading
+              ? Center(child: CircularProgressIndicator(color: primaryColor))
+              : _error != null
+                  ? _buildError()
+                  : _buildContent(primaryColor),
+        );
+      },
     );
   }
 
@@ -489,8 +608,15 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
                 const SizedBox(height: 24),
                 _buildInviteSection(primary),
                 const SizedBox(height: 32),
+                // Join Requests Section (only show if there are pending requests)
+                if (_joinRequests.isNotEmpty) ...[
+                  _buildSectionTitle('PENDING JOIN REQUESTS (${_joinRequests.length})'),
+                  const SizedBox(height: 12),
+                  _buildJoinRequestsSection(primary),
+                  const SizedBox(height: 32),
+                ],
                 _buildSectionTitle('RESIDENTS (${_members.length})'),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 _buildMemberPanel(primary),
                 const SizedBox(height: 100),
               ],
@@ -767,10 +893,157 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
     );
   }
 
+  Widget _buildJoinRequestsSection(Color primary) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: ListView.separated(
+        padding: EdgeInsets.zero,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _joinRequests.length,
+        separatorBuilder: (_, __) => Divider(
+          height: 1,
+          color: const Color(0xFFF0F0F3),
+          indent: 16,
+          endIndent: 16,
+        ),
+        itemBuilder: (context, index) {
+          final request = _joinRequests[index];
+          final requester = request['requester'];
+          final name = requester?['name'] ?? requester?['email'] ?? 'Unknown';
+          final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+          final requestId = request['id'].toString();
+          final isProcessing = request['_isProcessing'] == true;
+
+          return Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Colors.orange.shade50,
+                      child: Text(
+                        initial,
+                        style: TextStyle(
+                          color: Colors.orange.shade800,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: Color(0xFF1A1A2E),
+                            ),
+                          ),
+                          Text(
+                            'Wants to join',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: isProcessing
+                            ? null
+                            : () {
+                                setState(() {
+                                  _joinRequests[index]['_isProcessing'] = true;
+                                });
+                                _processJoinRequest(requestId, false, name);
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFC62828),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: isProcessing
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text(
+                                'Reject',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: isProcessing
+                            ? null
+                            : () {
+                                setState(() {
+                                  _joinRequests[index]['_isProcessing'] = true;
+                                });
+                                _processJoinRequest(requestId, true, name);
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: isProcessing
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Accept',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildMemberPanel(Color primary) {
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFEEEEF2))),
       child: ListView.separated(
+        padding: EdgeInsets.zero,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: _members.length,
@@ -783,7 +1056,9 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
           final isCreator = member['role'] == 'creator';
 
           return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+            minVerticalPadding: 0,
+            visualDensity: VisualDensity.compact,
             leading: CircleAvatar(
               radius: 18,
               backgroundColor: isMe ? primary : primary.withValues(alpha: 0.1),

@@ -85,6 +85,90 @@ class AdminApiService {
     }
   }
 
+  // Get user details
+  Future<Map<String, dynamic>> getUserDetails(String userId) async {
+    try {
+      final response = await _dio.get('/api/admin/users/$userId');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception(_handleError(e));
+    }
+  }
+
+  // Get all roomspaces
+  Future<Map<String, dynamic>> getAllRoomspaces() async {
+    try {
+      final response = await _dio.get('/api/admin/roomspaces');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception(_handleError(e));
+    }
+  }
+
+  // Get roomspace details
+  Future<Map<String, dynamic>> getRoomspaceDetails(String roomspaceId) async {
+    try {
+      final response = await _dio.get('/api/admin/roomspaces/$roomspaceId');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception(_handleError(e));
+    }
+  }
+
+  // Get all expenses
+  Future<Map<String, dynamic>> getAllExpenses({int? limit, int? offset}) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (limit != null) queryParams['limit'] = limit;
+      if (offset != null) queryParams['offset'] = offset;
+      
+      final response = await _dio.get(
+        '/api/admin/expenses',
+        queryParameters: queryParams,
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception(_handleError(e));
+    }
+  }
+
+  // Get expense details
+  Future<Map<String, dynamic>> getExpenseDetails(int expenseId) async {
+    try {
+      final response = await _dio.get('/api/admin/expenses/$expenseId');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception(_handleError(e));
+    }
+  }
+
+  // Get all personal expenses
+  Future<Map<String, dynamic>> getAllPersonalExpenses({int? limit, int? offset}) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (limit != null) queryParams['limit'] = limit;
+      if (offset != null) queryParams['offset'] = offset;
+      
+      final response = await _dio.get(
+        '/api/admin/personal-expenses',
+        queryParameters: queryParams,
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception(_handleError(e));
+    }
+  }
+
+  // Get analytics data
+  Future<Map<String, dynamic>> getAnalyticsData() async {
+    try {
+      final response = await _dio.get('/api/admin/analytics');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception(_handleError(e));
+    }
+  }
+
   String _handleError(DioException error) {
     if (error.response != null) {
       final data = error.response!.data;

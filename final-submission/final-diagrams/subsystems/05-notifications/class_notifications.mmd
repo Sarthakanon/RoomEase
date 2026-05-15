@@ -1,0 +1,7 @@
+classDiagram
+  class NotificationHandler {+list(); +markRead(); +sendReminder()}
+  class JoinRequestHandler {+listPending(); +process()}
+  class Notification {+id; +userId; +message; +isRead}
+  class JoinRequest {+id; +roomspaceId; +userId; +status}
+  NotificationHandler --> Notification
+  JoinRequestHandler --> JoinRequest

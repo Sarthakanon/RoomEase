@@ -156,20 +156,32 @@ func (h *EsewaHandler) VerifySubscriptionPayment(c *gin.Context) {
 		CreatedAt:       time.Now(),
 	}
 
+	fmt.Printf("💾 Creating subscription payment record: %+v\n", payment)
+
 	if err := h.dbService.CreateSubscriptionPayment(payment); err != nil {
+		fmt.Printf("❌ Failed to create subscription payment: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to record payment",
+			"error":   "Failed to record payment",
+			"details": err.Error(),
 		})
 		return
 	}
 
+	fmt.Printf("✅ Subscription payment recorded successfully: ID=%s\n", payment.ID)
+
 	// Update user subscription
+	fmt.Printf("🔄 Updating user subscription: UserID=%s, PlanID=%s\n", userID.(string), req.PlanID)
+	
 	if err := h.dbService.UpdateUserSubscription(userID.(string), req.PlanID); err != nil {
+		fmt.Printf("❌ Failed to update user subscription: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update subscription",
+			"error":   "Failed to update subscription",
+			"details": err.Error(),
 		})
 		return
 	}
+
+	fmt.Printf("✅ User subscription updated successfully\n")
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

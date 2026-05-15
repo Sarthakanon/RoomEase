@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/ban_monitoring_service.dart';
-import '../services/auth_state_service.dart';
 import 'ban_countdown_dialog.dart';
 
 class BanListenerWidget extends StatefulWidget {

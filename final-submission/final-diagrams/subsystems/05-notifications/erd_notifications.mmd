@@ -1,0 +1,17 @@
+erDiagram
+  USERS ||--o{ NOTIFICATIONS : receives
+  ROOMSPACES ||--o{ JOIN_REQUESTS : has
+  USERS ||--o{ JOIN_REQUESTS : sends
+  NOTIFICATIONS {
+    int id PK
+    string user_id FK
+    string type
+    string message
+    boolean is_read
+  }
+  JOIN_REQUESTS {
+    int id PK
+    string roomspace_id FK
+    string user_id FK
+    string status
+  }

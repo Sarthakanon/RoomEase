@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../../models/payment_notification.dart';
 import '../../../models/expense_models.dart';
@@ -614,11 +612,23 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     showModalBottomSheet(context: context, backgroundColor: Colors.transparent, builder: (context) => StatefulBuilder(builder: (context, setAltState) {
       return Container(decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))), child: Column(mainAxisSize: MainAxisSize.min, children: [
         _buildHandle(),
-        Padding(padding: const EdgeInsets.all(20), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Select Roommates', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)), TextButton(onPressed: () { setAltState(() { if (_selectedRoommates.length == widget.roommates.length) _selectedRoommates.clear(); else _selectedRoommates.addAll(widget.roommates.map((r) => r.id)); }); setState(() {}); }, child: Text(_selectedRoommates.length == widget.roommates.length ? 'None' : 'All', style: TextStyle(color: primary)))] )),
+        Padding(padding: const EdgeInsets.all(20), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Select Roommates', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)), TextButton(onPressed: () { setAltState(() { if (_selectedRoommates.length == widget.roommates.length) {
+          _selectedRoommates.clear();
+        } else {
+          _selectedRoommates.addAll(widget.roommates.map((r) => r.id));
+        } }); setState(() {}); }, child: Text(_selectedRoommates.length == widget.roommates.length ? 'None' : 'All', style: TextStyle(color: primary)))] )),
         Flexible(child: ListView.builder(shrinkWrap: true, itemCount: widget.roommates.length, itemBuilder: (context, i) {
           final r = widget.roommates[i];
           final active = _selectedRoommates.contains(r.id);
-          return ListTile(leading: CircleAvatar(radius: 14, backgroundColor: active ? primary : const Color(0xFFF0F0F3), child: Text(r.name[0].toUpperCase(), style: TextStyle(fontSize: 11, color: active ? Colors.white : primary, fontWeight: FontWeight.bold))), title: Text(r.name, style: TextStyle(fontSize: 14, fontWeight: active ? FontWeight.w700 : FontWeight.w500)), trailing: Checkbox(value: active, activeColor: primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), onChanged: (v) { setAltState(() { if (v!) _selectedRoommates.add(r.id); else _selectedRoommates.remove(r.id); }); setState(() {}); }), onTap: () { setAltState(() { if (active) _selectedRoommates.remove(r.id); else _selectedRoommates.add(r.id); }); setState(() {}); });
+          return ListTile(leading: CircleAvatar(radius: 14, backgroundColor: active ? primary : const Color(0xFFF0F0F3), child: Text(r.name[0].toUpperCase(), style: TextStyle(fontSize: 11, color: active ? Colors.white : primary, fontWeight: FontWeight.bold))), title: Text(r.name, style: TextStyle(fontSize: 14, fontWeight: active ? FontWeight.w700 : FontWeight.w500)), trailing: Checkbox(value: active, activeColor: primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), onChanged: (v) { setAltState(() { if (v!) {
+            _selectedRoommates.add(r.id);
+          } else {
+            _selectedRoommates.remove(r.id);
+          } }); setState(() {}); }), onTap: () { setAltState(() { if (active) {
+            _selectedRoommates.remove(r.id);
+          } else {
+            _selectedRoommates.add(r.id);
+          } }); setState(() {}); });
         })),
         Padding(padding: const EdgeInsets.all(20), child: SizedBox(width: double.infinity, height: 48, child: ElevatedButton(onPressed: () => Navigator.pop(context), style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0), child: const Text('Confirm'))))
       ]));
@@ -682,10 +692,14 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     if (_selectedRoommates.isEmpty) return;
     if (_splitType == SplitType.percentage) {
       final p = 100.0 / _selectedRoommates.length;
-      for (final id in _selectedRoommates) _customSplits[id] = p;
+      for (final id in _selectedRoommates) {
+        _customSplits[id] = p;
+      }
     } else if (_splitType == SplitType.exact && amt > 0) {
       final s = amt / _selectedRoommates.length;
-      for (final id in _selectedRoommates) _customSplits[id] = s;
+      for (final id in _selectedRoommates) {
+        _customSplits[id] = s;
+      }
     }
   }
 }

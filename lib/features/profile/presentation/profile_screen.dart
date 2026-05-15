@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../../../services/firebase_auth_service.dart';
 import '../../../services/smart_api_service.dart';
 import '../../../services/state_management_service.dart';
+import '../../../services/cloudinary_service.dart';
+import '../../../services/real_time_data_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
-import '../../../widgets/smart_future_builder.dart';
 import '../../subscription/presentation/widgets/subscription_status_card.dart';
 
 /// Profile screen — displays and allows editing of the user's profile data.
@@ -19,6 +22,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   final FirebaseAuthService _authService = FirebaseAuthService();
   final SmartApiService _smartApi = SmartApiService();
   final StateManagementService _state = StateManagementService();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   bool get wantKeepAlive => true; // Keep state alive when switching tabs
@@ -30,6 +36,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   bool _isEditing = false;
   bool _isSaving = false;
+  bool _isUploadingQr = false;
+  bool _isUploadingProfilePhoto = false;
+  String? _qrImageUrl;
 
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -71,6 +80,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           final data = response['data'] as Map<String, dynamic>;
           userName = data['name'] as String? ?? userName;
           userPhone = data['phone'] as String?;
+          _qrImageUrl = data['qr_image_url'] as String?;
         }
       } catch (e) {
         debugPrint('Backend profile fetch failed, using Firebase data: $e');
@@ -80,6 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         'userName': userName,
         'userEmail': userEmail,
         'userPhone': userPhone,
+        'qrImageUrl': _qrImageUrl,
         'photoURL': user.photoURL,
       };
 
@@ -90,7 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       // Cache the data
       _cachedProfileData = profileData;
       _lastDataLoad = DateTime.now();
-      debugPrint('💾 Profile data cached at ${_lastDataLoad}');
+      debugPrint('💾 Profile data cached at $_lastDataLoad');
 
       return profileData;
     } catch (e) {
@@ -108,17 +119,39 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _saveProfile() async {
     setState(() => _isSaving = true);
     try {
-      await _smartApi.updateUserProfile(
-        name: _nameController.text.trim(),
+      final updatedName = _nameController.text.trim();
+      final user = _authService.currentUser;
+      final updateResponse = await _smartApi.updateUserProfile(
+        name: updatedName,
         phone: _phoneController.text.trim().isEmpty
             ? null
             : _phoneController.text.trim(),
       );
 
+      if (updatedName.isNotEmpty) {
+        await user?.updateDisplayName(updatedName);
+        await user?.reload();
+      }
+
       // Clear cache to force refresh
       _cachedProfileData = null;
       _lastDataLoad = null;
       _state.forceRefresh(ScreenKeys.profile);
+      _state.forceRefresh(ScreenKeys.dashboard);
+      _realTimeService.notifyProfileUpdated();
+
+      final responseData = updateResponse['data'] as Map<String, dynamic>?;
+      final backendName = responseData?['name'] as String?;
+      final backendPhone = responseData?['phone'] as String?;
+      final refreshedUser = _authService.currentUser;
+      _cachedProfileData = {
+        'userName': backendName ?? updatedName,
+        'userEmail': refreshedUser?.email ?? 'No email',
+        'userPhone': backendPhone ?? (_phoneController.text.trim().isEmpty ? null : _phoneController.text.trim()),
+        'qrImageUrl': _qrImageUrl,
+        'photoURL': refreshedUser?.photoURL,
+      };
+      _lastDataLoad = DateTime.now();
 
       setState(() {
         _isEditing = false;
@@ -137,6 +170,97 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     } finally {
       setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _uploadQrImage() async {
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (pickedFile == null || !mounted) return;
+
+      setState(() => _isUploadingQr = true);
+      final uploadedUrl = await _cloudinaryService.uploadQrImage(File(pickedFile.path));
+      final updateRes = await _smartApi.updateUserProfile(qrImageUrl: uploadedUrl);
+      final backendQrUrl =
+          (updateRes['data'] as Map<String, dynamic>?)?['qr_image_url'] as String?;
+      final finalQrUrl = (backendQrUrl != null && backendQrUrl.isNotEmpty)
+          ? backendQrUrl
+          : uploadedUrl;
+
+      _qrImageUrl = finalQrUrl;
+      _cachedProfileData = {
+        'userName': _nameController.text.trim().isEmpty ? 'User' : _nameController.text.trim(),
+        'userEmail': _authService.currentUser?.email ?? 'No email',
+        'userPhone': _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
+        'qrImageUrl': finalQrUrl,
+        'photoURL': _authService.currentUser?.photoURL,
+      };
+      _lastDataLoad = DateTime.now();
+      _state.forceRefresh(ScreenKeys.profile);
+      _state.forceRefresh(ScreenKeys.expenses);
+      _realTimeService.notifyProfileUpdated();
+
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('QR updated successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to upload QR: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingQr = false);
+      }
+    }
+  }
+
+  Future<void> _uploadProfilePhoto() async {
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (pickedFile == null || !mounted) return;
+
+      setState(() => _isUploadingProfilePhoto = true);
+      final uploadedUrl = await _cloudinaryService.uploadQrImage(File(pickedFile.path));
+
+      final user = _authService.currentUser;
+      await user?.updatePhotoURL(uploadedUrl);
+      await user?.reload();
+
+      final refreshedUser = _authService.currentUser;
+      _cachedProfileData = {
+        'userName': _nameController.text.trim().isEmpty ? 'User' : _nameController.text.trim(),
+        'userEmail': refreshedUser?.email ?? 'No email',
+        'userPhone': _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
+        'qrImageUrl': _qrImageUrl,
+        'photoURL': refreshedUser?.photoURL ?? uploadedUrl,
+      };
+      _lastDataLoad = DateTime.now();
+      _state.forceRefresh(ScreenKeys.profile);
+      _realTimeService.notifyProfileUpdated();
+
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo updated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update profile photo: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingProfilePhoto = false);
+      }
     }
   }
 
@@ -231,6 +355,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     final userName = profileData['userName'] as String? ?? 'User';
     final userEmail = profileData['userEmail'] as String? ?? 'No email';
     final userPhone = profileData['userPhone'] as String?;
+    final qrImageUrl = profileData['qrImageUrl'] as String?;
     final photoURL = profileData['photoURL'] as String?;
 
     return CustomScrollView(
@@ -246,7 +371,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             style: TextStyle(
               color: Color(0xFF1A1A2E),
               fontWeight: FontWeight.w700,
-              fontSize: 17,
+              fontSize: 20,
             ),
           ),
           bottom: PreferredSize(
@@ -287,6 +412,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                   _buildProfileInfo(userName, userEmail, userPhone),
 
                 const SizedBox(height: 16),
+                _buildQrSection(primaryColor, qrImageUrl),
+                const SizedBox(height: 16),
 
                 // Menu shortcuts
                 _buildMenu(),
@@ -317,7 +444,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             style: TextStyle(
               color: Color(0xFF1A1A2E),
               fontWeight: FontWeight.w700,
-              fontSize: 17,
+              fontSize: 20,
             ),
           ),
           bottom: PreferredSize(
@@ -524,6 +651,72 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  Widget _buildQrSection(Color primaryColor, String? qrImageUrl) {
+    final hasQr = qrImageUrl != null && qrImageUrl.isNotEmpty;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Your Payment QR',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A2E),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (hasQr)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                qrImageUrl,
+                height: 180,
+                width: 180,
+                fit: BoxFit.cover,
+              ),
+            )
+          else
+            Text(
+              'No QR uploaded yet',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: _isUploadingQr ? null : _uploadQrImage,
+              icon: _isUploadingQr
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(hasQr ? Icons.edit_rounded : Icons.add_rounded, size: 18),
+              label: Text(hasQr ? 'Change QR' : 'Add Your QR'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _infoRow(String label, String value, IconData icon) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -559,6 +752,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   // EDIT FORM
   // ──────────────────────────────────────────
   Widget _buildEditForm(Color primaryColor, String userName, String? userPhone) {
+    final currentPhotoUrl = _authService.currentUser?.photoURL;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -577,6 +771,48 @@ class _ProfileScreenState extends State<ProfileScreen>
                 color: Color(0xFF1A1A2E)),
           ),
           const SizedBox(height: 16),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: primaryColor.withValues(alpha: 0.1),
+                backgroundImage: currentPhotoUrl != null && currentPhotoUrl.isNotEmpty
+                    ? NetworkImage(currentPhotoUrl)
+                    : null,
+                child: (currentPhotoUrl == null || currentPhotoUrl.isEmpty)
+                    ? Text(
+                        (_nameController.text.isNotEmpty ? _nameController.text[0] : '?').toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: primaryColor,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _isUploadingProfilePhoto ? null : _uploadProfilePhoto,
+                  icon: _isUploadingProfilePhoto
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.image_outlined, size: 16),
+                  label: const Text('Upload / Change Photo'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: _nameController,
             style: const TextStyle(fontSize: 14),

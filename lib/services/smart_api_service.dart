@@ -266,8 +266,16 @@ class SmartApiService {
   }
 
   /// Update user profile with cache invalidation
-  Future<Map<String, dynamic>> updateUserProfile({String? name, String? phone}) async {
-    final result = await _api.updateUserProfile(name: name, phone: phone);
+  Future<Map<String, dynamic>> updateUserProfile({
+    String? name,
+    String? phone,
+    String? qrImageUrl,
+  }) async {
+    final result = await _api.updateUserProfile(
+      name: name,
+      phone: phone,
+      qrImageUrl: qrImageUrl,
+    );
     
     // Invalidate user-related caches
     await _cache.invalidateUserRelated();
@@ -362,7 +370,7 @@ class SmartApiService {
   Future<Map<String, dynamic>> joinRoomspaceByCode(String code) => _api.joinRoomspaceByCode(code);
   Future<Map<String, dynamic>> getExpenses({String? roomspaceId, int? limit, int? offset}) => _api.getExpenses(roomspaceId: roomspaceId, limit: limit, offset: offset);
   Future<Map<String, dynamic>> getExpenseById(int expenseId) => _api.getExpenseById(expenseId);
-  Future<Map<String, dynamic>> removeMemberFromRoomspace(int roomspaceId, String memberFirebaseUid) => _api.removeMemberFromRoomspace(roomspaceId, memberFirebaseUid);
+  Future<Map<String, dynamic>> removeMemberFromRoomspace(String roomspaceId, String memberFirebaseUid) => _api.removeMemberFromRoomspace(roomspaceId, memberFirebaseUid);
   Future<Map<String, dynamic>> leaveRoomspace(String roomspaceId) => _api.leaveRoomspace(roomspaceId);
   Future<Map<String, dynamic>> getSettlements({required String roomspaceId, int? limit, int? offset}) => _api.getSettlements(roomspaceId: roomspaceId, limit: limit, offset: offset);
   Future<Map<String, dynamic>> createPaymentNotification(Map<String, dynamic> notificationData) => _api.createPaymentNotification(notificationData);

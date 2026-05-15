@@ -186,7 +186,7 @@ class PlanCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                )).toList(),
+                )),
 
                 SizedBox(height: isTablet ? 32 : 24),
 

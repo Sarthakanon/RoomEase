@@ -47,12 +47,12 @@ class SubscriptionLimits {
 
   static const SubscriptionLimits pro = SubscriptionLimits(
     maxRoomspaces: 10,
-    maxMembersPerRoomspace: 50,
+    maxMembersPerRoomspace: 10, // Same as free plan
     analyticsAccess: true,
-    prioritySupport: true,
+    prioritySupport: false, // Removed
     customCategories: true,
     exportFeatures: true, // Export available in pro
-    advancedReports: true, // Advanced reports available
+    advancedReports: false, // Removed
     recurringExpenses: true,
     receiptScanning: true,
   );
@@ -106,12 +106,8 @@ class SubscriptionPlanInfo {
       limits: SubscriptionLimits.pro,
       features: [
         'Up to 10 roomspaces',
-        'Up to 50 members per roomspace',
-        'Priority support',
         'Advanced analytics & insights',
         'Export to PDF/Excel',
-        'Advanced reporting',
-        'Custom split ratios',
         'All Free features',
       ],
       badge: 'Best Value',

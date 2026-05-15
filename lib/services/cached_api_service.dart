@@ -257,7 +257,7 @@ class CachedApiService {
   Future<Map<String, dynamic>> getExpenses({String? roomspaceId, int? limit, int? offset}) => _apiService.getExpenses(roomspaceId: roomspaceId, limit: limit, offset: offset);
   Future<Map<String, dynamic>> getExpenseById(int expenseId) => _apiService.getExpenseById(expenseId);
   Future<Map<String, dynamic>> getRecentExpenses({String? roomspaceId, int limit = 3, DateTime? month}) => _apiService.getRecentExpenses(roomspaceId: roomspaceId, limit: limit, month: month);
-  Future<Map<String, dynamic>> removeMemberFromRoomspace(int roomspaceId, String memberFirebaseUid) => _apiService.removeMemberFromRoomspace(roomspaceId, memberFirebaseUid);
+  Future<Map<String, dynamic>> removeMemberFromRoomspace(String roomspaceId, String memberFirebaseUid) => _apiService.removeMemberFromRoomspace(roomspaceId, memberFirebaseUid);
   Future<Map<String, dynamic>> getSettlements({required String roomspaceId, int? limit, int? offset}) => _apiService.getSettlements(roomspaceId: roomspaceId, limit: limit, offset: offset);
   Future<Map<String, dynamic>> createPaymentNotification(Map<String, dynamic> notificationData) => _apiService.createPaymentNotification(notificationData);
   Future<Map<String, dynamic>> getPaymentNotifications({String? roomspaceId, int? limit, int? offset}) => _apiService.getPaymentNotifications(roomspaceId: roomspaceId, limit: limit, offset: offset);

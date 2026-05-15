@@ -95,7 +95,8 @@ func (h *SubscriptionHandler) CancelSubscription(c *gin.Context) {
 	// Check if user has an active subscription
 	if user.SubscriptionPlan == "free" {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "No active subscription to cancel",
+			"success": false,
+			"error":   "No active subscription to cancel",
 		})
 		return
 	}
@@ -112,7 +113,8 @@ func (h *SubscriptionHandler) CancelSubscription(c *gin.Context) {
 	// Save the user
 	if err := config.DB.Save(user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to cancel subscription",
+			"success": false,
+			"error":   "Failed to cancel subscription",
 		})
 		return
 	}
@@ -120,6 +122,57 @@ func (h *SubscriptionHandler) CancelSubscription(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Subscription will be cancelled at the end of the current billing period",
+		"data": gin.H{
+			"plan":       user.SubscriptionPlan,
+			"expires_at": user.SubscriptionExpiry,
+		},
+	})
+}
+
+// ReactivateSubscription reactivates a cancelled subscription
+func (h *SubscriptionHandler) ReactivateSubscription(c *gin.Context) {
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authenticated",
+		})
+		return
+	}
+
+	// Get user from database
+	user, err := h.dbService.GetUserByFirebaseUID(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get user",
+		})
+		return
+	}
+
+	// Check if user has a subscription to reactivate
+	if user.SubscriptionPlan == "free" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "No subscription to reactivate",
+		})
+		return
+	}
+
+	// Remove the expiry date to reactivate
+	user.SubscriptionExpiry = nil
+
+	// Save the user
+	if err := config.DB.Save(user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to reactivate subscription",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Subscription reactivated successfully",
 		"data": gin.H{
 			"plan":       user.SubscriptionPlan,
 			"expires_at": user.SubscriptionExpiry,

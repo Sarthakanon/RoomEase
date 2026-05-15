@@ -1,0 +1,10 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart TB
+  S([Start]) --> A[Open analytics page]
+  A --> B[Select date range]
+  B --> C[Request analytics endpoints]
+  C --> D[Render cards and charts]
+  D --> E{Need deeper insight?}
+  E -->|Yes| F[Open anomaly or recommendation details]
+  E -->|No| G([End])
+  F --> G

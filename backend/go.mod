@@ -8,9 +8,9 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
-	github.com/lib/pq v1.12.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.10.0
+	github.com/stripe/stripe-go/v72 v72.122.0
 	google.golang.org/api v0.231.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.0

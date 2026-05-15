@@ -1,0 +1,27 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart TB
+    subgraph Client Devices
+      M1[Android Mobile App\nFlutter]
+      M2[iOS Mobile App\nFlutter]
+      A1[Admin Web Browser]
+    end
+
+    subgraph Cloud Services
+      BE[RoomEase Backend\nGo + Gin]
+      DB[(PostgreSQL)]
+      FB[Firebase Auth]
+      ST[Stripe API]
+      ES[eSewa Verify Endpoint]
+    end
+
+    M1 --> BE
+    M2 --> BE
+    A1 --> BE
+
+    BE --> DB
+    BE --> FB
+    BE --> ST
+    BE --> ES
+
+    M1 --> LDB[(Local SQLite)]
+    M2 --> LDB2[(Local SQLite)]

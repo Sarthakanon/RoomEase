@@ -408,7 +408,7 @@ class RecurringPaymentDetailsSheet extends StatelessWidget {
                 ),
               ],
             ),
-          )).toList(),
+          )),
         ],
       ),
     );

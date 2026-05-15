@@ -474,7 +474,7 @@ class _EsewaWebViewDialogState extends State<EsewaWebViewDialog> {
     
     // Create visible form fields for debugging
     final visibleFormFields = widget.formData.entries
-        .map((entry) => '<div style="margin: 5px 0; font-size: 11px; color: #666;"><strong>${entry.key}:</strong> ${entry.value.length > 50 ? entry.value.substring(0, 50) + '...' : entry.value}</div>')
+        .map((entry) => '<div style="margin: 5px 0; font-size: 11px; color: #666;"><strong>${entry.key}:</strong> ${entry.value.length > 50 ? '${entry.value.substring(0, 50)}...' : entry.value}</div>')
         .join('\n');
 
     final html = '''

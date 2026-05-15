@@ -243,9 +243,9 @@ class PaymentDialogService {
       // Extract roommates from the roomspace data
       final members = activeRoomspaceData['members'] as List<dynamic>? ?? [];
       final roommates = members
-          .where((member) => member is Map<String, dynamic>)
+          .whereType<Map<String, dynamic>>()
           .map((member) {
-            final memberData = member as Map<String, dynamic>;
+            final memberData = member;
             final user = memberData['user'] as Map<String, dynamic>?;
             return RoommateItem(
               id: memberData['user_id'] as String? ?? '',

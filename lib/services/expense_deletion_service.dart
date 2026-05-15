@@ -30,6 +30,14 @@ class ExpenseDeletionService {
     try {
       debugPrint('🗑️ Requesting deletion for expense: ${expense.title}');
       
+      // Validate required fields
+      if (expense.id == null) {
+        throw Exception('Expense ID is required for deletion');
+      }
+      if (expense.roomspaceId == null) {
+        throw Exception('Roomspace ID is required for deletion');
+      }
+      
       // Get all affected users from the expense splits
       final affectedUsers = <String>{};
       if (expense.splits != null) {

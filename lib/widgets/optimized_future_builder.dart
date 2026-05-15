@@ -10,7 +10,7 @@ class OptimizedFutureBuilder<T> extends StatefulWidget {
   final bool showRetry;
 
   const OptimizedFutureBuilder({
-    Key? key,
+    super.key,
     required this.future,
     required this.builder,
     this.errorBuilder,
@@ -18,7 +18,7 @@ class OptimizedFutureBuilder<T> extends StatefulWidget {
     this.initialData,
     this.timeout,
     this.showRetry = true,
-  }) : super(key: key);
+  });
 
   @override
   State<OptimizedFutureBuilder<T>> createState() => _OptimizedFutureBuilderState<T>();
@@ -174,7 +174,7 @@ class OptimizedListBuilder<T> extends StatelessWidget {
   final bool shrinkWrap;
 
   const OptimizedListBuilder({
-    Key? key,
+    super.key,
     required this.future,
     required this.itemBuilder,
     this.emptyBuilder,
@@ -182,7 +182,7 @@ class OptimizedListBuilder<T> extends StatelessWidget {
     this.loadingBuilder,
     this.physics,
     this.shrinkWrap = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

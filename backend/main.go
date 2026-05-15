@@ -74,6 +74,8 @@ func main() {
 	roomspaceHandler := handlers.NewRoomspaceHandler(dbService)
 	notificationHandler := handlers.NewNotificationHandler(dbService)
 	expenseHandler := handlers.NewExpenseHandler(dbService)
+	expenseDeletionHandler := handlers.NewExpenseDeletionHandler(dbService)
+	expenseHistoryHandler := handlers.NewExpenseHistoryHandler(dbService)
 	paymentNotificationHandler := handlers.NewPaymentNotificationHandler(dbService)
 	healthHandler := handlers.NewHealthHandler()
 	
@@ -116,6 +118,17 @@ func main() {
 		adminRoutes.POST("/users/:userId/ban", adminHandler.BanUser)
 		adminRoutes.POST("/users/:userId/unban", adminHandler.UnbanUser)
 		adminRoutes.GET("/users/:userId/ban-status", adminHandler.CheckUserBanStatus)
+		
+		// Roomspace admin routes
+		adminRoutes.GET("/roomspaces", adminHandler.GetAllRoomspaces)
+		adminRoutes.GET("/roomspaces/:roomspaceId", adminHandler.GetRoomspaceDetails)
+		
+		// Expense admin routes
+		adminRoutes.GET("/expenses", adminHandler.GetAllExpenses)
+		adminRoutes.GET("/personal-expenses", adminHandler.GetAllPersonalExpenses)
+		
+		// Analytics routes
+		adminRoutes.GET("/analytics", adminHandler.GetAnalyticsData)
 	}
 
 	// Protected routes (require authentication)
@@ -158,6 +171,16 @@ func main() {
 		protected.DELETE("/expenses/:id", expenseHandler.DeleteExpense)
 		protected.GET("/roomspaces/:id/expenses", middleware.ValidateRoomspaceMembership(), expenseHandler.GetRoomspaceExpenses)
 		protected.GET("/roomspaces/:id/expenses/recent", middleware.ValidateRoomspaceMembership(), expenseHandler.GetRecentExpenses)
+		
+		// Expense Deletion Request routes
+		protected.POST("/expenses/:id/deletion-request", expenseDeletionHandler.RequestExpenseDeletion)
+		protected.POST("/deletion-requests/:id/respond", expenseDeletionHandler.RespondToDeletionRequest)
+		protected.GET("/deletion-requests/pending", expenseDeletionHandler.GetPendingDeletionRequests)
+		
+		// Expense History routes
+		protected.GET("/roomspaces/:id/history", middleware.ValidateRoomspaceMembership(), expenseHistoryHandler.GetRoomspaceHistory)
+		protected.POST("/roomspaces/:id/history", middleware.ValidateRoomspaceMembership(), expenseHistoryHandler.CreateHistoryEntry)
+		protected.GET("/roomspaces/:id/history/recent", middleware.ValidateRoomspaceMembership(), expenseHistoryHandler.GetRecentHistory)
 		
 		// Personal Expense routes
 		protected.POST("/personal-expenses", expenseHandler.CreatePersonalExpense)
@@ -213,9 +236,21 @@ func main() {
 		protected.GET("/payments/history", esewaHandler.GetPaymentHistory)
 		protected.GET("/roomspaces/:id/settlements/history", middleware.ValidateRoomspaceMembership(), esewaHandler.GetSettlementHistory)
 		
+		// Stripe Payment routes
+		protected.POST("/payment/stripe/create-intent", func(c *gin.Context) {
+			handlers.CreatePaymentIntent(c.Writer, c.Request)
+		})
+		protected.POST("/payment/stripe/verify", func(c *gin.Context) {
+			handlers.VerifyPaymentIntent(c.Writer, c.Request)
+		})
+		protected.POST("/payment/stripe/subscription/verify", func(c *gin.Context) {
+			handlers.VerifySubscriptionPayment(c.Writer, c.Request)
+		})
+		
 		// Subscription routes
 		protected.GET("/subscription/current", subscriptionHandler.GetCurrentSubscription)
 		protected.POST("/subscription/cancel", subscriptionHandler.CancelSubscription)
+		protected.POST("/subscription/reactivate", subscriptionHandler.ReactivateSubscription)
 		protected.GET("/subscription/history", subscriptionHandler.GetSubscriptionHistory)
 		
 		// Admin routes (moved to public section above)

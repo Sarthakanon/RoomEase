@@ -1,0 +1,10 @@
+sequenceDiagram
+  actor U as User
+  participant APP as Mobile App
+  participant API as Notification API
+  participant DB as PostgreSQL
+  U->>APP: Send payment reminder
+  APP->>API: POST /api/notifications/send-reminder
+  API->>DB: Insert notification records
+  DB-->>API: Success
+  API-->>APP: Reminder sent

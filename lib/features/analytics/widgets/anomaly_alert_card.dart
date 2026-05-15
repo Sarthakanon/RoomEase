@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../models/analytics_models.dart';
 import '../../../services/analytics_service.dart';
 import 'skeleton_loader.dart';
-import 'analytics_shared.dart';
 
 class AnomalyAlertCard extends StatefulWidget {
   final String? roomspaceId;
@@ -81,9 +80,9 @@ class _AnomalyAlertCardState extends State<AnomalyAlertCard> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
         boxShadow: [
-          BoxShadow(color: color.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4)),
+          BoxShadow(color: color.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -93,7 +92,7 @@ class _AnomalyAlertCardState extends State<AnomalyAlertCard> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                 child: Text('UNUSUAL SPEND',
                     style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: color, letterSpacing: 1.0)),
               ),

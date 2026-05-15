@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:room_ease/providers/roomspace_provider.dart';
-import 'package:room_ease/models/roomspace_data.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -17,8 +16,6 @@ void main() {
     test('should cache roomspaces to SharedPreferences', () async {
       // This test verifies that roomspace data is properly cached
       // We'll test the internal caching mechanism by checking SharedPreferences
-      
-      final prefs = await SharedPreferences.getInstance();
       
       // Verify cache keys are defined
       expect(RoomspaceProvider, isNotNull);

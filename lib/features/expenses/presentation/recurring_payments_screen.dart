@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/expense_models.dart';
 import '../../../models/recurring_expense_models.dart';
-import '../../../widgets/enhanced_expense_tile.dart';
 
 /// Dedicated screen for managing all recurring payments
 class RecurringPaymentsScreen extends StatefulWidget {

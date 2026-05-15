@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../models/analytics_models.dart';
 import '../../../services/analytics_service.dart';
 import 'skeleton_loader.dart';
-import 'analytics_shared.dart';
 
 class RecommendationsCard extends StatefulWidget {
   final String? roomspaceId;
@@ -57,7 +56,7 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF1A1A2E), letterSpacing: -0.5)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: Colors.indigo.shade50.withOpacity(0.5), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: Colors.indigo.shade50.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(12)),
               child: const Text('AI POWERED',
                   style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.indigo, letterSpacing: 0.8)),
             ),
@@ -82,7 +81,7 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
         ),
         child: Column(
           children: [
-            Icon(Icons.auto_awesome_outlined, color: Colors.indigo.withOpacity(0.1), size: 48),
+            Icon(Icons.auto_awesome_outlined, color: Colors.indigo.withValues(alpha: 0.1), size: 48),
             const SizedBox(height: 16),
             const Text('No new insights', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E))),
             const SizedBox(height: 4),
@@ -108,7 +107,7 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: const Color(0xFFEEEEF2)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 15, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -127,7 +126,7 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.green.withOpacity(0.3),
+                      color: Colors.green.withValues(alpha: 0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -166,7 +165,7 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
                   ),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: Colors.indigo.withOpacity(0.2),
+                    color: Colors.indigo.withValues(alpha: 0.2),
                     width: 1,
                   ),
                 ),
@@ -316,22 +315,8 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
       child: Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: color, letterSpacing: 0.5)),
-    );
-  }
-
-  Widget _buildSpendingTag(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(10)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$label: ', style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
-          Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: color)),
-        ],
-      ),
     );
   }
 

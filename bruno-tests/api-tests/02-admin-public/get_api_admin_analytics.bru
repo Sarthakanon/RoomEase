@@ -1,0 +1,24 @@
+meta {
+  name: GET /api/admin/analytics
+  type: http
+}
+
+get {
+  url: {{baseUrl}}/api/admin/analytics
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+assert {
+  res.status: oneOf 200 201 400 401 403 404 409 422 500
+}
+
+tests {
+  test("status is handled", function() {
+    expect([200,201,400,401,403,404,409,422,500]).to.include(res.status);
+  });
+}

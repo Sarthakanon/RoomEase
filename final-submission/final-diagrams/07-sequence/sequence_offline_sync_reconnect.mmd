@@ -1,0 +1,25 @@
+sequenceDiagram
+    autonumber
+    participant NET as ConnectivityService
+    participant SYNC as SyncService
+    participant OFS as OfflineExpenseService
+    participant API as Backend API
+    participant DB as PostgreSQL
+
+    NET-->>SYNC: internet_restored
+    SYNC->>OFS: getPendingOperations()
+    OFS-->>SYNC: pending operations list
+
+    loop For each pending operation
+      SYNC->>API: Execute queued request
+      API->>DB: Apply operation
+      DB-->>API: Result
+      API-->>SYNC: Success/Failure
+      SYNC->>OFS: markSynced() or keepForRetry()
+    end
+
+    SYNC->>API: Fetch latest roomspace data
+    API->>DB: Query fresh data
+    DB-->>API: Latest data
+    API-->>SYNC: Data payload
+    SYNC->>OFS: updateLocalCache(data)

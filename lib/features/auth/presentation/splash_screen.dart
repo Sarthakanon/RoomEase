@@ -6,6 +6,7 @@ import '../../../services/auth_state_service.dart';
 import '../../../services/ban_monitoring_service.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../../../widgets/ban_countdown_dialog.dart';
+import '../../../widgets/first_time_permissions_dialog.dart';
 import '../controllers/auth_controller.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -77,10 +78,15 @@ class _SplashScreenState extends State<SplashScreen> {
                 final hasRoomspaces = roomspaceProvider.roomspaceCount > 0;
                 
                 if (mounted) {
-                  Navigator.pushReplacementNamed(
-                    context,
-                    hasRoomspaces ? '/home' : '/roomspace-selection',
-                  );
+                  // Show permissions dialog on first launch
+                  await FirstTimePermissionsDialog.show(context);
+                  
+                  if (mounted) {
+                    Navigator.pushReplacementNamed(
+                      context,
+                      hasRoomspaces ? '/home' : '/roomspace-selection',
+                    );
+                  }
                 }
               }
               return;

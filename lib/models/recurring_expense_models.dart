@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 
 /// Enum for recurring payment intervals
 enum RecurringInterval {

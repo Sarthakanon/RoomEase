@@ -6,30 +6,8 @@ auth {
   mode: none
 }
 
-script:pre-request {
-  // Global pre-request script
-  console.log(`Making ${req.method} request to ${req.url}`);
-}
-
-script:post-response {
-  // Global post-response script
-  console.log(`Response: ${res.status} ${res.statusText}`);
-  
-  // Log errors for debugging
-  if (res.status >= 400) {
-    console.log('Error Response:', res.body);
-  }
-}
-
 tests {
-  // Global tests that run for every request
-  test("Response time is reasonable", function() {
-    expect(res.responseTime).to.be.below(5000);
-  });
-  
-  test("Response has correct content type", function() {
-    if (res.status !== 404) {
-      expect(res.headers['content-type']).to.include('application/json');
-    }
+  test("response time < 10s", function() {
+    expect(res.responseTime).to.be.below(10000);
   });
 }

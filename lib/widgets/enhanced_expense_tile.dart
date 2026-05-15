@@ -3,15 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../models/expense_models.dart';
 import '../models/recurring_expense_models.dart';
-import '../features/expenses/presentation/edit_expense_screen.dart';
 import '../features/home/widgets/add_expense_dialog.dart';
 import '../features/home/widgets/personal_expense_dialog.dart';
-import '../services/real_time_data_service.dart';
-import '../services/expense_deletion_service.dart';
-import '../services/api_service.dart';
+import '../services/expense_service.dart';
+import '../services/expense_history_service.dart';
+import '../services/smart_api_service.dart';
 import '../widgets/expense_details_dialog.dart';
-import 'package:provider/provider.dart';
-import '../providers/roomspace_provider.dart';
 import '../providers/roomspace_provider.dart';
 import '../services/cached_api_service.dart';
 
@@ -218,12 +215,11 @@ class EnhancedExpenseTile extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'Repeats ${config.interval?.label.toLowerCase() ?? 'monthly'}' +
-              (config.endDate != null 
+              'Repeats ${config.interval?.label.toLowerCase() ?? 'monthly'}${config.endDate != null 
                   ? ' until ${_formatDate(config.endDate!)}'
                   : config.maxOccurrences != null
                       ? ' for ${config.maxOccurrences} times'
-                      : ''),
+                      : ''}',
               style: TextStyle(
                 fontSize: 10,
                 color: Colors.purple.shade700,
@@ -237,6 +233,10 @@ class EnhancedExpenseTile extends StatelessWidget {
   }
 
   void _showExpenseOptions(BuildContext context) {
+    // Get current user
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final isCreator = currentUser != null && expense.paidBy == currentUser.uid;
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -272,7 +272,7 @@ class EnhancedExpenseTile extends StatelessWidget {
               ),
             ),
             
-            // Options
+            // View Details - Always available
             ListTile(
               leading: Icon(Icons.visibility_rounded, color: themeColor),
               title: const Text('View Details'),
@@ -282,22 +282,26 @@ class EnhancedExpenseTile extends StatelessWidget {
               },
             ),
             
-            ListTile(
-              leading: Icon(Icons.edit_rounded, color: Colors.blue.shade600),
-              title: const Text('Edit Expense'),
-              onTap: () {
-                Navigator.pop(context);
-                _editExpense(context);
-              },
-            ),
-            
-            if (!isPersonal) ...[
+            // Edit - Only for creator
+            if (isCreator || isPersonal) ...[
               ListTile(
-                leading: Icon(Icons.delete_outline_rounded, color: Colors.red.shade600),
-                title: const Text('Request Deletion'),
+                leading: Icon(Icons.edit_rounded, color: Colors.blue.shade600),
+                title: const Text('Edit Expense'),
                 onTap: () {
                   Navigator.pop(context);
-                  _requestDeletion(context);
+                  _editExpense(context);
+                },
+              ),
+            ],
+            
+            // Delete - Only for creator
+            if (isCreator || isPersonal) ...[
+              ListTile(
+                leading: Icon(Icons.delete_outline_rounded, color: Colors.red.shade600),
+                title: const Text('Delete Expense'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeletion(context);
                 },
               ),
             ],
@@ -353,29 +357,6 @@ class EnhancedExpenseTile extends StatelessWidget {
             ),
           );
           return;
-          
-          // Update personal expense via API
-          await ApiService().updateExpense(
-            expense.id!,
-            PersonalExpenseCreateRequest.fromExpenseData(updatedExpense).toJson(),
-          );
-          
-          // Notify real-time service
-          RealTimeDataService().notifyPersonalExpenseCreated({
-            'id': expense.id,
-            'title': updatedExpense.title,
-            'amount': updatedExpense.amount,
-            'updated': true,
-          });
-
-          if (onUpdated != null) onUpdated!();
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Personal expense updated successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
         } catch (e) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -468,25 +449,7 @@ class EnhancedExpenseTile extends StatelessWidget {
               validRoomspaceId,
             );
             
-            await ApiService().updateExpense(expense.id!, updateRequest.toJson());
-            
-            // Notify real-time service about the update
-            final affectedUsers = <String>{};
-            if (expense.splits != null) {
-              affectedUsers.addAll(expense.splits!.map((s) => s.userUid));
-            }
-            affectedUsers.addAll(updatedExpense.selectedRoommateIds);
-            
-            RealTimeDataService().notifyExpenseUpdated(
-              validRoomspaceId,
-              {
-                'id': expense.id,
-                'title': updatedExpense.title,
-                'amount': updatedExpense.amount,
-                'category': updatedExpense.category,
-              },
-              affectedUsers.toList(),
-            );
+            await SmartApiService().updateExpense(expense.id!, updateRequest.toJson());
 
             if (onUpdated != null) onUpdated!();
             
@@ -518,7 +481,7 @@ class EnhancedExpenseTile extends StatelessWidget {
     }
   }
 
-  void _requestDeletion(BuildContext context) {
+  void _confirmDeletion(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -527,35 +490,12 @@ class EnhancedExpenseTile extends StatelessWidget {
           children: [
             Icon(Icons.warning_rounded, color: Colors.orange.shade600),
             const SizedBox(width: 12),
-            const Text('Request Deletion'),
+            const Text('Delete Expense'),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Are you sure you want to request deletion of "${expense.title}"?',
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'All roommates involved in this expense will need to approve the deletion before it\'s permanently removed.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Reason for deletion (optional)',
-                border: OutlineInputBorder(),
-                hintText: 'e.g., Duplicate entry, incorrect amount...',
-              ),
-              maxLines: 2,
-              onChanged: (value) {
-                // Store reason
-              },
-            ),
-          ],
+        content: Text(
+          'Are you sure you want to delete "${expense.title}"?\n\nThis action cannot be undone.',
+          style: const TextStyle(fontSize: 16),
         ),
         actions: [
           TextButton(
@@ -565,51 +505,100 @@ class EnhancedExpenseTile extends StatelessWidget {
           FilledButton(
             onPressed: () {
               Navigator.pop(context);
-              _performDeletionRequest(context, 'User requested deletion');
+              _performDeletion(context);
             },
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Request Deletion'),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
   }
 
-  void _performDeletionRequest(BuildContext context, String reason) async {
+  void _performDeletion(BuildContext context) async {
     try {
-      // Get current user ID from Firebase Auth
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please login to request deletion'),
-            backgroundColor: Colors.red,
-          ),
+      // Check if expense has an ID
+      if (expense.id == null) {
+        _showErrorDialog(
+          context,
+          'Cannot Delete',
+          'Expense ID is missing. Please try again.',
         );
         return;
       }
       
-      await ExpenseDeletionService().requestExpenseDeletion(
-        expense: expense,
-        requestedBy: currentUser.uid,
-        reason: reason,
-      );
+      // Get current user
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        _showErrorDialog(
+          context,
+          'Authentication Required',
+          'Please login to delete expenses.',
+        );
+        return;
+      }
+      
+      // Delete the expense
+      await ExpenseService().deleteExpense(expense.id!);
+      
+      // Log the deletion to history (if roomspace expense)
+      if (expense.roomspaceId != null) {
+        try {
+          final ExpenseHistoryService historyService = ExpenseHistoryService();
+          await historyService.logExpenseDeleted(
+            roomspaceId: expense.roomspaceId!,
+            expenseId: expense.id.toString(),
+            title: expense.title,
+            amount: expense.amount,
+            deletedBy: currentUser.uid,
+          );
+        } catch (e) {
+          debugPrint('Failed to log deletion to history: $e');
+        }
+      }
+      
+      // If successful, show success message and refresh
+      if (onUpdated != null) onUpdated!();
       
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Deletion request sent to all roommates for approval'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 3),
+          content: Text('Expense deleted successfully'),
+          backgroundColor: Colors.green,
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to request deletion: $e'),
-          backgroundColor: Colors.red,
-        ),
+      _showErrorDialog(
+        context,
+        'Deletion Failed',
+        'Failed to delete expense: ${e.toString().replaceAll('Exception: ', '')}',
       );
     }
+  }
+
+  void _showErrorDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red.shade600, size: 28),
+            const SizedBox(width: 12),
+            Text(title),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(fontSize: 16, height: 1.5),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   IconData _getIcon(String category) {

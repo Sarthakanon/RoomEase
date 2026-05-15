@@ -7,7 +7,6 @@ import '../../../services/state_management_service.dart';
 import '../../../services/real_time_data_service.dart';
 import '../../../models/expense_models.dart';
 import '../../../providers/roomspace_provider.dart';
-import '../../../widgets/smart_future_builder.dart';
 import '../../../widgets/enhanced_expense_tile.dart';
 import '../../../widgets/recurring_payment_details_sheet.dart';
 import '../../subscription/providers/subscription_provider.dart';
@@ -18,7 +17,7 @@ import 'personal_expenses_screen.dart';
 import 'personal_expense_details_screen.dart';
 import 'payment_confirmation_screen.dart';
 import 'who_owes_who_screen.dart';
-import 'report_preview_screen.dart';
+import 'balance_breakdown_screen.dart';
 import 'report_options_screen.dart';
 import 'settlements_screen.dart';
 import 'recurring_payments_screen.dart';
@@ -46,13 +45,14 @@ class _ExpenseScreenState extends State<ExpenseScreen>
   DateTime? _lastDataLoad;
   static const Duration _cacheValidDuration = Duration(minutes: 3);
   
-  String? _currentRoomspaceId;
   // Initialize with first day of current month
   late DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
   // Stream subscriptions for real-time updates
   StreamSubscription<ExpenseUpdateEvent>? _expenseUpdateSubscription;
   StreamSubscription<BalanceUpdateEvent>? _balanceUpdateSubscription;
+  StreamSubscription<NotificationEvent>? _notificationSubscription;
+  RoomspaceProvider? _roomspaceProvider;
 
   @override
   void initState() {
@@ -60,9 +60,8 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     
     // Listen for roomspace changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final roomspaceProvider =
-          Provider.of<RoomspaceProvider>(context, listen: false);
-      roomspaceProvider.addListener(_onRoomspaceChanged);
+      _roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      _roomspaceProvider?.addListener(_onRoomspaceChanged);
       
       // Set up real-time listeners
       _setupRealTimeListeners();
@@ -75,7 +74,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
       debugPrint('🔄 Expense update received: ${event.type}');
       
       // Check if this update affects current roomspace
-      final currentRoomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+      final currentRoomspaceId = _roomspaceProvider?.getActiveRoomspaceId();
       
       if (event.type == ExpenseUpdateType.clearCache ||
           event.roomspaceId == currentRoomspaceId ||
@@ -94,7 +93,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     _balanceUpdateSubscription = _realTimeService.balanceUpdates.listen((event) {
       debugPrint('🔄 Balance update received: ${event.type}');
       
-      final currentRoomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+      final currentRoomspaceId = _roomspaceProvider?.getActiveRoomspaceId();
       
       if (event.type == BalanceUpdateType.clearCache ||
           event.roomspaceId == currentRoomspaceId) {
@@ -107,17 +106,27 @@ class _ExpenseScreenState extends State<ExpenseScreen>
         }
       }
     });
+
+    // Listen for profile updates (QR upload/change) and refresh this screen live
+    _notificationSubscription = _realTimeService.notifications.listen((event) {
+      if (event.type == NotificationType.profileUpdated) {
+        _cachedExpenseData = null;
+        _lastDataLoad = null;
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
-    final roomspaceProvider =
-        Provider.of<RoomspaceProvider>(context, listen: false);
-    roomspaceProvider.removeListener(_onRoomspaceChanged);
+    _roomspaceProvider?.removeListener(_onRoomspaceChanged);
     
     // Cancel real-time subscriptions
     _expenseUpdateSubscription?.cancel();
     _balanceUpdateSubscription?.cancel();
+    _notificationSubscription?.cancel();
     
     super.dispose();
   }
@@ -175,6 +184,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
       
       // Load pending payments count
       futures['pendingPayments'] = _loadPendingPaymentsCount(activeRoomspaceId);
+      futures['userProfile'] = _smartApi.getUserProfile(forceRefresh: true);
     }
 
     // Wait for all data to load
@@ -198,8 +208,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     // Cache the data
     _cachedExpenseData = expenseData;
     _lastDataLoad = DateTime.now();
-    _currentRoomspaceId = activeRoomspaceId;
-    debugPrint('💾 Expense data cached at ${_lastDataLoad}');
+    debugPrint('💾 Expense data cached at $_lastDataLoad');
 
     return expenseData;
   }
@@ -373,17 +382,26 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     Map<String, dynamic> expenseData,
     Color primaryColor,
   ) {
+    Map<String, dynamic> asStringKeyedMap(dynamic value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return Map<String, dynamic>.from(value);
+      return <String, dynamic>{};
+    }
+
     final isPersonalSpace = expenseData['isPersonalSpace'] as bool? ?? true;
-    final personalExpenses = expenseData['personalExpenses'] as Map<String, dynamic>? ?? {'data': []};
-    final sharedExpenses = expenseData['sharedExpenses'] as Map<String, dynamic>? ?? {'data': []};
-    final recurringExpenses = expenseData['recurringExpenses'] as Map<String, dynamic>? ?? {'data': []};
-    final pendingPayments = expenseData['pendingPayments'] as Map<String, dynamic>? ?? {'data': [], 'count': 0};
+    final personalExpenses = asStringKeyedMap(expenseData['personalExpenses']);
+    final sharedExpenses = asStringKeyedMap(expenseData['sharedExpenses']);
+    final recurringExpenses = asStringKeyedMap(expenseData['recurringExpenses']);
+    final pendingPayments = asStringKeyedMap(expenseData['pendingPayments']);
+    final userProfile = asStringKeyedMap(expenseData['userProfile']);
     
     // Extract data safely
     final personalExpensesList = personalExpenses['data'] as List<dynamic>? ?? [];
     final sharedExpensesList = sharedExpenses['data'] as List<dynamic>? ?? [];
     final recurringExpensesList = recurringExpenses['data'] as List<dynamic>? ?? [];
     final pendingPaymentsCount = pendingPayments['count'] as int? ?? 0;
+    final profileData = asStringKeyedMap(userProfile['data']);
+    final qrImageUrl = profileData['qr_image_url'] as String?;
     
     // Convert to models
     final recentPersonalExpenses = personalExpensesList
@@ -412,7 +430,11 @@ class _ExpenseScreenState extends State<ExpenseScreen>
       child: Column(
           children: [
             // ── Header Section ──
-            _buildHeader(primaryColor, totalRecentSpending),
+            _buildHeader(
+              primaryColor,
+              totalRecentSpending,
+              showQrSetupMessage: !isPersonalSpace && (qrImageUrl == null || qrImageUrl.isEmpty),
+            ),
 
             // ── Month Selector ──
             MonthSelector(
@@ -452,22 +474,24 @@ class _ExpenseScreenState extends State<ExpenseScreen>
                     const SizedBox(height: 24),
                     
                     // Settle Up Actions (Who Owes Who + Pending Payments)
-                    _buildSettleUpSection(primaryColor, pendingPaymentsCount),
+                    _buildSettleUpSection(primaryColor, pendingPaymentsCount, qrImageUrl),
                     const SizedBox(height: 24),
                   ],
 
-                  // Personal Expenses
-                  _buildSectionHeader(
-                    title: "Personal Expenses", 
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const PersonalExpensesScreen(),
+                  if (isPersonalSpace) ...[
+                    // Personal Expenses
+                    _buildSectionHeader(
+                      title: "Personal Expenses",
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PersonalExpensesScreen(),
+                        ),
                       ),
+                      primaryColor: Colors.orange.shade700,
                     ),
-                    primaryColor: Colors.orange.shade700,
-                  ),
-                  _buildPersonalList(recentPersonalExpenses),
+                    _buildPersonalList(recentPersonalExpenses),
+                  ],
                   
                   const SizedBox(height: 100), // Extra space for bottom nav
                 ],
@@ -520,7 +544,11 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     );
   }
 
-  Widget _buildHeader(Color primaryColor, double totalRecentSpending) {
+  Widget _buildHeader(
+    Color primaryColor,
+    double totalRecentSpending, {
+    bool showQrSetupMessage = false,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 56, 16, 20),
@@ -554,6 +582,19 @@ class _ExpenseScreenState extends State<ExpenseScreen>
               ),
             ],
           ),
+          if (showQrSetupMessage) ...[
+            const SizedBox(height: 12),
+            _buildQrSetupMessage(
+              color: Colors.teal.shade700,
+              onTap: () async {
+                await Navigator.pushNamed(context, '/profile');
+                _cachedExpenseData = null;
+                _lastDataLoad = null;
+                _state.forceRefresh(ScreenKeys.expenses);
+                if (mounted) setState(() {});
+              },
+            ),
+          ],
           const SizedBox(height: 16),
           _buildSpendingSummaryPanel(primaryColor, totalRecentSpending),
         ],
@@ -950,7 +991,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     );
   }
 
-  Widget _buildSettleUpSection(Color primaryColor, int pendingPaymentsCount) {
+  Widget _buildSettleUpSection(Color primaryColor, int pendingPaymentsCount, String? qrImageUrl) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1028,6 +1069,24 @@ class _ExpenseScreenState extends State<ExpenseScreen>
           },
         ),
         const SizedBox(height: 12),
+        _ManagementActionCard(
+          title: 'Balance Calculation',
+          subtitle: 'See full overall balance math breakdown',
+          icon: Icons.calculate_rounded,
+          color: Colors.deepPurple.shade600,
+          onTap: () {
+            final roomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+            if (roomspaceId != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => BalanceBreakdownScreen(roomspaceId: roomspaceId),
+                ),
+              );
+            }
+          },
+        ),
+        const SizedBox(height: 12),
         Consumer<SubscriptionProvider>(
           builder: (context, subscriptionProvider, child) {
             final canExport = subscriptionProvider.currentLimits.exportFeatures;
@@ -1058,6 +1117,42 @@ class _ExpenseScreenState extends State<ExpenseScreen>
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildQrSetupMessage({
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.qr_code_rounded, size: 18, color: color),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Add your payment QR',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: color),
+          ],
+        ),
+      ),
     );
   }
 

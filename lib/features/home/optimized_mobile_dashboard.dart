@@ -1,23 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/mobile_scaffold.dart';
-import '../../core/widgets/roomspace_switcher.dart';
 import '../../core/widgets/global_roomspace_selector.dart';
 import '../../core/widgets/skeleton_loader.dart';
+import '../../providers/roomspace_provider.dart';
 import '../../services/cached_api_service.dart';
 import '../../services/performance_service.dart';
 import '../../services/loading_service.dart';
-import '../../services/balance_service.dart';
-import '../../services/payment_notification_service.dart';
-import '../../services/ocr_service.dart';
-import '../../models/payment_notification.dart';
-import '../../models/expense_models.dart';
-import '../../providers/roomspace_provider.dart';
 import '../../widgets/optimized_future_builder.dart';
-import 'widgets/add_expense_dialog.dart';
-import 'widgets/personal_expense_dialog.dart';
-import 'widgets/receipt_scanner_dialog.dart';
 import 'widgets/balance_details_dialog.dart';
 
 /// Optimized Home dashboard with caching and performance improvements
@@ -33,10 +23,8 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
   
   final CachedApiService _cachedApiService = CachedApiService();
   final PerformanceService _performanceService = PerformanceService();
-  final BalanceService _balanceService = BalanceService();
 
   late Future<Map<String, dynamic>> _dashboardDataFuture;
-  String? _currentRoomspaceId;
 
   @override
   bool get wantKeepAlive => true; // Keep state alive when switching tabs
@@ -72,19 +60,6 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
     setState(() {
       _dashboardDataFuture = _performanceService.getDashboardData();
     });
-  }
-
-  void _onRoomspaceChanged(String? roomspaceId) {
-    if (_currentRoomspaceId != roomspaceId) {
-      setState(() {
-        _currentRoomspaceId = roomspaceId;
-      });
-      
-      // Preload roomspace data in background
-      if (roomspaceId != null) {
-        _performanceService.preloadRoomspaceData(roomspaceId);
-      }
-    }
   }
 
   @override
@@ -205,6 +180,9 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
         .cast<Map<String, dynamic>>();
     
     final hasRoomspace = roomspaces.isNotEmpty;
+    final activeRoomspaceId =
+        Provider.of<RoomspaceProvider>(context, listen: false)
+            .getActiveRoomspaceId();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -227,8 +205,8 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
           ],
 
           // Balance summary (only if has roomspace)
-          if (hasRoomspace && _currentRoomspaceId != null)
-            _buildBalanceSection(_currentRoomspaceId!),
+          if (hasRoomspace && activeRoomspaceId != null)
+            _buildBalanceSection(activeRoomspaceId),
 
           // Quick actions
           _buildQuickActions(hasRoomspace),
@@ -303,13 +281,15 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
         final balances = balanceData['data'] as Map<String, dynamic>? ?? {};
         final youOwe = (balances['you_owe'] as num?)?.toDouble() ?? 0.0;
         final youAreOwed = (balances['you_are_owed'] as num?)?.toDouble() ?? 0.0;
+        final netYouOwe = (youOwe - youAreOwed).clamp(0.0, double.infinity);
+        final netYouAreOwed = (youAreOwed - youOwe).clamp(0.0, double.infinity);
 
         return Row(
           children: [
             Expanded(
               child: _buildBalanceCard(
                 'You Owe',
-                youOwe,
+                netYouOwe,
                 Colors.red,
                 Icons.arrow_upward,
               ),
@@ -318,7 +298,7 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
             Expanded(
               child: _buildBalanceCard(
                 'You Are Owed',
-                youAreOwed,
+                netYouAreOwed,
                 Colors.green,
                 Icons.arrow_downward,
               ),
@@ -334,10 +314,13 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
       elevation: 2,
       child: InkWell(
         onTap: () {
-          if (_currentRoomspaceId != null) {
+          final activeRoomspaceId =
+              Provider.of<RoomspaceProvider>(context, listen: false)
+                  .getActiveRoomspaceId();
+          if (activeRoomspaceId != null) {
             BalanceDetailsDialog.show(
               context,
-              roomspaceId: _currentRoomspaceId!,
+              roomspaceId: activeRoomspaceId,
               isOwed: amount > 0, // Determine based on amount
               actualBalance: amount,
             );
@@ -438,7 +421,7 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -519,7 +502,7 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
         children: [
           CircleAvatar(
             radius: 16,
-            backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+            backgroundColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
             child: Icon(
               _getCategoryIcon(category),
               size: 16,

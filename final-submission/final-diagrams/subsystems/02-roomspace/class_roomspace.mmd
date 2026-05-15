@@ -1,0 +1,8 @@
+classDiagram
+  class RoomspaceHandler {+create(); +list(); +join(); +leave()}
+  class Roomspace {+id; +name; +code; +creatorId}
+  class RoomspaceMember {+roomspaceId; +userId; +isActive}
+  class JoinRequest {+id; +roomspaceId; +userId; +status}
+  RoomspaceHandler --> Roomspace
+  RoomspaceHandler --> RoomspaceMember
+  RoomspaceHandler --> JoinRequest

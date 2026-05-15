@@ -51,7 +51,15 @@ class RoomspaceProvider extends ChangeNotifier {
   String? get error => _error;
   RoomspaceErrorType? get errorType => _errorType;
   bool get hasMultipleRoomspaces => _roomspaces.length > 1;
-  bool get canJoinMore => _roomspaces.length < 5;
+  
+  /// Check if user can join more roomspaces based on their subscription
+  /// This should be checked against subscription limits, not hardcoded
+  bool get canJoinMore {
+    // Fallback used only in places where subscription provider is unavailable.
+    // Keep this aligned with current default product limit.
+    return _roomspaces.length < 10;
+  }
+  
   int get roomspaceCount => _roomspaces.length;
   bool get hasNoRoomspaces => _roomspaces.isEmpty;
   bool get isPersonalSpace => _activeRoomspace == null;
@@ -510,7 +518,7 @@ class RoomspaceProvider extends ChangeNotifier {
       case RoomspaceErrorType.authenticationRequired:
         return 'Please log in to continue.';
       case RoomspaceErrorType.limitReached:
-        return 'You have reached the maximum limit of 5 roomspaces.';
+        return 'You have reached your roomspace limit. Upgrade to Pro for more roomspaces.';
       case RoomspaceErrorType.unknown:
       default:
         return _error ?? 'An unexpected error occurred. Please try again.';

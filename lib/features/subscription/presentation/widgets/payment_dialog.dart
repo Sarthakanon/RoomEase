@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/subscription_models.dart';
 import '../../providers/subscription_provider.dart';
-import '../../../../services/esewa_sdk_service.dart';
+import '../../../../services/stripe_payment_service.dart';
 
 class PaymentDialog extends StatefulWidget {
   final SubscriptionPlanInfo planInfo;
@@ -21,9 +21,9 @@ class PaymentDialog extends StatefulWidget {
 }
 
 class _PaymentDialogState extends State<PaymentDialog> {
-  String _selectedPaymentMethod = 'esewa';
+  final String _selectedPaymentMethod = 'stripe';
   bool _isProcessing = false;
-  final EsewaSdkService _esewaService = EsewaSdkService();
+  final StripePaymentService _stripeService = StripePaymentService();
 
   @override
   Widget build(BuildContext context) {
@@ -135,9 +135,9 @@ class _PaymentDialogState extends State<PaymentDialog> {
             SizedBox(height: isTablet ? 16 : 12),
 
             _buildPaymentMethodTile(
-              'esewa',
-              'eSewa Digital Wallet',
-              Icons.account_balance_wallet,
+              'stripe',
+              'Stripe Payment',
+              Icons.credit_card,
               isTablet,
             ),
 
@@ -173,7 +173,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                         child: ElevatedButton(
                           onPressed: () => _processDirectPayment(),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF60BB46),
+                            backgroundColor: const Color(0xFF635BFF), // Stripe purple
                             foregroundColor: Colors.white,
                             padding: EdgeInsets.symmetric(vertical: buttonPadding),
                             shape: RoundedRectangleBorder(
@@ -186,7 +186,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                               const Icon(Icons.account_balance_wallet),
                               const SizedBox(width: 8),
                               Text(
-                                'Pay ₹${price.toInt()} with eSewa',
+                                'Pay ₹${price.toInt()} with Stripe',
                                 style: TextStyle(
                                   fontSize: isTablet ? 16 : 14,
                                   fontWeight: FontWeight.w600,
@@ -264,23 +264,23 @@ class _PaymentDialogState extends State<PaymentDialog> {
       padding: EdgeInsets.all(isTablet ? 20 : 16),
       decoration: BoxDecoration(
         border: Border.all(
-          color: isSelected ? const Color(0xFF60BB46) : Colors.grey.shade300,
+          color: isSelected ? const Color(0xFF635BFF) : Colors.grey.shade300,
           width: isSelected ? 2 : 1,
         ),
         borderRadius: BorderRadius.circular(8),
-        color: isSelected ? const Color(0xFF60BB46).withValues(alpha: 0.1) : Colors.white,
+        color: isSelected ? const Color(0xFF635BFF).withValues(alpha: 0.1) : Colors.white,
       ),
       child: Row(
         children: [
-          // eSewa-style icon
+          // Stripe-style icon
           Container(
             padding: EdgeInsets.all(isTablet ? 10 : 8),
             decoration: BoxDecoration(
-              color: const Color(0xFF60BB46),
+              color: const Color(0xFF635BFF),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Icon(
-              Icons.account_balance_wallet,
+              icon,
               color: Colors.white,
               size: isTablet ? 24 : 20,
             ),
@@ -295,12 +295,12 @@ class _PaymentDialogState extends State<PaymentDialog> {
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: isTablet ? 18 : 16,
-                    color: isSelected ? const Color(0xFF60BB46) : Colors.grey.shade800,
+                    color: isSelected ? const Color(0xFF635BFF) : Colors.grey.shade800,
                   ),
                 ),
                 SizedBox(height: isTablet ? 4 : 2),
                 Text(
-                  'Secure payment via eSewa',
+                  'Secure payment via Stripe',
                   style: TextStyle(
                     fontSize: isTablet ? 14 : 12,
                     color: Colors.grey.shade600,
@@ -312,7 +312,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
           if (isSelected)
             Icon(
               Icons.check_circle,
-              color: const Color(0xFF60BB46),
+              color: const Color(0xFF635BFF),
               size: isTablet ? 28 : 24,
             ),
         ],
@@ -325,13 +325,14 @@ class _PaymentDialogState extends State<PaymentDialog> {
 
     try {
       final provider = context.read<SubscriptionProvider>();
+      final price = widget.isYearly ? widget.planInfo.yearlyPrice : widget.planInfo.monthlyPrice;
       
-      // Process subscription upgrade through eSewa Direct (POST form)
-      final result = await _esewaService.processSubscriptionPayment(
+      // Process subscription upgrade through Stripe
+      final result = await _stripeService.processPayment(
         context: context,
-        planId: widget.planInfo.plan.name,
-        amount: widget.isYearly ? widget.planInfo.yearlyPrice : widget.planInfo.monthlyPrice,
-        planName: widget.planInfo.name,
+        amount: price,
+        productId: 'SUB-${DateTime.now().millisecondsSinceEpoch}',
+        productName: '${widget.planInfo.name} - ${widget.isYearly ? "Yearly" : "Monthly"} Subscription',
       );
 
       if (result.success) {
@@ -340,9 +341,10 @@ class _PaymentDialogState extends State<PaymentDialog> {
           plan: widget.planInfo.plan,
           isYearly: widget.isYearly,
           paymentDetails: {
-            'method': 'esewa',
+            'method': 'stripe',
             'transaction_id': result.transactionId,
-            'amount': result.amount,
+            'payment_intent_id': result.paymentIntentId,
+            'amount': price,
           },
         );
 
@@ -361,7 +363,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
           _handlePaymentFailure(provider.error ?? 'Failed to update subscription');
         }
       } else {
-        _handlePaymentFailure(result.message);
+        _handlePaymentFailure(result.message ?? 'Payment failed');
       }
     } catch (e) {
       _handlePaymentFailure('Payment processing error: ${e.toString()}');

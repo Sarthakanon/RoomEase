@@ -6,11 +6,11 @@ import android.content.IntentFilter
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private val NOTIFICATION_CHANNEL = "payment_notification_channel"
     private val SMS_CHANNEL = "sms_detection_channel"
     private var smsReceiver: SmsReceiver? = null

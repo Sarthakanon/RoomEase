@@ -158,7 +158,7 @@ class RecurringExpenseTestScreen extends StatelessWidget {
                   ],
                 ),
               );
-            }).toList(),
+            }),
             
             const SizedBox(height: 32),
             

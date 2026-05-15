@@ -1,0 +1,11 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart TB
+  S([Start]) --> A[Enter roomspace code]
+  A --> B[Validate code]
+  B --> C{Code exists?}
+  C -->|No| D[Show invalid code]
+  C -->|Yes| E[Create membership]
+  E --> F[Notify roomspace owner]
+  F --> G[Show join success]
+  D --> H([End])
+  G --> H

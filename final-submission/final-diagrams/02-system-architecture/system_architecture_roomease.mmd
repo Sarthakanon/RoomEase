@@ -1,0 +1,28 @@
+%%{init: {'flowchart': {'curve': 'linear'}} }%%
+flowchart LR
+    U[End User] --> M[RoomEase Mobile App\nFlutter]
+    A[Admin User] --> W[Admin Web App\nFlutter Web]
+
+    M --> API[RoomEase Backend API\nGo + Gin]
+    W --> API
+
+    API --> AUTH[Firebase Auth]
+    API --> DB[(PostgreSQL Database)]
+    API --> CACHE[Analytics Cache Layer]
+
+    M --> LOCAL[(Local SQLite Storage)]
+    M --> SYNC[Sync Service]
+    M --> NET[Connectivity Service]
+
+    SYNC --> API
+    NET --> SYNC
+    LOCAL --> SYNC
+
+    M --> OCR[OCR Service\nGoogle ML Kit]
+    M --> PAY[Payment Facilitation Layer\nQR + Confirmation Logic]
+
+    API --> ESEWA[eSewa Verification Endpoints]
+    API --> STRIPE[Stripe Subscription Endpoints]
+
+    API --> ML[Analytics Model Service Layer]
+    ML --> CACHE

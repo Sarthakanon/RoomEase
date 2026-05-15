@@ -15,6 +15,11 @@ class AppConstants {
   // App Info
   static const String appName = 'RoomEase';
   static const String appVersion = '1.0.0';
+
+  // Cloudinary (unsigned upload preset flow)
+  static const String cloudinaryCloudName = 'dzaakz1ir';
+  static const String cloudinaryUploadPreset = 'roomease_qr';
+  static const String cloudinaryFolder = 'roomease/qr';
   
   // Backend IP management methods
   static Future<String> getBackendIp() async {

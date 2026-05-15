@@ -1,0 +1,28 @@
+sequenceDiagram
+    autonumber
+    actor P as Payer
+    actor R as Receiver
+    participant APP as Mobile App
+    participant API as Backend API
+    participant DB as PostgreSQL
+
+    P->>APP: Submit payment confirmation
+    APP->>API: POST /api/roomspaces/:id/payments/confirm
+    API->>DB: Insert pending confirmation
+    DB-->>API: Saved
+    API-->>APP: Pending status
+    APP-->>P: Confirmation submitted
+
+    R->>APP: Open pending confirmations
+    APP->>API: GET /api/roomspaces/:id/payments/pending
+    API->>DB: Fetch pending records
+    DB-->>API: Pending list
+    API-->>APP: Pending list
+
+    R->>APP: Approve confirmation
+    APP->>API: PUT /api/roomspaces/:id/payments/:paymentId/confirm
+    API->>DB: Update status = confirmed
+    API->>DB: Update balances/settlement records
+    DB-->>API: Updated
+    API-->>APP: Confirmed response
+    APP-->>R: Show success

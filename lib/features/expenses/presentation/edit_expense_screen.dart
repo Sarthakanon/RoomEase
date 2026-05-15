@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:room_ease/models/expense_models.dart';
-import 'package:room_ease/services/expense_service.dart';
 import 'package:room_ease/services/api_service.dart';
-import 'package:room_ease/services/real_time_data_service.dart';
+import 'package:room_ease/services/smart_api_service.dart';
 
 /// Professional, minimalist screen for editing shared expenses.
 class EditExpenseScreen extends StatefulWidget {
@@ -16,9 +15,8 @@ class EditExpenseScreen extends StatefulWidget {
 
 class _EditExpenseScreenState extends State<EditExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
-  final ExpenseService _expenseService = ExpenseService();
   final ApiService _apiService = ApiService();
-  final RealTimeDataService _realTimeService = RealTimeDataService();
+  final SmartApiService _smartApi = SmartApiService();
   
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
@@ -28,7 +26,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
   late SplitType _selectedSplitType;
   List<Map<String, dynamic>> _roommates = [];
   List<String> _selectedRoommateIds = [];
-  Map<String, double> _customSplits = {};
+  final Map<String, double> _customSplits = {};
   
   bool _isLoading = false;
   bool _isLoadingRoommates = true;
@@ -81,31 +79,9 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
         customSplits: _selectedSplitType != SplitType.equal ? _customSplits : null,
       );
       
-      final updated = await _expenseService.updateExpense(widget.expense.id!, req);
+      await _smartApi.updateExpense(widget.expense.id!, req.toJson());
       
-      // Notify real-time service about the expense update
-      if (widget.expense.roomspaceId != null) {
-        final updatedExpenseData = {
-          'id': widget.expense.id,
-          'title': _titleController.text.trim(),
-          'amount': double.parse(_amountController.text),
-          'category': _selectedCategory,
-          'roomspace_id': widget.expense.roomspaceId,
-        };
-        
-        // Get all affected users (original + new selected roommates)
-        final affectedUsers = <String>{};
-        if (widget.expense.splits != null) {
-          affectedUsers.addAll(widget.expense.splits!.map((s) => s.userUid));
-        }
-        affectedUsers.addAll(_selectedRoommateIds);
-        
-        _realTimeService.notifyExpenseUpdated(
-          widget.expense.roomspaceId!,
-          updatedExpenseData,
-          affectedUsers.toList(),
-        );
-      }
+      // SmartApiService already handles cache invalidation + real-time updates
       
       if (mounted) {
         // Show success message
@@ -237,7 +213,11 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
       child: Column(children: _roommates.map((r) {
         final id = (r['user_id'] ?? r['firebase_uid']).toString();
         final active = _selectedRoommateIds.contains(id);
-        return CheckboxListTile(title: Text(r['name'] ?? 'Member', style: TextStyle(fontSize: 14, fontWeight: active ? FontWeight.w700 : FontWeight.w500)), value: active, activeColor: primary, controlAffinity: ListTileControlAffinity.trailing, checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), onChanged: (v) => setState(() { if (v!) _selectedRoommateIds.add(id); else _selectedRoommateIds.remove(id); }));
+        return CheckboxListTile(title: Text(r['name'] ?? 'Member', style: TextStyle(fontSize: 14, fontWeight: active ? FontWeight.w700 : FontWeight.w500)), value: active, activeColor: primary, controlAffinity: ListTileControlAffinity.trailing, checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), onChanged: (v) => setState(() { if (v!) {
+          _selectedRoommateIds.add(id);
+        } else {
+          _selectedRoommateIds.remove(id);
+        } }));
       }).toList()),
     );
   }

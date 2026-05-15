@@ -130,9 +130,6 @@ class _SpendingTrendsChartState extends State<SpendingTrendsChart> {
   Widget _buildLineChart() {
     final trends = _trendsData!.trends;
     final spots = List.generate(trends.length, (i) => FlSpot(i.toDouble(), trends[i].amount));
-    final amounts = trends.map((t) => t.amount).toList();
-    final maxY = (amounts.reduce((a, b) => a > b ? a : b) * 1.2).clamp(100.0, double.infinity);
-
     return LineChart(
       LineChartData(
         gridData: const FlGridData(show: true, drawVerticalLine: false),
@@ -170,7 +167,7 @@ class _SpendingTrendsChartState extends State<SpendingTrendsChart> {
             barWidth: 3,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [Colors.indigo.withOpacity(0.1), Colors.indigo.withOpacity(0)], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
+            belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [Colors.indigo.withValues(alpha: 0.1), Colors.indigo.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
           ),
         ],
         lineTouchData: LineTouchData(
