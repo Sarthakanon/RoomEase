@@ -123,8 +123,11 @@ func (s *RecurringExpenseService) generateExpenseFromTemplate(template *models.R
 		Description: template.Description,
 		Amount:      template.Amount,
 		Category:    template.Category,
-		PaidBy:      template.CreatedBy, // Default to template creator
+		PaidBy:      template.PaidBy,
 		SplitType:   models.ExpenseSplitType(template.SplitType),
+	}
+	if expense.PaidBy == "" {
+		expense.PaidBy = template.CreatedBy
 	}
 	
 	// Save expense

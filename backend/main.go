@@ -225,6 +225,7 @@ func main() {
 		protected.GET("/roomspaces/:id/recurring-expenses", middleware.ValidateRoomspaceMembership(), recurringExpenseHandler.GetRecurringExpenseTemplates)
 		protected.PUT("/recurring-expenses/:template_id", recurringExpenseHandler.UpdateRecurringExpenseTemplate)
 		protected.DELETE("/recurring-expenses/:template_id", recurringExpenseHandler.DeleteRecurringExpenseTemplate)
+		protected.POST("/recurring-expenses/:template_id/restore", recurringExpenseHandler.RestoreRecurringExpenseTemplate)
 		protected.GET("/recurring-expenses/notifications", recurringExpenseHandler.GetRecurringExpenseNotifications)
 		protected.POST("/recurring-expenses/notifications/:notification_id/process", recurringExpenseHandler.ProcessRecurringExpenseNotification)
 		protected.GET("/roomspaces/:id/recurring-expenses/upcoming", middleware.ValidateRoomspaceMembership(), recurringExpenseHandler.GetUpcomingRecurringExpenses)

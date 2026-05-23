@@ -116,10 +116,23 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       }
       
       if (widget.isPersonalExpenses) {
-         expenses = await _expenseService.getUserExpenses(
+        final personal = await _expenseService.getPersonalExpenses(
           limit: _pageSize,
           offset: _currentPage * _pageSize,
         );
+        expenses = personal
+            .map((p) => ExpenseData(
+                  id: p.id,
+                  title: p.title,
+                  amount: p.amount,
+                  description: p.description,
+                  category: p.category,
+                  selectedRoommateIds: const [],
+                  splitType: SplitType.exact,
+                  customSplits: const {},
+                  createdAt: p.createdAt,
+                ))
+            .toList();
       } else if (effectiveId != null) {
         final response = await _expenseService.getRoomspaceExpenses(
           effectiveId,
@@ -239,20 +252,23 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   Widget _buildSearchBar() {
     return Container(
-      height: 40,
+      height: 44,
       decoration: BoxDecoration(
         color: const Color(0xFFF7F7FB),
         borderRadius: BorderRadius.circular(10),
       ),
       child: TextField(
         controller: _searchController,
+        textAlignVertical: TextAlignVertical.center,
         style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Search expenses...',
           hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
           prefixIcon: Icon(Icons.search_rounded, size: 18, color: Colors.grey.shade400),
+          prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
         ),
         onChanged: (val) => setState(() => _searchQuery = val),
       ),

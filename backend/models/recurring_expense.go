@@ -20,6 +20,20 @@ const (
 	IntervalYearly  RecurringInterval = "yearly"
 )
 
+// NormalizeRecurringInterval maps legacy/short values to canonical values.
+func NormalizeRecurringInterval(interval RecurringInterval) RecurringInterval {
+	switch strings.ToLower(string(interval)) {
+	case "week", "weekly":
+		return IntervalWeekly
+	case "month", "monthly":
+		return IntervalMonthly
+	case "year", "yearly":
+		return IntervalYearly
+	default:
+		return interval
+	}
+}
+
 // RecurringConfig represents the configuration for recurring expenses
 type RecurringConfig struct {
 	IsRecurring             bool              `json:"is_recurring"`
@@ -29,6 +43,47 @@ type RecurringConfig struct {
 	MaxOccurrences          *int              `json:"max_occurrences,omitempty"`
 	NotifyBeforeCreation    bool              `json:"notify_before_creation"`
 	NotificationDaysBefore  int               `json:"notification_days_before"`
+}
+
+// JSONFloatMap is a JSONB-backed map type for custom splits.
+type JSONFloatMap map[string]float64
+
+// Value implements the driver.Valuer interface.
+func (m JSONFloatMap) Value() (driver.Value, error) {
+	if m == nil {
+		return []byte("{}"), nil
+	}
+	return json.Marshal(m)
+}
+
+// Scan implements the sql.Scanner interface.
+func (m *JSONFloatMap) Scan(value interface{}) error {
+	if value == nil {
+		*m = JSONFloatMap{}
+		return nil
+	}
+
+	var raw []byte
+	switch v := value.(type) {
+	case []byte:
+		raw = v
+	case string:
+		raw = []byte(v)
+	default:
+		return fmt.Errorf("unsupported JSONFloatMap scan type: %T", value)
+	}
+
+	if len(raw) == 0 {
+		*m = JSONFloatMap{}
+		return nil
+	}
+
+	var out map[string]float64
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return err
+	}
+	*m = JSONFloatMap(out)
+	return nil
 }
 
 // Value implements the driver.Valuer interface for database storage
@@ -42,12 +97,14 @@ func (rc *RecurringConfig) Scan(value interface{}) error {
 		return nil
 	}
 
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
+	switch v := value.(type) {
+	case []byte:
+		return json.Unmarshal(v, rc)
+	case string:
+		return json.Unmarshal([]byte(v), rc)
+	default:
+		return fmt.Errorf("unsupported RecurringConfig scan type: %T", value)
 	}
-
-	return json.Unmarshal(bytes, rc)
 }
 
 // RecurringExpenseTemplate represents a template for recurring expenses
@@ -59,15 +116,18 @@ type RecurringExpenseTemplate struct {
 	Amount            float64                `json:"amount" gorm:"not null"`
 	Category          string                 `json:"category" gorm:"not null"`
 	CreatedBy         string                 `json:"created_by" gorm:"not null;index"`
+	PaidBy            string                 `json:"paid_by"`
 	SelectedRoommates StringArray            `json:"selected_roommates" gorm:"type:text"`
 	SplitType         string                 `json:"split_type" gorm:"not null"`
-	CustomSplits      map[string]float64     `json:"custom_splits" gorm:"type:jsonb"`
+	CustomSplits      JSONFloatMap           `json:"custom_splits" gorm:"type:jsonb"`
 	RecurringConfig   RecurringConfig        `json:"recurring_config" gorm:"type:jsonb"`
 	CreatedAt         time.Time              `json:"created_at"`
 	UpdatedAt         time.Time              `json:"updated_at"`
 	LastGenerated     *time.Time             `json:"last_generated,omitempty"`
 	OccurrenceCount   int                    `json:"occurrence_count" gorm:"default:0"`
 	IsActive          bool                   `json:"is_active" gorm:"default:true"`
+	IsDeleted         bool                   `json:"is_deleted" gorm:"default:false"`
+	DeletedAt         *time.Time             `json:"deleted_at,omitempty"`
 }
 
 // TableName specifies the table name for RecurringExpenseTemplate
@@ -87,7 +147,7 @@ func (ret *RecurringExpenseTemplate) GetNextScheduledDate() *time.Time {
 	}
 
 	var nextDate time.Time
-	switch ret.RecurringConfig.Interval {
+	switch NormalizeRecurringInterval(ret.RecurringConfig.Interval) {
 	case IntervalWeekly:
 		nextDate = baseDate.AddDate(0, 0, 7)
 	case IntervalMonthly:
@@ -204,6 +264,7 @@ type UpdateRecurringExpenseRequest struct {
 	SelectedRoommates []string               `json:"selected_roommates"`
 	CustomSplits      map[string]float64     `json:"custom_splits"`
 	RecurringConfig   *RecurringConfig       `json:"recurring_config"`
+	NextScheduledDate *time.Time             `json:"next_scheduled_date"`
 	IsActive          *bool                  `json:"is_active"`
 }
 
@@ -273,6 +334,7 @@ func (sa *StringArray) Scan(value interface{}) error {
 // BeforeCreate hook for RecurringExpenseTemplate
 func (ret *RecurringExpenseTemplate) BeforeCreate(tx *gorm.DB) error {
 	now := time.Now()
+	ret.RecurringConfig.Interval = NormalizeRecurringInterval(ret.RecurringConfig.Interval)
 	ret.CreatedAt = now
 	ret.UpdatedAt = now
 	return nil
@@ -280,6 +342,7 @@ func (ret *RecurringExpenseTemplate) BeforeCreate(tx *gorm.DB) error {
 
 // BeforeUpdate hook for RecurringExpenseTemplate
 func (ret *RecurringExpenseTemplate) BeforeUpdate(tx *gorm.DB) error {
+	ret.RecurringConfig.Interval = NormalizeRecurringInterval(ret.RecurringConfig.Interval)
 	ret.UpdatedAt = time.Now()
 	return nil
 }

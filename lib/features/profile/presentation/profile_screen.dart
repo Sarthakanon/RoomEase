@@ -8,6 +8,8 @@ import '../../../services/cloudinary_service.dart';
 import '../../../services/real_time_data_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
 import '../../subscription/presentation/widgets/subscription_status_card.dart';
+import 'help_support_screen.dart';
+import 'about_roomease_screen.dart';
 
 /// Profile screen — displays and allows editing of the user's profile data.
 class ProfileScreen extends StatefulWidget {
@@ -904,16 +906,20 @@ class _ProfileScreenState extends State<ProfileScreen>
           _menuRow(
             icon: Icons.help_outline_rounded,
             title: 'Help & Support',
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Help & Support coming soon!')),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const HelpSupportScreen(),
+              ),
             ),
           ),
           _divider(),
           _menuRow(
             icon: Icons.info_outline_rounded,
             title: 'About RoomEase',
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('RoomEase v1.0.0')),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const AboutRoomEaseScreen(),
+              ),
             ),
           ),
         ],

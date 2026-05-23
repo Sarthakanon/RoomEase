@@ -147,6 +147,7 @@ class RecurringExpenseTemplate {
   final double amount;
   final String category;
   final String createdBy;
+  final String paidBy;
   final List<String> selectedRoommates;
   final String splitType;
   final Map<String, double> customSplits;
@@ -155,6 +156,8 @@ class RecurringExpenseTemplate {
   final DateTime? lastGenerated;
   final int occurrenceCount;
   final bool isActive;
+  final bool isDeleted;
+  final DateTime? deletedAt;
 
   RecurringExpenseTemplate({
     this.id,
@@ -164,6 +167,7 @@ class RecurringExpenseTemplate {
     required this.amount,
     required this.category,
     required this.createdBy,
+    required this.paidBy,
     required this.selectedRoommates,
     required this.splitType,
     required this.customSplits,
@@ -172,6 +176,8 @@ class RecurringExpenseTemplate {
     this.lastGenerated,
     this.occurrenceCount = 0,
     this.isActive = true,
+    this.isDeleted = false,
+    this.deletedAt,
   });
 
   Map<String, dynamic> toJson() {
@@ -183,6 +189,7 @@ class RecurringExpenseTemplate {
       'amount': amount,
       'category': category,
       'created_by': createdBy,
+      'paid_by': paidBy,
       'selected_roommates': selectedRoommates,
       'split_type': splitType,
       'custom_splits': customSplits,
@@ -191,6 +198,8 @@ class RecurringExpenseTemplate {
       'last_generated': lastGenerated?.toUtc().toIso8601String(),
       'occurrence_count': occurrenceCount,
       'is_active': isActive,
+      'is_deleted': isDeleted,
+      'deleted_at': deletedAt?.toUtc().toIso8601String(),
     };
   }
 
@@ -203,6 +212,7 @@ class RecurringExpenseTemplate {
       amount: (json['amount'] as num).toDouble(),
       category: json['category'],
       createdBy: json['created_by'],
+      paidBy: json['paid_by'] ?? json['created_by'] ?? '',
       selectedRoommates: List<String>.from(json['selected_roommates'] ?? []),
       splitType: json['split_type'],
       customSplits: Map<String, double>.from(
@@ -218,6 +228,8 @@ class RecurringExpenseTemplate {
           : null,
       occurrenceCount: json['occurrence_count'] ?? 0,
       isActive: json['is_active'] ?? true,
+      isDeleted: json['is_deleted'] ?? false,
+      deletedAt: json['deleted_at'] != null ? DateTime.parse(json['deleted_at']) : null,
     );
   }
 
@@ -269,6 +281,7 @@ class RecurringExpenseTemplate {
     double? amount,
     String? category,
     String? createdBy,
+    String? paidBy,
     List<String>? selectedRoommates,
     String? splitType,
     Map<String, double>? customSplits,
@@ -277,6 +290,8 @@ class RecurringExpenseTemplate {
     DateTime? lastGenerated,
     int? occurrenceCount,
     bool? isActive,
+    bool? isDeleted,
+    DateTime? deletedAt,
   }) {
     return RecurringExpenseTemplate(
       id: id ?? this.id,
@@ -286,6 +301,7 @@ class RecurringExpenseTemplate {
       amount: amount ?? this.amount,
       category: category ?? this.category,
       createdBy: createdBy ?? this.createdBy,
+      paidBy: paidBy ?? this.paidBy,
       selectedRoommates: selectedRoommates ?? this.selectedRoommates,
       splitType: splitType ?? this.splitType,
       customSplits: customSplits ?? this.customSplits,
@@ -294,7 +310,14 @@ class RecurringExpenseTemplate {
       lastGenerated: lastGenerated ?? this.lastGenerated,
       occurrenceCount: occurrenceCount ?? this.occurrenceCount,
       isActive: isActive ?? this.isActive,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
+  }
+
+  bool get canUndoDelete {
+    if (!isDeleted || deletedAt == null) return false;
+    return DateTime.now().isBefore(deletedAt!.add(const Duration(days: 1)));
   }
 }
 

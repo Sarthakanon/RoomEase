@@ -260,12 +260,20 @@ class ExpenseDetailsDialog extends StatelessWidget {
   }
 
   Widget _buildSplitSection() {
+    final uniqueSplits = <String, ExpenseSplit>{};
+    for (final split in expense.splits ?? const <ExpenseSplit>[]) {
+      final key = split.userUid.isNotEmpty
+          ? split.userUid
+          : '${split.userName}_${split.amount}_${split.percentage ?? 0}';
+      uniqueSplits[key] = split;
+    }
+
     return _buildInfoSection(
       'Split Details',
       [
         _buildInfoRow('Split Type', expense.splitType.label, Icons.pie_chart_rounded),
         const SizedBox(height: 8),
-        ...expense.splits!.map((split) => Container(
+        ...uniqueSplits.values.map((split) => Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(

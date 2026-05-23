@@ -905,6 +905,16 @@ class ApiService {
     }
   }
 
+  /// Restore a soft-deleted recurring expense template
+  Future<Map<String, dynamic>> restoreRecurringExpenseTemplate(int templateId) async {
+    try {
+      final response = await _dio.post('/api/recurring-expenses/$templateId/restore');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to restore recurring expense template: ${e.toString()}');
+    }
+  }
+
   /// Get recurring expense notifications
   Future<Map<String, dynamic>> getRecurringExpenseNotifications() async {
     try {

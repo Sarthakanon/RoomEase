@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../../models/expense_models.dart';
 import '../../../models/recurring_expense_models.dart';
+import '../../../services/api_service.dart';
+import '../../../services/recurring_expense_service.dart';
 
 /// Dedicated screen for managing all recurring payments
 class RecurringPaymentsScreen extends StatefulWidget {
+  final String roomspaceId;
   final List<ExpenseData> recurringExpenses;
 
   const RecurringPaymentsScreen({
     super.key,
+    required this.roomspaceId,
     required this.recurringExpenses,
   });
 
@@ -16,22 +20,70 @@ class RecurringPaymentsScreen extends StatefulWidget {
 }
 
 class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
-  late List<ExpenseData> _recurringExpenses;
+  final RecurringExpenseService _recurringService = RecurringExpenseService();
+  final ApiService _apiService = ApiService();
+
+  List<RecurringExpenseTemplate> _templates = [];
+  List<Map<String, String>> _roomspaceMembers = [];
+  bool _isLoading = true;
+  String? _error;
   String _sortBy = 'next_payment'; // next_payment, amount, frequency
 
   @override
   void initState() {
     super.initState();
-    _recurringExpenses = List.from(widget.recurringExpenses);
-    _sortExpenses();
+    _loadTemplates();
   }
 
-  void _sortExpenses() {
+  Future<void> _loadTemplates() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        _recurringService.getRecurringExpenseTemplates(widget.roomspaceId),
+        _loadRoomspaceMembers(),
+      ]);
+      final templates = results[0] as List<RecurringExpenseTemplate>;
+      final members = results[1] as List<Map<String, String>>;
+      setState(() {
+        _templates = templates;
+        _roomspaceMembers = members;
+        _sortTemplates();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '');
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<List<Map<String, String>>> _loadRoomspaceMembers() async {
+    try {
+      final response = await _apiService.getRoomspaceMembers(widget.roomspaceId);
+      final List<dynamic> rawMembers = response['data'] as List<dynamic>? ?? [];
+      return rawMembers.map((m) {
+        final map = Map<String, dynamic>.from(m as Map);
+        final user = map['user'] is Map ? Map<String, dynamic>.from(map['user'] as Map) : <String, dynamic>{};
+        final uid = (map['user_id'] ?? map['firebase_uid'] ?? user['firebase_uid'] ?? '').toString();
+        final name = (user['name'] ?? map['name'] ?? uid).toString();
+        return {'id': uid, 'name': name};
+      }).where((m) => (m['id'] ?? '').isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  void _sortTemplates() {
     switch (_sortBy) {
       case 'next_payment':
-        _recurringExpenses.sort((a, b) {
-          final nextA = a.recurringConfig?.getNextOccurrence(DateTime.now());
-          final nextB = b.recurringConfig?.getNextOccurrence(DateTime.now());
+        _templates.sort((a, b) {
+          final nextA = a.getNextScheduledDate();
+          final nextB = b.getNextScheduledDate();
           if (nextA == null && nextB == null) return 0;
           if (nextA == null) return 1;
           if (nextB == null) return -1;
@@ -39,12 +91,12 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
         });
         break;
       case 'amount':
-        _recurringExpenses.sort((a, b) => b.amount.compareTo(a.amount));
+        _templates.sort((a, b) => b.amount.compareTo(a.amount));
         break;
       case 'frequency':
-        _recurringExpenses.sort((a, b) {
-          final intervalA = a.recurringConfig?.interval?.days ?? 30;
-          final intervalB = b.recurringConfig?.interval?.days ?? 30;
+        _templates.sort((a, b) {
+          final intervalA = a.recurringConfig.interval?.days ?? 30;
+          final intervalB = b.recurringConfig.interval?.days ?? 30;
           return intervalA.compareTo(intervalB);
         });
         break;
@@ -64,16 +116,21 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            onPressed: _loadTemplates,
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh',
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.sort_rounded),
             onSelected: (value) {
               setState(() {
                 _sortBy = value;
-                _sortExpenses();
+                _sortTemplates();
               });
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
+            itemBuilder: (context) => const [
+              PopupMenuItem(
                 value: 'next_payment',
                 child: Row(
                   children: [
@@ -83,7 +140,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                   ],
                 ),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'amount',
                 child: Row(
                   children: [
@@ -93,7 +150,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                   ],
                 ),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'frequency',
                 child: Row(
                   children: [
@@ -109,7 +166,6 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
       ),
       body: Column(
         children: [
-          // Summary Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -138,7 +194,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${_recurringExpenses.length} active recurring payment${_recurringExpenses.length != 1 ? 's' : ''}',
+                  '${_templates.length} active recurring payment${_templates.length != 1 ? 's' : ''}',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 12,
@@ -147,47 +203,55 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
               ],
             ),
           ),
-
-          // Recurring Payments List
-          Expanded(
-            child: _recurringExpenses.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _recurringExpenses.length,
-                    itemBuilder: (context, index) {
-                      final expense = _recurringExpenses[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildRecurringPaymentCard(expense, primaryColor),
-                      );
-                    },
-                  ),
-          ),
+          Expanded(child: _buildBody(primaryColor)),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // TODO: Navigate to create recurring payment
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Create new recurring payment - Coming soon!'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        },
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New Recurring'),
       ),
     );
   }
 
-  Widget _buildRecurringPaymentCard(ExpenseData expense, Color primaryColor) {
-    final config = expense.recurringConfig;
-    final nextPayment = config?.getNextOccurrence(DateTime.now());
-    final daysUntilNext = nextPayment?.difference(DateTime.now()).inDays;
+  Widget _buildBody(Color primaryColor) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, size: 52, color: Colors.redAccent),
+              const SizedBox(height: 12),
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton(onPressed: _loadTemplates, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_templates.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _templates.length,
+      itemBuilder: (context, index) {
+        final template = _templates[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _buildRecurringPaymentCard(template, primaryColor),
+        );
+      },
+    );
+  }
+
+  Widget _buildRecurringPaymentCard(RecurringExpenseTemplate template, Color primaryColor) {
+    final nextPayment = template.getNextScheduledDate();
+    final daysUntilNext = _calendarDaysUntil(nextPayment);
 
     return Container(
       decoration: BoxDecoration(
@@ -204,9 +268,8 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
       ),
       child: Column(
         children: [
-          // Main Content
           InkWell(
-            onTap: () => _showRecurringPaymentDetails(expense),
+            onTap: () => _showRecurringPaymentDetails(template),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -214,7 +277,6 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                 children: [
                   Row(
                     children: [
-                      // Icon
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -222,20 +284,18 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          _getIcon(expense.category),
+                          _getIcon(template.category),
                           color: primaryColor,
                           size: 24,
                         ),
                       ),
                       const SizedBox(width: 16),
-                      
-                      // Content
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              expense.title,
+                              template.title,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 16,
@@ -252,7 +312,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
-                                    config?.interval?.label ?? 'Monthly',
+                                    template.recurringConfig.interval?.label ?? 'Monthly',
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
@@ -262,7 +322,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  expense.category,
+                                  template.category,
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey.shade600,
@@ -273,29 +333,27 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                           ],
                         ),
                       ),
-                      
-                      // Amount
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            'Rs. ${expense.amount.toStringAsFixed(0)}',
+                            'Rs. ${template.amount.toStringAsFixed(0)}',
                             style: TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 18,
                               color: primaryColor,
                             ),
                           ),
-                          if (daysUntilNext != null) ...[
+                          if (daysUntilNext != null)
                             Text(
-                              daysUntilNext == 0 
+                              daysUntilNext == 0
                                   ? 'Due today'
-                                  : daysUntilNext > 0 
+                                  : daysUntilNext > 0
                                       ? 'In $daysUntilNext day${daysUntilNext != 1 ? 's' : ''}'
                                       : 'Overdue',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: daysUntilNext <= 0 
+                                color: daysUntilNext <= 0
                                     ? Colors.red.shade600
                                     : daysUntilNext <= 3
                                         ? Colors.orange.shade600
@@ -303,13 +361,10 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                          ],
                         ],
                       ),
                     ],
                   ),
-                  
-                  // Next Payment Info
                   if (nextPayment != null) ...[
                     const SizedBox(height: 12),
                     Container(
@@ -321,11 +376,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.schedule_rounded,
-                            size: 16,
-                            color: Colors.grey.shade600,
-                          ),
+                          Icon(Icons.schedule_rounded, size: 16, color: Colors.grey.shade600),
                           const SizedBox(width: 8),
                           Text(
                             'Next payment: ${_formatDate(nextPayment)}',
@@ -343,94 +394,109 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
               ),
             ),
           ),
-          
-          // Action Buttons
           Container(
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
               borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _editRecurringPayment(expense),
-                    borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(16)),
+            child: template.canUndoDelete
+                ? InkWell(
+                    onTap: () => _undoDeleteRecurringPayment(template),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.edit_rounded, size: 16, color: Colors.blue.shade600),
-                          const SizedBox(width: 4),
+                          Icon(Icons.undo_rounded, size: 16, color: Colors.green.shade700),
+                          const SizedBox(width: 6),
                           Text(
-                            'Edit',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.blue.shade600,
-                            ),
+                            'Undo Delete (available 24h)',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.green.shade700),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ),
-                Container(width: 1, height: 40, color: Colors.grey.shade300),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _pauseRecurringPayment(expense),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.pause_rounded, size: 16, color: Colors.orange.shade600),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Pause',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.orange.shade600,
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: template.isDeleted ? null : () => _editRecurringPayment(template),
+                          borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(16)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.edit_rounded, size: 16, color: Colors.blue.shade600),
+                                const SizedBox(width: 4),
+                                Text('Edit', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.blue.shade600)),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-                Container(width: 1, height: 40, color: Colors.grey.shade300),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _deleteRecurringPayment(expense),
-                    borderRadius: const BorderRadius.only(bottomRight: Radius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.delete_outline_rounded, size: 16, color: Colors.red.shade600),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Delete',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.red.shade600,
+                      Container(width: 1, height: 40, color: Colors.grey.shade300),
+                      Expanded(
+                        child: InkWell(
+                          onTap: template.isDeleted ? null : () => _togglePauseResume(template),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  template.isActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                  size: 16,
+                                  color: template.isActive ? Colors.orange.shade600 : Colors.green.shade600,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  template.isActive ? 'Pause' : 'Resume',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: template.isActive ? Colors.orange.shade600 : Colors.green.shade600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                      Container(width: 1, height: 40, color: Colors.grey.shade300),
+                      Expanded(
+                        child: InkWell(
+                          onTap: template.isDeleted ? null : () => _deleteRecurringPayment(template),
+                          borderRadius: const BorderRadius.only(bottomRight: Radius.circular(16)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.delete_outline_rounded, size: 16, color: Colors.red.shade600),
+                                const SizedBox(width: 4),
+                                Text('Delete', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.red.shade600)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
     );
+  }
+
+  int? _calendarDaysUntil(DateTime? targetDate) {
+    if (targetDate == null) return null;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(targetDate.year, targetDate.month, targetDate.day);
+    return target.difference(today).inDays;
   }
 
   Widget _buildEmptyState() {
@@ -440,28 +506,17 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.schedule_outlined,
-              size: 64,
-              color: Colors.grey.shade300,
-            ),
+            Icon(Icons.schedule_outlined, size: 64, color: Colors.grey.shade300),
             const SizedBox(height: 16),
             const Text(
               'No Recurring Payments',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A2E),
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E)),
             ),
             const SizedBox(height: 8),
             Text(
               'Set up automatic payments for rent, utilities, and other regular expenses.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
           ],
         ),
@@ -471,84 +526,264 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
 
   double _calculateMonthlyTotal() {
     double total = 0.0;
-    for (final expense in _recurringExpenses) {
-      final config = expense.recurringConfig;
-      if (config != null && config.interval != null) {
-        final interval = config.interval!;
-        if (interval == RecurringInterval.monthly) {
-          total += expense.amount;
-        } else if (interval == RecurringInterval.weekly) {
-          total += expense.amount * 4.33; // Average weeks per month
-        } else if (interval == RecurringInterval.yearly) {
-          total += expense.amount / 12;
-        }
+    for (final t in _templates.where((e) => e.isActive)) {
+      final interval = t.recurringConfig.interval;
+      if (interval == RecurringInterval.monthly) {
+        total += t.amount;
+      } else if (interval == RecurringInterval.weekly) {
+        total += t.amount * 4.33;
+      } else if (interval == RecurringInterval.yearly) {
+        total += t.amount / 12;
       } else {
-        // Default to monthly if no interval specified
-        total += expense.amount;
+        total += t.amount;
       }
     }
     return total;
   }
 
-  void _showRecurringPaymentDetails(ExpenseData expense) {
-    // TODO: Show detailed recurring payment info
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Details for "${expense.title}" - Coming soon!'),
-        backgroundColor: Colors.blue,
-      ),
-    );
-  }
+  void _showRecurringPaymentDetails(RecurringExpenseTemplate template) {
+    final config = template.recurringConfig;
+    final next = template.getNextScheduledDate();
+    final activeText = template.isActive ? 'Active' : 'Paused';
 
-  void _editRecurringPayment(ExpenseData expense) {
-    // TODO: Edit recurring payment
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Edit "${expense.title}" - Coming soon!'),
-        backgroundColor: Colors.blue,
-      ),
-    );
-  }
-
-  void _pauseRecurringPayment(ExpenseData expense) {
-    // TODO: Pause recurring payment
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Pause "${expense.title}" - Coming soon!'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-  }
-
-  void _deleteRecurringPayment(ExpenseData expense) {
     showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(template.title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Status: $activeText'),
+            Text('Amount: Rs. ${template.amount.toStringAsFixed(2)}'),
+            Text('Category: ${template.category}'),
+            Text('Frequency: ${config.interval?.label ?? 'Monthly'}'),
+            if (next != null) Text('Next: ${_formatDate(next)}'),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editRecurringPayment(RecurringExpenseTemplate template) async {
+    final titleCtrl = TextEditingController(text: template.title);
+    final descCtrl = TextEditingController(text: template.description);
+    final amountCtrl = TextEditingController(text: template.amount.toStringAsFixed(2));
+    final categoryCtrl = TextEditingController(text: template.category);
+    RecurringInterval selected = template.recurringConfig.interval ?? RecurringInterval.monthly;
+    DateTime selectedNextDate = template.getNextScheduledDate() ?? DateTime.now().add(const Duration(days: 1));
+    String selectedPaidBy = template.paidBy.isNotEmpty ? template.paidBy : template.createdBy;
+
+    final payerCandidates = _roomspaceMembers.where((m) {
+      final id = m['id'] ?? '';
+      return id.isNotEmpty && (template.selectedRoommates.contains(id) || id == template.createdBy);
+    }).toList();
+    final hasSelectedPayer = payerCandidates.any((m) => m['id'] == selectedPaidBy);
+    if (!hasSelectedPayer && selectedPaidBy.isNotEmpty) {
+      payerCandidates.add({'id': selectedPaidBy, 'name': selectedPaidBy});
+    }
+
+    final updated = await showDialog<RecurringExpenseTemplate>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Edit Recurring Payment'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Title')),
+                  const SizedBox(height: 10),
+                  TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description')),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Amount'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(controller: categoryCtrl, decoration: const InputDecoration(labelText: 'Category')),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<RecurringInterval>(
+                    value: selected,
+                    decoration: const InputDecoration(labelText: 'Frequency'),
+                    items: RecurringInterval.values
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e.label)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setLocal(() => selected = v);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: selectedPaidBy.isNotEmpty ? selectedPaidBy : null,
+                    decoration: const InputDecoration(labelText: 'Paid by'),
+                    items: payerCandidates
+                        .map((m) => DropdownMenuItem<String>(
+                              value: m['id'],
+                              child: Text(m['name'] ?? m['id'] ?? ''),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setLocal(() => selectedPaidBy = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      const Icon(Icons.event_rounded, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Next payment: ${_formatDate(selectedNextDate)}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedNextDate,
+                            firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                            lastDate: DateTime.now().add(const Duration(days: 3650)),
+                          );
+                          if (picked != null) {
+                            setLocal(() => selectedNextDate = picked);
+                          }
+                        },
+                        child: const Text('Change'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                final amount = double.tryParse(amountCtrl.text.trim());
+                if (amount == null || amount <= 0) return;
+                Navigator.pop(
+                  context,
+                  template.copyWith(
+                    title: titleCtrl.text.trim(),
+                    description: descCtrl.text.trim(),
+                    amount: amount,
+                    category: categoryCtrl.text.trim(),
+                    paidBy: selectedPaidBy,
+                    recurringConfig: template.recurringConfig.copyWith(interval: selected),
+                  ),
+                );
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (updated == null || template.id == null) return;
+
+    try {
+      await _recurringService.updateRecurringExpenseTemplate(
+        template.id!,
+        updated,
+        nextScheduledDate: selectedNextDate,
+      );
+      await _loadTemplates();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recurring payment updated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update recurring payment: $e')),
+      );
+    }
+  }
+
+  Future<void> _togglePauseResume(RecurringExpenseTemplate template) async {
+    if (template.id == null) return;
+    try {
+      await _recurringService.updateRecurringExpenseTemplate(
+        template.id!,
+        template.copyWith(isActive: !template.isActive),
+      );
+      await _loadTemplates();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(template.isActive ? 'Recurring payment paused' : 'Recurring payment resumed')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e')),
+      );
+    }
+  }
+
+  Future<void> _deleteRecurringPayment(RecurringExpenseTemplate template) async {
+    if (template.id == null) return;
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Recurring Payment'),
-        content: Text('Are you sure you want to delete "${expense.title}"? This will stop all future automatic payments.'),
+        content: Text('Are you sure you want to delete "${template.title}"? This will stop all future automatic payments.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: Delete recurring payment
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Delete "${expense.title}" - Coming soon!'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
+
+    if (confirm != true) return;
+
+    try {
+      await _recurringService.deleteRecurringExpenseTemplate(template.id!);
+      await _loadTemplates();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recurring payment deleted. You can undo within 24 hours.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete recurring payment: $e')),
+      );
+    }
+  }
+
+  Future<void> _undoDeleteRecurringPayment(RecurringExpenseTemplate template) async {
+    if (template.id == null) return;
+    try {
+      await _recurringService.restoreRecurringExpenseTemplate(template.id!);
+      await _loadTemplates();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recurring payment restored')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to restore recurring payment: $e')),
+      );
+    }
   }
 
   IconData _getIcon(String category) {

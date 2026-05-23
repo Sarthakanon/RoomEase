@@ -1,5 +1,6 @@
 import '../models/recurring_expense_models.dart';
 import 'api_service.dart';
+import 'real_time_data_service.dart';
 
 /// Service for managing recurring expenses
 class RecurringExpenseService {
@@ -49,15 +50,29 @@ class RecurringExpenseService {
   /// Update a recurring expense template
   Future<RecurringExpenseTemplate> updateRecurringExpenseTemplate(
     int templateId,
-    RecurringExpenseTemplate template,
-  ) async {
+    RecurringExpenseTemplate template, {
+    DateTime? nextScheduledDate,
+  }) async {
     try {
+      final payload = template.toJson();
+      if (nextScheduledDate != null) {
+        final normalizedUtc = DateTime.utc(
+          nextScheduledDate.year,
+          nextScheduledDate.month,
+          nextScheduledDate.day,
+          12,
+          0,
+          0,
+        );
+        payload['next_scheduled_date'] = normalizedUtc.toIso8601String();
+      }
       final response = await _apiService.updateRecurringExpenseTemplate(
         templateId,
-        template.toJson(),
+        payload,
       );
       
       if (response['success'] == true && response['data'] != null) {
+        RealTimeDataService().clearAllData();
         return RecurringExpenseTemplate.fromJson(response['data']);
       }
       
@@ -77,6 +92,20 @@ class RecurringExpenseService {
       }
     } catch (e) {
       throw Exception('Failed to delete recurring expense template: ${e.toString()}');
+    }
+  }
+
+  /// Restore a soft-deleted recurring expense template
+  Future<RecurringExpenseTemplate> restoreRecurringExpenseTemplate(int templateId) async {
+    try {
+      final response = await _apiService.restoreRecurringExpenseTemplate(templateId);
+      if (response['success'] == true && response['data'] != null) {
+        RealTimeDataService().clearAllData();
+        return RecurringExpenseTemplate.fromJson(response['data']);
+      }
+      throw Exception('Failed to restore recurring expense template');
+    } catch (e) {
+      throw Exception('Failed to restore recurring expense template: ${e.toString()}');
     }
   }
 

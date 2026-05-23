@@ -101,6 +101,16 @@ class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObse
     return Consumer<RoomspaceProvider>(
       builder: (context, roomspaceProvider, child) {
         final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+
+        // If user switches to Personal Space while currently on Rooms tab,
+        // move to Expenses tab to avoid showing roomspace-only context.
+        if (isPersonalSpace && _currentIndex == 1) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _currentIndex == 1) {
+              setState(() => _currentIndex = 2);
+            }
+          });
+        }
         
         return Scaffold(
           backgroundColor: Colors.white,

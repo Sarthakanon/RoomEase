@@ -1,0 +1,47 @@
+{
+  "approach": "task-oriented models for assistant use cases",
+  "monthly_forecast": {
+    "mae": 5048.394687087505,
+    "r2": 0.2801191611287219,
+    "baseline_mae": 9006.700164130974,
+    "pct_off": 28.487784268471326,
+    "within_20": 46.15098395898793,
+    "within_50": 84.15743343806847,
+    "train_size": 57715,
+    "test_size": 24188
+  },
+  "anomaly_detection": {
+    "accuracy": 0.9220913711266713,
+    "f1": 0.0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "auc": 0.7073373130311633,
+    "train_size": 1419486,
+    "test_size": 607391
+  },
+  "spending_profiles": {
+    "n_clusters": 6,
+    "cluster_names": {
+      "0": "cluster_0_travel_daily$1071",
+      "1": "cluster_1_housing_daily$265",
+      "2": "cluster_2_housing_daily$212",
+      "3": "cluster_3_travel_daily$927",
+      "4": "cluster_4_housing_daily$311",
+      "5": "cluster_5_housing_daily$462"
+    },
+    "n_users": 1000
+  },
+  "v1_vs_v2_vs_v3": {
+    "v1_regression_R2": 0.61,
+    "v1_was_leaked": true,
+    "v2_regression_R2": 0.003,
+    "v2_honest_day_level": true,
+    "v3_monthly_forecast_R2": 0.2801191611287219,
+    "v3_weekly_aggregation": true,
+    "v1_overspend_AUC": 0.9998,
+    "v1_was_circular": true,
+    "v2_overspend_AUC": 0.68,
+    "v3_anomaly_AUC": 0.7073373130311633,
+    "v3_uses_prior_patterns": true
+  }
+}

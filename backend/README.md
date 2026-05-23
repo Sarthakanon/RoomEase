@@ -23,6 +23,27 @@ Go backend server for RoomEase application.
    go run main.go
    ```
 
+## Analytics V2 Bridge (Required For ML Insights)
+
+The analytics endpoints call an ML bridge at `ML_API_URL` (default `http://localhost:5001`).
+
+Start the V2 bridge from project root:
+
+```bash
+cd dataset-sarthak-ai
+pip install -r requirements.txt
+./start_ml_bridge_v2.sh
+```
+
+Then run backend:
+
+```bash
+cd backend
+go run main.go
+```
+
+The V2 bridge now runs in strict mode: if model dependencies or model files are missing, the bridge will fail to start (no dummy/fallback inference).
+
 ## Project Structure
 
 ```

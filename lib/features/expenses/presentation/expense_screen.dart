@@ -6,9 +6,9 @@ import '../../../services/smart_api_service.dart';
 import '../../../services/state_management_service.dart';
 import '../../../services/real_time_data_service.dart';
 import '../../../models/expense_models.dart';
+import '../../../models/recurring_expense_models.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../../../widgets/enhanced_expense_tile.dart';
-import '../../../widgets/recurring_payment_details_sheet.dart';
 import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/utils/subscription_helper.dart';
 import '../widgets/month_selector.dart';
@@ -144,13 +144,23 @@ class _ExpenseScreenState extends State<ExpenseScreen>
 
   /// Smart data loader for expenses with caching
   Future<Map<String, dynamic>> _loadExpenseData({bool forceRefresh = false}) async {
-    // Return cached data if valid and not forcing refresh
+    // Return cached data if valid and not forcing refresh.
+    // If recurring count is 0 in roomspace mode, bypass cache to avoid stale empty state.
     if (!forceRefresh && 
         _cachedExpenseData != null && 
         _lastDataLoad != null &&
         DateTime.now().difference(_lastDataLoad!) < _cacheValidDuration) {
-      debugPrint('🚀 Using cached expense data');
-      return _cachedExpenseData!;
+      final cachedIsPersonal = _cachedExpenseData!['isPersonalSpace'] as bool? ?? true;
+      final cachedRecurring = _cachedExpenseData!['recurringExpenses'];
+      final cachedRecurringCount = (cachedRecurring is Map<String, dynamic>)
+          ? (cachedRecurring['count'] as int? ?? 0)
+          : 0;
+      if (!cachedIsPersonal && cachedRecurringCount == 0) {
+        debugPrint('🚀 Cached recurring count is 0 in roomspace, fetching fresh data');
+      } else {
+        debugPrint('🚀 Using cached expense data');
+        return _cachedExpenseData!;
+      }
     }
 
     debugPrint('🌐 Loading fresh expense data...');
@@ -240,12 +250,34 @@ class _ExpenseScreenState extends State<ExpenseScreen>
       );
       
       if (response.statusCode == 200 && response.data['success'] == true) {
-        final List<dynamic> recurringData = response.data['data'] ?? [];
+        final dynamic rawData = response.data['data'];
+        final List<dynamic> recurringData = rawData is List
+            ? rawData
+            : (rawData is Map<String, dynamic> && rawData['data'] is List ? rawData['data'] as List : <dynamic>[]);
         debugPrint('🔄 Found ${recurringData.length} recurring expense templates');
-        return {'data': recurringData, 'count': recurringData.length};
+        if (recurringData.isNotEmpty) {
+          return {'data': recurringData, 'count': recurringData.length};
+        }
+        debugPrint('🔄 No templates found, trying fallback from regular expenses');
+      }
+
+      // Fallback 1: Upcoming recurring endpoint
+      try {
+        final upcomingResponse = await _smartApi.dio.get(
+          '/api/roomspaces/$roomspaceId/recurring-expenses/upcoming?days=365',
+        );
+        if (upcomingResponse.statusCode == 200 && upcomingResponse.data['success'] == true) {
+          final List<dynamic> upcomingData = upcomingResponse.data['data'] ?? [];
+          debugPrint('🔄 Upcoming fallback found ${upcomingData.length} recurring items');
+          if (upcomingData.isNotEmpty) {
+            return {'data': upcomingData, 'count': upcomingData.length};
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ Upcoming recurring fallback failed: $e');
       }
       
-      // Fallback: Filter regular expenses for recurring ones
+      // Fallback 2: Filter regular expenses for recurring ones
       debugPrint('🔄 Fallback: Filtering regular expenses for recurring ones');
       final expensesResponse = await _smartApi.getRoomspaceExpenses(
         roomspaceId,
@@ -417,13 +449,14 @@ class _ExpenseScreenState extends State<ExpenseScreen>
         .map((json) => ExpenseData.fromJson(json))
         .toList();
     
-    final recentRecurringExpenses = recurringExpensesList
-        .map((json) => ExpenseData.fromJson(json))
+    final recurringTemplates = recurringExpensesList
+        .map((json) => RecurringExpenseTemplate.fromJson(Map<String, dynamic>.from(json)))
+        .where((template) => !template.isDeleted)
         .toList();
     
     final totalRecentSpending = nonRecurringSharedExpenses.fold(0.0, (sum, item) => sum + item.amount) +
         recentPersonalExpenses.fold(0.0, (sum, item) => sum + item.amount) +
-        recentRecurringExpenses.fold(0.0, (sum, item) => sum + item.amount);
+        recurringTemplates.fold(0.0, (sum, item) => sum + item.amount);
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -448,10 +481,10 @@ class _ExpenseScreenState extends State<ExpenseScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Recurring Payments Section (Priority Display)
-                  if (!isPersonalSpace && recentRecurringExpenses.isNotEmpty) ...[
+                  // Recurring Payments Section
+                  if (!isPersonalSpace) ...[
                     const SizedBox(height: 12),
-                    _buildRecurringPaymentsSection(primaryColor, recentRecurringExpenses),
+                    _buildRecurringPaymentsSection(primaryColor, recurringTemplates),
                     const SizedBox(height: 24),
                   ],
                   
@@ -697,7 +730,9 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     );
   }
 
-  Widget _buildRecurringPaymentsSection(Color primaryColor, List<ExpenseData> recurringExpenses) {
+  Widget _buildRecurringPaymentsSection(Color primaryColor, List<RecurringExpenseTemplate> recurringExpenses) {
+    final isEmpty = recurringExpenses.isEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -729,25 +764,11 @@ class _ExpenseScreenState extends State<ExpenseScreen>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.shade600,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${recurringExpenses.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
+                
               ],
             ),
             TextButton(
-              onPressed: () => _showAllRecurringPayments(recurringExpenses),
+              onPressed: _openRecurringManager,
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 minimumSize: Size.zero,
@@ -775,33 +796,52 @@ class _ExpenseScreenState extends State<ExpenseScreen>
         const SizedBox(height: 12),
         
         // Recurring Payments List
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.purple.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.purple.shade200, width: 1),
-          ),
-          child: Column(
-            children: recurringExpenses.take(3).map((expense) {
-              final isLast = expense == recurringExpenses.take(3).last;
-              return Container(
-                decoration: BoxDecoration(
-                  border: isLast ? null : Border(
-                    bottom: BorderSide(color: Colors.purple.shade200, width: 0.5),
+        if (isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200, width: 1),
+            ),
+            child: Text(
+              'No recurring payments found in this roomspace yet. Tap "Manage All" to open recurring manager.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200, width: 1),
+            ),
+            child: Column(
+              children: recurringExpenses.take(3).map((expense) {
+                final isLast = expense == recurringExpenses.take(3).last;
+                return Container(
+                  decoration: BoxDecoration(
+                    border: isLast ? null : Border(
+                      bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+                    ),
                   ),
-                ),
-                child: _buildRecurringPaymentTile(expense, Colors.purple.shade700),
-              );
-            }).toList(),
+                  child: _buildRecurringPaymentTile(expense, Colors.purple.shade700),
+                );
+              }).toList(),
+            ),
           ),
-        ),
         
         // Show more indicator if there are more than 3
         if (recurringExpenses.length > 3) ...[
           const SizedBox(height: 8),
           Center(
             child: TextButton.icon(
-              onPressed: () => _showAllRecurringPayments(recurringExpenses),
+              onPressed: _openRecurringManager,
               icon: Icon(Icons.expand_more_rounded, size: 16, color: Colors.purple.shade600),
               label: Text(
                 '+${recurringExpenses.length - 3} more recurring payments',
@@ -823,12 +863,11 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     );
   }
 
-  Widget _buildRecurringPaymentTile(ExpenseData expense, Color themeColor) {
-    final config = expense.recurringConfig;
-    final nextPayment = config?.getNextOccurrence(DateTime.now());
+  Widget _buildRecurringPaymentTile(RecurringExpenseTemplate template, Color themeColor) {
+    final nextPayment = template.getNextScheduledDate();
     
     return InkWell(
-      onTap: () => _showRecurringPaymentDetails(expense),
+      onTap: _openRecurringManager,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -841,7 +880,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
-                _getIcon(expense.category),
+                _getIcon(template.category),
                 color: themeColor,
                 size: 18,
               ),
@@ -854,7 +893,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    expense.title,
+                    template.title,
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
@@ -867,7 +906,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
                   Row(
                     children: [
                       Text(
-                        config?.interval?.label ?? 'Monthly',
+                        template.recurringConfig.interval?.label ?? 'Monthly',
                         style: TextStyle(
                           fontSize: 11,
                           color: themeColor,
@@ -876,7 +915,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
                       ),
                       if (nextPayment != null) ...[
                         Text(
-                          ' • Next: ${_formatDate(nextPayment)}',
+                          ' • Next: ${_formatUpcomingDate(nextPayment)}',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade600,
@@ -894,7 +933,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  'Rs. ${expense.amount.toStringAsFixed(0)}',
+                  'Rs. ${template.amount.toStringAsFixed(0)}',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -925,23 +964,24 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     );
   }
 
-  void _showAllRecurringPayments(List<ExpenseData> recurringExpenses) {
+  void _openRecurringManager() {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    if (activeRoomspaceId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active roomspace selected')),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => RecurringPaymentsScreen(
-          recurringExpenses: recurringExpenses,
+          roomspaceId: activeRoomspaceId,
+          recurringExpenses: const [],
         ),
       ),
-    );
-  }
-
-  void _showRecurringPaymentDetails(ExpenseData expense) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => RecurringPaymentDetailsSheet(expense: expense),
     );
   }
 
@@ -1187,6 +1227,24 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     if (difference.inDays == 1) return 'Yesterday';
     if (difference.inDays < 7) return '${difference.inDays}d ago';
     
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[date.month - 1]} ${date.day}';
+  }
+
+  String _formatUpcomingDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(date.year, date.month, date.day);
+    final dayDiff = target.difference(today).inDays;
+
+    if (dayDiff == 0) return 'Today';
+    if (dayDiff == 1) return 'Tomorrow';
+    if (dayDiff > 1 && dayDiff < 7) return 'In $dayDiff days';
+    if (dayDiff < 0) return 'Overdue';
+
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'

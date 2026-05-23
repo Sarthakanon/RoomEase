@@ -1,0 +1,280 @@
+{
+  "user_profile": {
+    "user_id": "USR_0522",
+    "name": "Avery Harris",
+    "persona": "moderate",
+    "age": 21,
+    "income": 56000.0,
+    "location_tier": "tier3",
+    "total_spent": 734735.42,
+    "total_transactions": 6784,
+    "avg_transaction": 108.30415978773586,
+    "top_categories": [
+      {
+        "category": "travel",
+        "total_spent": 183503.36000000002,
+        "count": 455
+      },
+      {
+        "category": "housing",
+        "total_spent": 180030.65,
+        "count": 681
+      },
+      {
+        "category": "food_dining",
+        "total_spent": 128379.38,
+        "count": 1878
+      }
+    ],
+    "num_groups": 4,
+    "group_types": [
+      "household",
+      "friends",
+      "project",
+      "family"
+    ]
+  },
+  "spending_breakdown": {
+    "user_id": "USR_0522",
+    "period": "last_30d",
+    "total_spent": 10851.310000000001,
+    "total_transactions": 95,
+    "breakdown": {
+      "education": {
+        "total": 292.89,
+        "count": 7.0,
+        "avg": 41.84142857142857
+      },
+      "entertainment": {
+        "total": 1181.72,
+        "count": 16.0,
+        "avg": 73.8575
+      },
+      "food_dining": {
+        "total": 2541.68,
+        "count": 25.0,
+        "avg": 101.6672
+      },
+      "gifts_donations": {
+        "total": 579.45,
+        "count": 4.0,
+        "avg": 144.8625
+      },
+      "health": {
+        "total": 122.56,
+        "count": 3.0,
+        "avg": 40.85333333333333
+      },
+      "housing": {
+        "total": 2874.07,
+        "count": 11.0,
+        "avg": 261.27909090909094
+      },
+      "shopping": {
+        "total": 574.8199999999999,
+        "count": 5.0,
+        "avg": 114.96399999999998
+      },
+      "subscriptions": {
+        "total": 89.1,
+        "count": 4.0,
+        "avg": 22.275
+      },
+      "transportation": {
+        "total": 1580.91,
+        "count": 13.0,
+        "avg": 121.60846153846154
+      },
+      "travel": {
+        "total": 1014.11,
+        "count": 7.0,
+        "avg": 144.87285714285716
+      }
+    }
+  },
+  "overspending_alerts": {
+    "user_id": "USR_0522",
+    "alerts": [
+      {
+        "type": "negative_amounts",
+        "message": "You have 2 refund/credit entries totaling $143.40",
+        "severity": "info"
+      }
+    ],
+    "risk_level": "low"
+  },
+  "recommendations": {
+    "user_id": "USR_0522",
+    "persona": "moderate",
+    "recommendations": [
+      {
+        "category": "housing",
+        "monthly_spend": 2874.07,
+        "transaction_count": 11.0,
+        "tips": [
+          "Review utility bills for potential savings (LED bulbs, smart thermostat)",
+          "Negotiate rent at renewal time"
+        ]
+      },
+      {
+        "category": "food_dining",
+        "monthly_spend": 2541.68,
+        "transaction_count": 25.0,
+        "tips": [
+          "Try meal prepping to reduce dining out expenses by 20-30%",
+          "Set a weekly grocery budget and stick to it"
+        ]
+      },
+      {
+        "category": "transportation",
+        "monthly_spend": 1580.91,
+        "transaction_count": 13.0,
+        "tips": [
+          "Consider public transit passes for daily commuting",
+          "Carpool to reduce fuel costs by 50%"
+        ]
+      },
+      {
+        "category": "general",
+        "persona_tip": "You spend within reasonable limits. Focus on redirecting spending toward value-aligned categories."
+      }
+    ]
+  },
+  "spend_prediction": {
+    "user_id": "USR_0522",
+    "target_date": "2026-01-01",
+    "predicted_spend": 310.27,
+    "overspending_probability": 0.0006,
+    "overspending_risk": "low",
+    "recent_7d_avg": 308.03,
+    "recent_30d_avg": 353.82
+  },
+  "group_insights": [
+    {
+      "group_id": "GRP_0020",
+      "name": "Apartment 97",
+      "type": "household",
+      "total_spent": 403936.62,
+      "category_breakdown": {
+        "transportation": 136292.6,
+        "housing": 134267.76,
+        "food_dining": 133376.26
+      },
+      "members": {
+        "USR_0687": {
+          "total_paid": 52293.950000000004,
+          "transactions": 429
+        },
+        "USR_0942": {
+          "total_paid": 90123.03,
+          "transactions": 769
+        },
+        "USR_0522": {
+          "total_paid": 90565.85,
+          "transactions": 773
+        },
+        "USR_0029": {
+          "total_paid": 87292.53,
+          "transactions": 733
+        },
+        "USR_0625": {
+          "total_paid": 83661.26,
+          "transactions": 731
+        }
+      },
+      "unsettled_balance": {
+        "USR_0942": 2067.93,
+        "USR_0522": 3072.62,
+        "USR_0625": -3333.99,
+        "USR_0029": 2648.12,
+        "USR_0687": -4454.68
+      },
+      "settled_amount": 72405.25,
+      "settlement_efficiency": 17.9
+    },
+    {
+      "group_id": "GRP_0051",
+      "name": "Brunch Bunch",
+      "type": "friends",
+      "total_spent": 136584.15,
+      "category_breakdown": {
+        "entertainment": 46036.67,
+        "travel": 45355.36,
+        "food_dining": 45192.12
+      },
+      "members": {
+        "USR_0522": {
+          "total_paid": 44594.950000000004,
+          "transactions": 498
+        },
+        "USR_0858": {
+          "total_paid": 45736.13,
+          "transactions": 505
+        },
+        "USR_0297": {
+          "total_paid": 46253.07,
+          "transactions": 542
+        }
+      },
+      "unsettled_balance": {
+        "USR_0522": -933.34,
+        "USR_0858": 208.2,
+        "USR_0297": 725.14
+      },
+      "settled_amount": 8609.84,
+      "settlement_efficiency": 6.3
+    },
+    {
+      "group_id": "GRP_0105",
+      "name": "Task Force 91",
+      "type": "project",
+      "total_spent": 54263.91,
+      "category_breakdown": {
+        "transportation": 19878.99,
+        "food_dining": 17664.42,
+        "education": 16720.5
+      },
+      "members": {
+        "USR_0484": {
+          "total_paid": 1884.73,
+          "transactions": 22
+        },
+        "USR_0677": {
+          "total_paid": 9751.100000000002,
+          "transactions": 123
+        },
+        "USR_0355": {
+          "total_paid": 9119.15,
+          "transactions": 121
+        },
+        "USR_0267": {
+          "total_paid": 3240.0299999999997,
+          "transactions": 39
+        },
+        "USR_0154": {
+          "total_paid": 8596.26,
+          "transactions": 122
+        },
+        "USR_0856": {
+          "total_paid": 11412.929999999998,
+          "transactions": 141
+        },
+        "USR_0522": {
+          "total_paid": 10259.71,
+          "transactions": 130
+        }
+      },
+      "unsettled_balance": {
+        "USR_0677": 43.72,
+        "USR_0355": -587.42,
+        "USR_0154": -1110.31,
+        "USR_0856": 1706.36,
+        "USR_0522": 553.14,
+        "USR_0267": -529.26,
+        "USR_0484": -76.23
+      },
+      "settled_amount": 3631.86,
+      "settlement_efficiency": 6.7
+    }
+  ]
+}

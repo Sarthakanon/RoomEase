@@ -243,139 +243,102 @@ class _RecurringPaymentWidgetState extends State<RecurringPaymentWidget> {
   }
 
   Widget _buildAdvancedOptions(Color primaryColor) {
-    return ExpansionTile(
-      title: const Text(
-        'Advanced Options',
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF1A1A2E),
-        ),
-      ),
-      tilePadding: EdgeInsets.zero,
-      childrenPadding: const EdgeInsets.only(top: 8),
-      children: [
-        // End Date Option
-        Row(
-          children: [
-            Checkbox(
-              value: _config.endDate != null,
-              onChanged: (value) {
-                _updateConfig(_config.copyWith(
-                  endDate: value == true ? DateTime.now().add(const Duration(days: 365)) : null,
-                ));
-              },
-              activeColor: primaryColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'Set end date',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        
-        if (_config.endDate != null) ...[
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.only(left: 40),
-            child: _buildDateSelector(
-              label: 'Select end date',
-              date: _config.endDate,
-              onDateSelected: (date) {
-                _updateConfig(_config.copyWith(endDate: date));
-              },
-            ),
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        title: const Text(
+          'Advanced Options',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1A1A2E),
           ),
-        ],
-        
-        const SizedBox(height: 16),
-        
-        // Notification Settings
-        Row(
-          children: [
-            Checkbox(
-              value: _config.notifyBeforeCreation,
-              onChanged: (value) {
-                _updateConfig(_config.copyWith(
-                  notifyBeforeCreation: value ?? true,
-                ));
-              },
-              activeColor: primaryColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'Notify before creating expense',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
         ),
-        
-        if (_config.notifyBeforeCreation) ...[
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.only(left: 40),
-            child: Row(
-              children: [
-                const Text(
-                  'Notify',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(top: 8),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        children: [
+          // Notification Settings
+          Row(
+            children: [
+              Checkbox(
+                value: _config.notifyBeforeCreation,
+                onChanged: (value) {
+                  _updateConfig(_config.copyWith(
+                    notifyBeforeCreation: value ?? true,
+                  ));
+                },
+                activeColor: primaryColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  width: 60,
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF7F7FB),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFEEEEF2)),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Notify before creating expense',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          if (_config.notifyBeforeCreation) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 40),
+              child: Row(
+                children: [
+                  const Text(
+                    'Notify',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<int>(
-                      value: _config.notificationDaysBefore,
-                      isExpanded: true,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A1A2E),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 60,
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7F7FB),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFEEEEF2)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: _config.notificationDaysBefore,
+                        isExpanded: true,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A1A2E),
+                        ),
+                        items: [1, 2, 3, 7].map((days) {
+                          return DropdownMenuItem<int>(
+                            value: days,
+                            child: Text('$days'),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            _updateConfig(_config.copyWith(
+                              notificationDaysBefore: value,
+                            ));
+                          }
+                        },
                       ),
-                      items: [1, 2, 3, 7].map((days) {
-                        return DropdownMenuItem<int>(
-                          value: days,
-                          child: Text('$days'),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          _updateConfig(_config.copyWith(
-                            notificationDaysBefore: value,
-                          ));
-                        }
-                      },
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'day(s) before',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  const Text(
+                    'day(s) before',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 

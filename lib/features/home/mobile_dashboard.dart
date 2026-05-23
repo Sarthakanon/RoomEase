@@ -10,6 +10,7 @@ import '../../services/state_management_service.dart';
 import '../../services/payment_notification_service.dart';
 import '../../services/ocr_service.dart';
 import '../../services/real_time_data_service.dart';
+import '../../services/recurring_notification_service.dart';
 import 'dart:async';
 import '../../models/payment_notification.dart';
 import '../../models/expense_models.dart';
@@ -19,6 +20,7 @@ import 'widgets/personal_expense_dialog.dart';
 import 'widgets/receipt_scanner_dialog.dart';
 import 'widgets/balance_details_dialog.dart';
 import '../expenses/presentation/expense_history_screen.dart';
+import '../expenses/presentation/expense_list_screen.dart';
 
 /// Home dashboard — shows balance summary, quick actions, and recent expenses.
 class MobileDashboard extends StatefulWidget {
@@ -174,6 +176,10 @@ class _MobileDashboardState extends State<MobileDashboard>
       await paymentService.initializeBackgroundService();
       await paymentService.startBackgroundMonitoring();
       paymentService.onExpenseRequested = _showExpenseDialogFromPayment;
+
+      final recurringNotificationService = RecurringNotificationService();
+      await recurringNotificationService.initialize();
+      unawaited(recurringNotificationService.syncAndNotifyPending());
     } catch (e) {
       debugPrint('Error initializing payment notifications: $e');
     }
@@ -264,6 +270,9 @@ class _MobileDashboardState extends State<MobileDashboard>
     _lastDataLoad = DateTime.now();
     _state.markRefreshed(ScreenKeys.dashboard);
     debugPrint('💾 Dashboard data cached at $_lastDataLoad');
+
+    // Non-blocking recurring reminder sync for Android system notifications.
+    unawaited(RecurringNotificationService().syncAndNotifyPending());
 
     return dashboardData;
   }
@@ -916,10 +925,16 @@ class _MobileDashboardState extends State<MobileDashboard>
                   children: [
                     TextButton.icon(
                       onPressed: () {
+                        final roomspaceProvider =
+                            Provider.of<RoomspaceProvider>(context, listen: false);
+                        final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const ExpenseHistoryScreen(),
+                            builder: (context) => isPersonalSpace
+                                ? const ExpenseListScreen(isPersonalExpenses: true)
+                                : const ExpenseHistoryScreen(),
                           ),
                         );
                       },
@@ -1657,7 +1672,9 @@ class _MobileDashboardState extends State<MobileDashboard>
 
     return _ExpenseTile(
       title: title,
-      subtitle: isPaidByMe ? 'You paid' : '${payerName ?? 'Someone'} paid',
+      subtitle: isPaidByMe
+          ? 'Shared · You paid'
+          : 'Shared · ${payerName ?? 'Someone'} paid',
       amount: 'Rs. ${amount.toStringAsFixed(0)}',
       amountColor: isPaidByMe ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
       date: _formatDate(date),
@@ -1682,7 +1699,7 @@ class _MobileDashboardState extends State<MobileDashboard>
 
     return _ExpenseTile(
       title: title,
-      subtitle: category,
+      subtitle: 'Personal · $category',
       amount: 'Rs. ${amount.toStringAsFixed(0)}',
       amountColor: const Color(0xFF1A1A2E),
       date: _formatDate(date),

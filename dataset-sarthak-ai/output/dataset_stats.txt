@@ -1,0 +1,56 @@
+============================================================
+DATASET STATISTICS
+============================================================
+
+--- Users ---
+Total users: 1000
+  moderate: 241 (24.1%)
+  lifestyle: 195 (19.5%)
+  conservative: 190 (19.0%)
+  frugal: 155 (15.5%)
+  occasional_splurger: 113 (11.3%)
+  spender: 106 (10.6%)
+  metro: 461
+  tier2: 348
+  tier3: 191
+Average income: $56,148
+Average age: 41.0
+
+--- Groups ---
+Total groups: 350
+  friends: 100
+  household: 77
+  office: 65
+  family: 47
+  project: 34
+  travel: 27
+Total memberships: 1778
+
+--- Expenses ---
+Total expenses: 4,385,888
+Total amount: $1,070,815,093.48
+Average: $244.15
+Median: $61.49
+Date range: 2016-01-01 to 2025-12-31
+
+--- By Category ---
+  education           : 144984 | $12,142,079.37 | avg $   83.75
+  entertainment       : 452562 | $45,530,606.07 | avg $  100.61
+  food_dining         : 1186749 | $120,528,206.84 | avg $  101.56
+  gifts_donations     : 100404 | $19,484,702.26 | avg $  194.06
+  health              : 339162 | $34,609,285.28 | avg $  102.04
+  housing             : 618831 | $373,684,037.78 | avg $  603.85
+  shopping            : 474287 | $87,735,925.37 | avg $  184.98
+  subscriptions       : 250718 | $10,247,001.65 | avg $   40.87
+  transportation      : 519787 | $28,717,298.17 | avg $   55.25
+  travel              : 298404 | $338,135,950.69 | avg $ 1133.15
+
+--- Data Quality ---
+Empty descriptions: 93018 (2.1%)
+Vague descriptions: 91977 (2.1%)
+Negative amounts: 3760 (0.09%)
+
+--- Splits ---
+Total: 2,386,226
+Settled: 1,671,188
+============================================================

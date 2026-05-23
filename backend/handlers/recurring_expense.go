@@ -10,7 +10,21 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
+
+func shiftBackOneInterval(nextDate time.Time, interval models.RecurringInterval) time.Time {
+	switch models.NormalizeRecurringInterval(interval) {
+	case models.IntervalWeekly:
+		return nextDate.AddDate(0, 0, -7)
+	case models.IntervalMonthly:
+		return nextDate.AddDate(0, -1, 0)
+	case models.IntervalYearly:
+		return nextDate.AddDate(-1, 0, 0)
+	default:
+		return nextDate.AddDate(0, -1, 0)
+	}
+}
 
 // RecurringExpenseHandler handles recurring expense-related requests
 type RecurringExpenseHandler struct {
@@ -52,6 +66,7 @@ func (h *RecurringExpenseHandler) CreateRecurringExpenseTemplate(c *gin.Context)
 		})
 		return
 	}
+	req.RecurringConfig.Interval = models.NormalizeRecurringInterval(req.RecurringConfig.Interval)
 
 	if req.RecurringConfig.StartDate == nil {
 		now := time.Now()
@@ -74,11 +89,15 @@ func (h *RecurringExpenseHandler) CreateRecurringExpenseTemplate(c *gin.Context)
 		Amount:            req.Amount,
 		Category:          req.Category,
 		CreatedBy:         userID.(string),
+		PaidBy:            req.PaidBy,
 		SelectedRoommates: models.StringArray(req.SelectedRoommates),
 		SplitType:         req.SplitType,
-		CustomSplits:      req.CustomSplits,
+		CustomSplits:      models.JSONFloatMap(req.CustomSplits),
 		RecurringConfig:   req.RecurringConfig,
 		IsActive:          true,
+	}
+	if template.PaidBy == "" {
+		template.PaidBy = userID.(string)
 	}
 
 	// Save to database
@@ -124,10 +143,15 @@ func (h *RecurringExpenseHandler) GetRecurringExpenseTemplates(c *gin.Context) {
 		return
 	}
 
-	// Get templates
+	// Get templates: active/paused + recently deleted (undo window = 1 day)
 	var templates []models.RecurringExpenseTemplate
-	if err := config.DB.Where("roomspace_id = ? AND is_active = ?", roomspaceID, true).
-		Order("created_at DESC").
+	undoWindowStart := time.Now().Add(-24 * time.Hour)
+	if err := config.DB.Where(
+		"roomspace_id = ? AND (is_deleted = false OR (is_deleted = true AND deleted_at IS NOT NULL AND deleted_at >= ?))",
+		roomspaceID,
+		undoWindowStart,
+	).
+		Order("is_deleted ASC, is_active DESC, created_at DESC").
 		Find(&templates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to fetch recurring expense templates",
@@ -204,6 +228,9 @@ func (h *RecurringExpenseHandler) UpdateRecurringExpenseTemplate(c *gin.Context)
 	if req.Category != nil {
 		updates["category"] = *req.Category
 	}
+	if req.PaidBy != nil {
+		updates["paid_by"] = *req.PaidBy
+	}
 	if req.SplitType != nil {
 		updates["split_type"] = *req.SplitType
 	}
@@ -211,13 +238,39 @@ func (h *RecurringExpenseHandler) UpdateRecurringExpenseTemplate(c *gin.Context)
 		updates["selected_roommates"] = models.StringArray(req.SelectedRoommates)
 	}
 	if req.CustomSplits != nil {
-		updates["custom_splits"] = req.CustomSplits
+		updates["custom_splits"] = models.JSONFloatMap(req.CustomSplits)
 	}
 	if req.RecurringConfig != nil {
+		req.RecurringConfig.Interval = models.NormalizeRecurringInterval(req.RecurringConfig.Interval)
 		updates["recurring_config"] = *req.RecurringConfig
+	}
+	if req.NextScheduledDate != nil {
+		interval := models.NormalizeRecurringInterval(template.RecurringConfig.Interval)
+		if req.RecurringConfig != nil && req.RecurringConfig.Interval != "" {
+			interval = models.NormalizeRecurringInterval(req.RecurringConfig.Interval)
+		}
+		// Normalize to date-only schedule anchor in UTC to avoid timezone drift.
+		nextDate := time.Date(
+			req.NextScheduledDate.UTC().Year(),
+			req.NextScheduledDate.UTC().Month(),
+			req.NextScheduledDate.UTC().Day(),
+			12, 0, 0, 0,
+			time.UTC,
+		)
+		lastGenerated := shiftBackOneInterval(nextDate, interval)
+		updates["last_generated"] = lastGenerated
 	}
 	if req.IsActive != nil {
 		updates["is_active"] = *req.IsActive
+	}
+	// Any update on a deleted item restores it by intent.
+	updates["is_deleted"] = false
+	updates["deleted_at"] = nil
+	if len(updates) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "No fields provided for update",
+		})
+		return
 	}
 
 	// Update in database
@@ -232,7 +285,8 @@ func (h *RecurringExpenseHandler) UpdateRecurringExpenseTemplate(c *gin.Context)
 	// Reload template
 	if err := config.DB.First(&template, templateID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to reload updated template",
+			"error":   "Failed to reload updated template",
+			"details": err.Error(),
 		})
 		return
 	}
@@ -280,8 +334,13 @@ func (h *RecurringExpenseHandler) DeleteRecurringExpenseTemplate(c *gin.Context)
 		return
 	}
 
-	// Deactivate template instead of deleting
-	if err := config.DB.Model(&template).Update("is_active", false).Error; err != nil {
+	now := time.Now().UTC()
+	// Soft-delete with 24h undo window
+	if err := config.DB.Model(&template).UpdateColumns(map[string]interface{}{
+		"is_active":  false,
+		"is_deleted": true,
+		"deleted_at": now,
+	}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to delete recurring expense template",
 			"details": err.Error(),
@@ -291,7 +350,64 @@ func (h *RecurringExpenseHandler) DeleteRecurringExpenseTemplate(c *gin.Context)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "Recurring expense template deleted successfully",
+		"message": "Recurring expense template deleted successfully. You can undo within 24 hours.",
+	})
+}
+
+// RestoreRecurringExpenseTemplate restores a soft-deleted recurring template (within 24h).
+func (h *RecurringExpenseHandler) RestoreRecurringExpenseTemplate(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	templateID, err := strconv.Atoi(c.Param("template_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid template ID"})
+		return
+	}
+
+	var template models.RecurringExpenseTemplate
+	if err := config.DB.First(&template, templateID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Recurring expense template not found"})
+		return
+	}
+
+	if template.CreatedBy != userID.(string) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You can only restore templates you created"})
+		return
+	}
+
+	if !template.IsDeleted || template.DeletedAt == nil || template.DeletedAt.Before(time.Now().Add(-24*time.Hour)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Restore window expired for this recurring payment"})
+		return
+	}
+
+	if err := config.DB.Model(&template).UpdateColumns(map[string]interface{}{
+		"is_deleted": false,
+		"deleted_at": gorm.Expr("NULL"),
+		"is_active":  true,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to restore recurring expense template",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if err := config.DB.First(&template, templateID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to reload restored template",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Recurring expense template restored successfully",
+		"data":    template,
 	})
 }
 
@@ -468,8 +584,11 @@ func (h *RecurringExpenseHandler) createExpenseFromTemplate(template *models.Rec
 		Description: template.Description,
 		Amount:      template.Amount,
 		Category:    template.Category,
-		PaidBy:      userID, // The user who processed the notification pays
+		PaidBy:      template.PaidBy,
 		SplitType:   models.ExpenseSplitType(template.SplitType),
+	}
+	if expense.PaidBy == "" {
+		expense.PaidBy = userID // fallback for legacy rows
 	}
 
 	// Save expense

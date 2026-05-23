@@ -1,0 +1,351 @@
+group_id,name,group_type,created_date,status,default_split_method,description
+GRP_0001,Weekend Warriors,friends,2018-01-28,ended,percentage,friends group
+GRP_0002,Floor 97 Gang,office,2021-05-09,ended,percentage,office group
+GRP_0003,Movie Night Gang,friends,2022-01-08,ended,equal,friends group
+GRP_0004,The Squad 17,friends,2022-07-11,active,equal,friends group
+GRP_0005,The Residents 50,household,2019-03-28,ended,equal,household group
+GRP_0006,The Residents 74,household,2019-09-17,dormant,percentage,household group
+GRP_0007,Group80 Household,household,2020-01-13,active,percentage,household group
+GRP_0008,Room 13 Crew,household,2021-12-26,active,custom,household group
+GRP_0009,Coffee Fund,office,2022-02-07,dormant,percentage,office group
+GRP_0010,Weekend Warriors,friends,2019-02-12,ended,equal,friends group
+GRP_0011,Project Group59 59,project,2023-07-10,ended,equal,project group
+GRP_0012,Wanderlust 47,travel,2020-04-25,ended,custom,travel group
+GRP_0013,Team 32,office,2019-01-05,ended,equal,office group
+GRP_0014,The Residents 86,household,2025-12-12,active,equal,household group
+GRP_0015,Group48's Crew,friends,2016-03-03,ended,equal,friends group
+GRP_0016,Room 22 Crew,household,2022-08-30,active,equal,household group
+GRP_0017,Foodie Friends,friends,2018-05-21,ended,equal,friends group
+GRP_0018,Working Group 50,project,2022-02-02,ended,percentage,project group
+GRP_0019,The Squad 35,friends,2022-09-18,active,percentage,friends group
+GRP_0020,Apartment 97,household,2020-07-26,active,custom,household group
+GRP_0021,Group75 Team,office,2016-01-22,ended,custom,office group
+GRP_0022,Project Group9 9,project,2022-12-02,ended,equal,project group
+GRP_0023,Family Matters 4,family,2020-04-22,ended,percentage,family group
+GRP_0024,Sprint 26 Team,project,2020-09-28,ended,equal,project group
+GRP_0025,Team 59,office,2016-06-03,ended,equal,office group
+GRP_0026,Task Force 77,project,2023-12-07,ended,equal,project group
+GRP_0027,Weekend Warriors,friends,2017-10-08,dormant,equal,friends group
+GRP_0028,Coffee Fund,office,2021-11-21,ended,equal,office group
+GRP_0029,Room 41 Crew,household,2019-07-05,ended,custom,household group
+GRP_0030,Office Snacks,office,2022-03-01,ended,equal,office group
+GRP_0031,The Group96s,family,2018-12-24,active,custom,family group
+GRP_0032,Group12's Crew,friends,2021-07-29,ended,equal,friends group
+GRP_0033,Project Group37 37,project,2020-08-28,ended,equal,project group
+GRP_0034,Group55 Team,office,2023-02-12,ended,custom,office group
+GRP_0035,Home Base 82,family,2024-03-08,active,percentage,family group
+GRP_0036,Family Matters 12,family,2025-10-10,active,percentage,family group
+GRP_0037,Group88 Household,household,2023-01-15,active,equal,household group
+GRP_0038,Office Snacks,office,2021-06-06,ended,equal,office group
+GRP_0039,Room 35 Crew,household,2019-11-25,dormant,percentage,household group
+GRP_0040,The Group40s,family,2021-10-09,active,percentage,family group
+GRP_0041,Home Base 24,family,2016-03-13,ended,percentage,family group
+GRP_0042,Group38 Family,family,2016-12-16,ended,custom,family group
+GRP_0043,The Squad 88,friends,2020-11-10,active,equal,friends group
+GRP_0044,Movie Night Gang,friends,2022-10-17,active,equal,friends group
+GRP_0045,Coffee Fund,office,2019-06-04,ended,percentage,office group
+GRP_0046,Weekend Warriors,friends,2025-01-19,active,equal,friends group
+GRP_0047,The Residents 52,household,2016-12-10,ended,custom,household group
+GRP_0048,Weekend Warriors,friends,2020-10-09,active,percentage,friends group
+GRP_0049,Room 28 Crew,household,2018-02-07,ended,equal,household group
+GRP_0050,The Residents 44,household,2020-01-29,active,equal,household group
+GRP_0051,Brunch Bunch,friends,2019-02-28,dormant,equal,friends group
+GRP_0052,Hawaii Adventure,travel,2020-08-07,ended,custom,travel group
+GRP_0053,Paris Adventure,travel,2024-11-15,ended,equal,travel group
+GRP_0054,Group1 Family,family,2020-08-26,active,percentage,family group
+GRP_0055,Lunch Crew 95,office,2022-10-03,ended,equal,office group
+GRP_0056,Team 87,office,2019-07-24,ended,equal,office group
+GRP_0057,Brunch Bunch,friends,2019-08-19,ended,equal,friends group
+GRP_0058,Room 74 Crew,household,2016-12-22,active,equal,household group
+GRP_0059,NYC Crew 68,travel,2020-11-27,ended,percentage,travel group
+GRP_0060,Foodie Friends,friends,2016-08-12,ended,percentage,friends group
+GRP_0061,Project Group10 10,project,2022-08-08,ended,equal,project group
+GRP_0062,Weekend Warriors,friends,2022-12-11,ended,equal,friends group
+GRP_0063,Group91 Team,office,2021-03-01,ended,equal,office group
+GRP_0064,Group9 Family,family,2018-03-18,active,custom,family group
+GRP_0065,Sprint 10 Team,project,2021-02-05,ended,equal,project group
+GRP_0066,Good Times 41,friends,2025-03-20,active,equal,friends group
+GRP_0067,The Residents 68,household,2021-12-11,active,equal,household group
+GRP_0068,Good Times 71,friends,2017-11-04,ended,percentage,friends group
+GRP_0069,Sprint 75 Team,project,2018-05-03,ended,equal,project group
+GRP_0070,Apartment 74,household,2020-01-17,ended,custom,household group
+GRP_0071,Apartment 86,household,2021-05-25,active,percentage,household group
+GRP_0072,The Squad 21,friends,2017-02-12,ended,equal,friends group
+GRP_0073,Room 72 Crew,household,2021-09-22,dormant,percentage,household group
+GRP_0074,Group74 Family,family,2020-11-16,active,percentage,family group
+GRP_0075,Hawaii Crew 31,travel,2022-07-17,dormant,equal,travel group
+GRP_0076,Japan Adventure,travel,2025-03-22,ended,equal,travel group
+GRP_0077,Group79 Family,family,2019-09-09,active,percentage,family group
+GRP_0078,Office Snacks,office,2025-08-13,active,equal,office group
+GRP_0079,Family Fund 28,family,2021-12-03,active,equal,family group
+GRP_0080,Group67's Crew,friends,2017-06-13,ended,equal,friends group
+GRP_0081,Room 24 Crew,household,2016-01-24,ended,equal,household group
+GRP_0082,Trip to Hawaii 71,travel,2022-03-30,ended,custom,travel group
+GRP_0083,Project Group40 40,project,2020-08-12,ended,equal,project group
+GRP_0084,Weekend Warriors,friends,2021-11-27,ended,equal,friends group
+GRP_0085,Home Sweet Home 44,household,2018-07-02,ended,equal,household group
+GRP_0086,The Squad 66,friends,2022-08-20,ended,equal,friends group
+GRP_0087,Vacation Fund 61,travel,2019-01-12,ended,percentage,travel group
+GRP_0088,Trip to Thailand 85,travel,2022-09-12,dormant,percentage,travel group
+GRP_0089,Home Sweet Home 92,household,2020-03-08,active,percentage,household group
+GRP_0090,Trip to Japan 92,travel,2019-08-07,ended,custom,travel group
+GRP_0091,The Squad 38,friends,2016-06-26,ended,equal,friends group
+GRP_0092,Weekend Warriors,friends,2023-12-19,ended,equal,friends group
+GRP_0093,Vacation Fund 70,travel,2017-05-08,ended,equal,travel group
+GRP_0094,The Squad 36,friends,2021-01-03,ended,equal,friends group
+GRP_0095,Lunch Crew 65,office,2020-10-16,ended,equal,office group
+GRP_0096,Trip to Italy 87,travel,2022-05-04,ended,equal,travel group
+GRP_0097,Team 71,office,2019-10-10,ended,equal,office group
+GRP_0098,Movie Night Gang,friends,2017-10-20,ended,equal,friends group
+GRP_0099,Paris Adventure,travel,2017-02-25,dormant,percentage,travel group
+GRP_0100,Game Night Regulars,friends,2017-10-21,ended,percentage,friends group
+GRP_0101,Japan Adventure,travel,2023-07-10,ended,equal,travel group
+GRP_0102,Project Group45 45,project,2017-06-17,ended,equal,project group
+GRP_0103,Brunch Bunch,friends,2020-08-01,ended,equal,friends group
+GRP_0104,Office Snacks,office,2017-10-09,ended,percentage,office group
+GRP_0105,Task Force 91,project,2022-05-17,ended,equal,project group
+GRP_0106,Family Fund 95,family,2024-02-23,active,percentage,family group
+GRP_0107,Brunch Bunch,friends,2017-03-21,dormant,equal,friends group
+GRP_0108,Foodie Friends,friends,2016-10-09,dormant,equal,friends group
+GRP_0109,Home Base 76,family,2016-01-02,dormant,equal,family group
+GRP_0110,Apartment 20,household,2016-03-03,dormant,equal,household group
+GRP_0111,Foodie Friends,friends,2021-01-09,ended,custom,friends group
+GRP_0112,Group7 Team,office,2019-08-24,ended,percentage,office group
+GRP_0113,Group24's Crew,friends,2020-03-12,ended,equal,friends group
+GRP_0114,Floor 93 Gang,office,2023-05-06,ended,equal,office group
+GRP_0115,Movie Night Gang,friends,2021-09-11,ended,percentage,friends group
+GRP_0116,Movie Night Gang,friends,2023-11-19,active,equal,friends group
+GRP_0117,Home Base 78,family,2020-09-24,active,percentage,family group
+GRP_0118,Floor 2 Gang,office,2024-04-08,active,equal,office group
+GRP_0119,Game Night Regulars,friends,2017-11-04,ended,equal,friends group
+GRP_0120,The Residents 24,household,2017-06-28,ended,equal,household group
+GRP_0121,Apartment 15,household,2018-08-19,ended,percentage,household group
+GRP_0122,Foodie Friends,friends,2018-06-04,ended,equal,friends group
+GRP_0123,Collab 88,project,2023-10-02,dormant,custom,project group
+GRP_0124,Lunch Crew 18,office,2024-02-08,active,percentage,office group
+GRP_0125,Office Snacks,office,2019-06-18,dormant,equal,office group
+GRP_0126,Wanderlust 20,travel,2021-06-02,ended,custom,travel group
+GRP_0127,Group22 Family,family,2020-10-21,ended,percentage,family group
+GRP_0128,Group40's Crew,friends,2019-08-08,ended,equal,friends group
+GRP_0129,Vacation Fund 59,travel,2016-01-06,ended,custom,travel group
+GRP_0130,Group32's Crew,friends,2019-07-13,active,equal,friends group
+GRP_0131,Good Times 84,friends,2019-12-22,ended,percentage,friends group
+GRP_0132,Working Group 54,project,2021-01-03,ended,percentage,project group
+GRP_0133,Coffee Fund,office,2019-11-08,ended,equal,office group
+GRP_0134,Movie Night Gang,friends,2018-10-07,dormant,equal,friends group
+GRP_0135,Collab 48,project,2018-07-12,ended,custom,project group
+GRP_0136,Good Times 23,friends,2022-02-03,active,percentage,friends group
+GRP_0137,Game Night Regulars,friends,2025-01-18,active,percentage,friends group
+GRP_0138,Movie Night Gang,friends,2017-05-29,ended,equal,friends group
+GRP_0139,Apartment 24,household,2020-10-20,ended,custom,household group
+GRP_0140,Coffee Fund,office,2024-03-29,active,percentage,office group
+GRP_0141,Brunch Bunch,friends,2025-03-25,active,equal,friends group
+GRP_0142,Group91 Household,household,2020-08-13,active,equal,household group
+GRP_0143,Good Times 20,friends,2020-08-30,ended,equal,friends group
+GRP_0144,Floor 83 Gang,office,2019-04-27,ended,equal,office group
+GRP_0145,Room 61 Crew,household,2024-12-29,active,equal,household group
+GRP_0146,Sprint 47 Team,project,2019-05-31,ended,equal,project group
+GRP_0147,Group46 Family,family,2023-04-26,active,percentage,family group
+GRP_0148,Brunch Bunch,friends,2017-01-09,ended,equal,friends group
+GRP_0149,Room 4 Crew,household,2021-04-14,active,percentage,household group
+GRP_0150,Working Group 69,project,2017-02-05,ended,equal,project group
+GRP_0151,Group54 Household,household,2017-10-08,ended,equal,household group
+GRP_0152,Apartment 85,household,2019-03-30,ended,custom,household group
+GRP_0153,Group57 Team,office,2019-04-19,ended,equal,office group
+GRP_0154,Group79 Family,family,2017-04-22,ended,custom,family group
+GRP_0155,Home Base 84,family,2023-05-24,active,equal,family group
+GRP_0156,Apartment 60,household,2018-03-22,ended,percentage,household group
+GRP_0157,Apartment 31,household,2019-02-21,ended,equal,household group
+GRP_0158,Lunch Crew 68,office,2019-02-25,ended,equal,office group
+GRP_0159,Weekend Warriors,friends,2025-06-17,active,equal,friends group
+GRP_0160,Movie Night Gang,friends,2020-04-19,ended,equal,friends group
+GRP_0161,Family Matters 98,family,2023-02-05,active,custom,family group
+GRP_0162,Lunch Crew 32,office,2022-07-12,active,equal,office group
+GRP_0163,Family Fund 33,family,2018-12-25,ended,equal,family group
+GRP_0164,Task Force 16,project,2021-08-29,ended,equal,project group
+GRP_0165,Family Fund 36,family,2020-05-31,active,percentage,family group
+GRP_0166,Family Matters 84,family,2016-04-16,ended,percentage,family group
+GRP_0167,Working Group 98,project,2020-08-17,dormant,equal,project group
+GRP_0168,Vacation Fund 26,travel,2020-04-26,ended,custom,travel group
+GRP_0169,Group71 Household,household,2017-06-14,ended,equal,household group
+GRP_0170,The Squad 64,friends,2016-09-23,ended,equal,friends group
+GRP_0171,Floor 94 Gang,office,2016-03-19,ended,equal,office group
+GRP_0172,Group98 Household,household,2017-05-08,dormant,equal,household group
+GRP_0173,Group38's Crew,friends,2021-12-27,active,equal,friends group
+GRP_0174,Group57's Crew,friends,2016-05-06,ended,equal,friends group
+GRP_0175,Room 95 Crew,household,2016-02-16,ended,equal,household group
+GRP_0176,Family Matters 73,family,2021-07-22,active,percentage,family group
+GRP_0177,Coffee Fund,office,2019-06-08,ended,percentage,office group
+GRP_0178,Vacation Fund 69,travel,2021-01-21,ended,equal,travel group
+GRP_0179,Sprint 46 Team,project,2020-04-11,ended,equal,project group
+GRP_0180,Group46 Household,household,2019-03-23,active,percentage,household group
+GRP_0181,Group42's Crew,friends,2019-01-16,ended,percentage,friends group
+GRP_0182,Floor 6 Gang,office,2021-02-14,ended,percentage,office group
+GRP_0183,Good Times 23,friends,2018-12-25,ended,equal,friends group
+GRP_0184,Family Matters 62,family,2023-08-10,active,percentage,family group
+GRP_0185,Foodie Friends,friends,2023-01-03,active,equal,friends group
+GRP_0186,The Squad 98,friends,2020-05-12,active,equal,friends group
+GRP_0187,Family Fund 15,family,2019-07-27,ended,percentage,family group
+GRP_0188,The Squad 41,friends,2021-09-20,ended,equal,friends group
+GRP_0189,Floor 78 Gang,office,2017-12-19,ended,equal,office group
+GRP_0190,Lunch Crew 45,office,2018-08-14,ended,equal,office group
+GRP_0191,Apartment 68,household,2016-10-26,ended,equal,household group
+GRP_0192,Room 73 Crew,household,2021-08-05,active,equal,household group
+GRP_0193,Room 75 Crew,household,2017-12-14,ended,equal,household group
+GRP_0194,Game Night Regulars,friends,2016-08-28,ended,equal,friends group
+GRP_0195,Group85's Crew,friends,2016-06-03,ended,equal,friends group
+GRP_0196,Family Fund 19,family,2017-06-22,active,custom,family group
+GRP_0197,The Squad 37,friends,2025-10-10,active,custom,friends group
+GRP_0198,Group62 Team,office,2018-09-26,ended,percentage,office group
+GRP_0199,Sprint 12 Team,project,2021-05-04,ended,equal,project group
+GRP_0200,Team 71,office,2017-04-27,ended,equal,office group
+GRP_0201,The Residents 74,household,2021-01-18,ended,percentage,household group
+GRP_0202,Lunch Crew 48,office,2021-07-29,ended,equal,office group
+GRP_0203,Good Times 16,friends,2016-10-15,ended,equal,friends group
+GRP_0204,Game Night Regulars,friends,2019-03-24,dormant,equal,friends group
+GRP_0205,Trip to Paris 81,travel,2024-08-11,ended,percentage,travel group
+GRP_0206,Brunch Bunch,friends,2018-02-10,ended,equal,friends group
+GRP_0207,Movie Night Gang,friends,2018-03-03,dormant,equal,friends group
+GRP_0208,Task Force 15,project,2017-04-25,ended,custom,project group
+GRP_0209,Collab 74,project,2019-07-24,ended,percentage,project group
+GRP_0210,Good Times 95,friends,2016-04-21,ended,equal,friends group
+GRP_0211,Home Sweet Home 93,household,2023-04-12,active,equal,household group
+GRP_0212,Group95 Team,office,2021-01-03,ended,equal,office group
+GRP_0213,Brunch Bunch,friends,2024-07-04,active,custom,friends group
+GRP_0214,Room 19 Crew,household,2018-03-20,ended,equal,household group
+GRP_0215,Group46 Team,office,2022-04-19,active,equal,office group
+GRP_0216,Coffee Fund,office,2021-12-19,ended,custom,office group
+GRP_0217,Team 49,office,2018-11-07,dormant,equal,office group
+GRP_0218,Weekend Warriors,friends,2024-02-14,active,percentage,friends group
+GRP_0219,Sprint 52 Team,project,2022-10-09,ended,equal,project group
+GRP_0220,The Squad 27,friends,2020-04-01,dormant,equal,friends group
+GRP_0221,Brunch Bunch,friends,2025-03-27,active,custom,friends group
+GRP_0222,Room 71 Crew,household,2022-06-16,active,percentage,household group
+GRP_0223,Family Matters 71,family,2020-05-09,active,percentage,family group
+GRP_0224,Game Night Regulars,friends,2022-10-17,ended,custom,friends group
+GRP_0225,Group90 Household,household,2019-04-30,active,equal,household group
+GRP_0226,Bali Crew 14,travel,2017-06-08,ended,equal,travel group
+GRP_0227,Team 67,office,2021-06-19,dormant,equal,office group
+GRP_0228,Group98 Household,household,2018-06-19,active,equal,household group
+GRP_0229,Team 40,office,2016-12-29,dormant,equal,office group
+GRP_0230,Task Force 55,project,2022-08-21,dormant,equal,project group
+GRP_0231,Floor 79 Gang,office,2016-06-03,ended,equal,office group
+GRP_0232,Foodie Friends,friends,2017-07-12,dormant,percentage,friends group
+GRP_0233,Brunch Bunch,friends,2021-08-11,ended,equal,friends group
+GRP_0234,Group55 Family,family,2020-03-18,active,equal,family group
+GRP_0235,Group19's Crew,friends,2018-02-02,dormant,custom,friends group
+GRP_0236,Family Matters 95,family,2019-01-28,active,percentage,family group
+GRP_0237,Game Night Regulars,friends,2016-08-02,ended,equal,friends group
+GRP_0238,Lunch Crew 80,office,2025-02-22,active,equal,office group
+GRP_0239,The Group75s,family,2021-10-11,active,percentage,family group
+GRP_0240,Weekend Warriors,friends,2022-04-25,dormant,equal,friends group
+GRP_0241,Home Base 2,family,2019-09-01,active,custom,family group
+GRP_0242,Trip to Vegas 20,travel,2021-08-10,ended,equal,travel group
+GRP_0243,Movie Night Gang,friends,2023-01-07,active,percentage,friends group
+GRP_0244,Floor 57 Gang,office,2022-01-11,active,equal,office group
+GRP_0245,Group40 Family,family,2025-12-18,active,percentage,family group
+GRP_0246,Working Group 77,project,2021-05-25,ended,percentage,project group
+GRP_0247,Group54's Crew,friends,2016-01-07,dormant,custom,friends group
+GRP_0248,Group40 Family,family,2018-03-13,active,custom,family group
+GRP_0249,Game Night Regulars,friends,2020-05-02,dormant,equal,friends group
+GRP_0250,Room 6 Crew,household,2019-10-19,ended,custom,household group
+GRP_0251,Family Fund 99,family,2024-08-15,active,percentage,family group
+GRP_0252,Home Sweet Home 48,household,2020-10-28,active,percentage,household group
+GRP_0253,Apartment 8,household,2024-08-04,active,percentage,household group
+GRP_0254,Game Night Regulars,friends,2020-08-10,ended,equal,friends group
+GRP_0255,Group66's Crew,friends,2020-10-03,ended,equal,friends group
+GRP_0256,Collab 39,project,2021-02-04,ended,custom,project group
+GRP_0257,Lunch Crew 72,office,2019-06-15,ended,equal,office group
+GRP_0258,Movie Night Gang,friends,2018-01-23,ended,equal,friends group
+GRP_0259,The Group15s,family,2016-09-24,ended,equal,family group
+GRP_0260,Group29 Team,office,2021-03-25,ended,percentage,office group
+GRP_0261,Home Sweet Home 78,household,2018-06-05,ended,custom,household group
+GRP_0262,Group75 Family,family,2018-06-07,ended,percentage,family group
+GRP_0263,Good Times 50,friends,2020-12-10,active,equal,friends group
+GRP_0264,Team 88,office,2016-06-30,dormant,percentage,office group
+GRP_0265,Wanderlust 65,travel,2016-07-14,ended,percentage,travel group
+GRP_0266,Coffee Fund,office,2017-08-20,dormant,equal,office group
+GRP_0267,Foodie Friends,friends,2016-02-01,ended,custom,friends group
+GRP_0268,Group90 Household,household,2022-10-07,ended,percentage,household group
+GRP_0269,Home Sweet Home 46,household,2025-09-03,active,custom,household group
+GRP_0270,Room 83 Crew,household,2019-07-05,active,equal,household group
+GRP_0271,Collab 98,project,2018-05-18,ended,equal,project group
+GRP_0272,Group2 Team,office,2016-12-28,ended,equal,office group
+GRP_0273,Foodie Friends,friends,2017-09-24,ended,equal,friends group
+GRP_0274,Group29 Household,household,2016-02-07,ended,percentage,household group
+GRP_0275,Wanderlust 96,travel,2017-08-28,ended,equal,travel group
+GRP_0276,The Group65s,family,2017-08-27,active,custom,family group
+GRP_0277,Group94 Household,household,2025-01-25,active,percentage,household group
+GRP_0278,Working Group 37,project,2021-12-19,ended,equal,project group
+GRP_0279,Good Times 9,friends,2018-11-03,ended,equal,friends group
+GRP_0280,Floor 72 Gang,office,2016-04-17,ended,equal,office group
+GRP_0281,The Residents 23,household,2025-11-05,active,percentage,household group
+GRP_0282,Group20 Team,office,2024-02-20,active,equal,office group
+GRP_0283,Group82 Household,household,2021-03-05,ended,percentage,household group
+GRP_0284,Apartment 49,household,2018-12-20,active,custom,household group
+GRP_0285,Home Sweet Home 2,household,2020-06-11,active,custom,household group
+GRP_0286,Trip to Hawaii 62,travel,2019-02-12,ended,percentage,travel group
+GRP_0287,The Group11s,family,2018-09-22,ended,percentage,family group
+GRP_0288,Team 5,office,2020-11-13,ended,custom,office group
+GRP_0289,Home Sweet Home 92,household,2017-02-25,ended,equal,household group
+GRP_0290,Vacation Fund 21,travel,2024-08-20,ended,custom,travel group
+GRP_0291,Group77 Family,family,2020-10-08,active,equal,family group
+GRP_0292,The Residents 22,household,2016-02-02,ended,equal,household group
+GRP_0293,Vacation Fund 54,travel,2022-03-09,dormant,equal,travel group
+GRP_0294,Trip to Goa 61,travel,2019-06-09,ended,custom,travel group
+GRP_0295,Office Snacks,office,2016-05-22,ended,equal,office group
+GRP_0296,Group64's Crew,friends,2020-06-21,ended,percentage,friends group
+GRP_0297,Apartment 76,household,2021-07-13,ended,equal,household group
+GRP_0298,Home Sweet Home 42,household,2024-01-05,active,custom,household group
+GRP_0299,Group60's Crew,friends,2018-04-27,dormant,equal,friends group
+GRP_0300,The Squad 94,friends,2019-12-31,dormant,equal,friends group
+GRP_0301,Apartment 39,household,2017-07-22,active,percentage,household group
+GRP_0302,The Group37s,family,2017-05-02,ended,percentage,family group
+GRP_0303,Apartment 98,household,2020-04-29,ended,percentage,household group
+GRP_0304,Floor 21 Gang,office,2024-11-28,active,equal,office group
+GRP_0305,Game Night Regulars,friends,2022-12-23,active,equal,friends group
+GRP_0306,Apartment 18,household,2023-07-16,active,equal,household group
+GRP_0307,The Squad 82,friends,2018-09-01,ended,custom,friends group
+GRP_0308,Home Base 4,family,2019-06-17,active,percentage,family group
+GRP_0309,Floor 19 Gang,office,2018-06-18,ended,equal,office group
+GRP_0310,Group19's Crew,friends,2024-09-26,active,equal,friends group
+GRP_0311,Working Group 39,project,2018-12-31,dormant,equal,project group
+GRP_0312,Weekend Warriors,friends,2020-01-11,ended,percentage,friends group
+GRP_0313,Home Sweet Home 46,household,2017-03-26,dormant,equal,household group
+GRP_0314,Group94 Household,household,2018-10-26,ended,percentage,household group
+GRP_0315,Home Sweet Home 40,household,2021-02-23,active,equal,household group
+GRP_0316,Apartment 26,household,2022-03-03,active,equal,household group
+GRP_0317,Home Sweet Home 25,household,2018-11-15,dormant,percentage,household group
+GRP_0318,Movie Night Gang,friends,2024-07-29,active,percentage,friends group
+GRP_0319,Foodie Friends,friends,2018-05-16,ended,percentage,friends group
+GRP_0320,Group83 Team,office,2018-09-27,dormant,percentage,office group
+GRP_0321,Home Base 99,family,2016-03-26,ended,percentage,family group
+GRP_0322,The Squad 92,friends,2017-01-06,ended,percentage,friends group
+GRP_0323,Working Group 14,project,2023-02-02,ended,equal,project group
+GRP_0324,Family Matters 40,family,2019-04-02,active,percentage,family group
+GRP_0325,Lunch Crew 13,office,2020-02-10,ended,percentage,office group
+GRP_0326,Sprint 27 Team,project,2022-01-19,ended,equal,project group
+GRP_0327,Team 27,office,2020-04-15,ended,equal,office group
+GRP_0328,Apartment 47,household,2020-03-16,ended,equal,household group
+GRP_0329,Task Force 20,project,2020-04-14,ended,equal,project group
+GRP_0330,Family Fund 90,family,2020-05-14,active,custom,family group
+GRP_0331,Apartment 15,household,2019-04-25,ended,equal,household group
+GRP_0332,Weekend Warriors,friends,2025-09-02,active,custom,friends group
+GRP_0333,Movie Night Gang,friends,2022-02-22,ended,equal,friends group
+GRP_0334,Apartment 7,household,2016-07-06,dormant,custom,household group
+GRP_0335,Family Fund 65,family,2022-07-26,active,custom,family group
+GRP_0336,Group38 Household,household,2018-03-21,ended,equal,household group
+GRP_0337,Group82's Crew,friends,2025-01-15,active,equal,friends group
+GRP_0338,Sprint 29 Team,project,2016-01-18,ended,equal,project group
+GRP_0339,Good Times 89,friends,2017-07-07,ended,equal,friends group
+GRP_0340,Group15 Team,office,2021-02-07,active,equal,office group
+GRP_0341,Foodie Friends,friends,2021-03-27,ended,equal,friends group
+GRP_0342,Apartment 21,household,2019-03-16,active,percentage,household group
+GRP_0343,Coffee Fund,office,2022-01-25,active,equal,office group
+GRP_0344,Office Snacks,office,2023-03-31,active,equal,office group
+GRP_0345,Home Sweet Home 33,household,2018-02-27,ended,custom,household group
+GRP_0346,Coffee Fund,office,2016-04-07,ended,equal,office group
+GRP_0347,Floor 61 Gang,office,2017-08-13,ended,equal,office group
+GRP_0348,Team 67,office,2019-10-30,ended,equal,office group
+GRP_0349,Apartment 31,household,2018-03-02,ended,equal,household group
+GRP_0350,Family Fund 68,family,2018-02-18,ended,percentage,family group
