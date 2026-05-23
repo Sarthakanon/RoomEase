@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"roomease/backend/config"
 	"roomease/backend/handlers"
 	"roomease/backend/middleware"
@@ -24,6 +25,8 @@ func main() {
 
 	// Initialize PostgreSQL (non-fatal for development)
 	var dbService *services.PostgresService
+	skipStartupMigrations := os.Getenv("SKIP_STARTUP_MIGRATIONS") == "true"
+	skipStartupCacheCleanup := os.Getenv("SKIP_STARTUP_CACHE_CLEANUP") == "true"
 	if err := config.InitPostgreSQL(cfg.PostgresDatabaseURL); err != nil {
 		log.Printf("⚠️  WARNING: Failed to initialize PostgreSQL: %v", err)
 		log.Println("⚠️  Server will start WITHOUT database connectivity")
@@ -34,18 +37,26 @@ func main() {
 		// Initialize services
 		dbService = services.NewPostgresService()
 
-		// Run database migrations
-		if err := dbService.AutoMigrate(); err != nil {
-			log.Printf("⚠️  WARNING: Failed to run migrations: %v", err)
+		// Run database migrations (can be skipped on platforms with strict startup timeouts)
+		if skipStartupMigrations {
+			log.Println("⏭️  Skipping startup migrations (SKIP_STARTUP_MIGRATIONS=true)")
 		} else {
-			log.Println("✅ Database migrations completed successfully")
-			
-			// Cleanup expired analytics cache on startup
-			analyticsCacheService := services.NewAnalyticsCacheService(dbService)
-			if err := analyticsCacheService.CleanupExpiredCache(); err != nil {
-				log.Printf("⚠️  WARNING: Failed to cleanup expired cache: %v", err)
+			if err := dbService.AutoMigrate(); err != nil {
+				log.Printf("⚠️  WARNING: Failed to run migrations: %v", err)
 			} else {
-				log.Println("✅ Expired analytics cache cleaned up")
+				log.Println("✅ Database migrations completed successfully")
+
+				// Cleanup expired analytics cache on startup
+				if skipStartupCacheCleanup {
+					log.Println("⏭️  Skipping startup analytics cache cleanup (SKIP_STARTUP_CACHE_CLEANUP=true)")
+				} else {
+					analyticsCacheService := services.NewAnalyticsCacheService(dbService)
+					if err := analyticsCacheService.CleanupExpiredCache(); err != nil {
+						log.Printf("⚠️  WARNING: Failed to cleanup expired cache: %v", err)
+					} else {
+						log.Println("✅ Expired analytics cache cleaned up")
+					}
+				}
 			}
 		}
 	}
