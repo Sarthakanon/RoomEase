@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -22,7 +23,7 @@ func InitPostgreSQL(databaseURL string) error {
 	}
 	
 	// Check if it's a Supabase connection (contains supabase.co) or AWS RDS (contains amazonaws.com)
-	if strings.Contains(databaseURL, "supabase.co") {
+	if strings.Contains(databaseURL, "supabase.co") || strings.Contains(databaseURL, "supabase.com") {
 		// Try to resolve IPv4 address for Supabase hostname
 		hostname := "db.raabjafkrerotvqbimbp.supabase.co"
 		
@@ -49,15 +50,30 @@ func InitPostgreSQL(databaseURL string) error {
 			dsn = databaseURL
 		}
 		
-		// Add connection optimizations for Supabase
-		dsn = dsn + "?sslmode=require&connect_timeout=30&statement_timeout=30000&idle_in_transaction_session_timeout=30000&tcp_user_timeout=30000&application_name=roomease_backend&prefer_simple_protocol=true"
+		// Add connection optimizations for Supabase and preserve existing query params.
+		dsn = addOrUpdateQueryParams(dsn, map[string]string{
+			"sslmode":                              "require",
+			"search_path":                          "public",
+			"connect_timeout":                      "30",
+			"statement_timeout":                    "30000",
+			"idle_in_transaction_session_timeout":  "30000",
+			"tcp_user_timeout":                     "30000",
+			"application_name":                     "roomease_backend",
+			"prefer_simple_protocol":               "true",
+		})
 		log.Println("🌐 Connecting to Supabase PostgreSQL with optimized settings...")
 	} else if strings.Contains(databaseURL, "amazonaws.com") {
 		// AWS RDS connection
-		dsn = databaseURL + "?sslmode=require&connect_timeout=10"
+		dsn = addOrUpdateQueryParams(databaseURL, map[string]string{
+			"sslmode":         "require",
+			"connect_timeout": "10",
+		})
 		log.Println("☁️  Connecting to AWS RDS PostgreSQL...")
 	} else {
-		dsn = databaseURL + "?sslmode=disable&connect_timeout=10"
+		dsn = addOrUpdateQueryParams(databaseURL, map[string]string{
+			"sslmode":         "disable",
+			"connect_timeout": "10",
+		})
 		log.Println("🐳 Connecting to local PostgreSQL...")
 	}
 	
@@ -82,6 +98,19 @@ func InitPostgreSQL(databaseURL string) error {
 	DB = db
 	log.Println("✅ PostgreSQL connected successfully with connection pool configured")
 	return nil
+}
+
+func addOrUpdateQueryParams(rawURL string, params map[string]string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	q := u.Query()
+	for k, v := range params {
+		q.Set(k, v)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // ClosePostgreSQL closes the PostgreSQL connection

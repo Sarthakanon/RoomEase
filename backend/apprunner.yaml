@@ -18,7 +18,7 @@ run:
     - name: ENVIRONMENT
       value: "production"
     - name: POSTGRES_DATABASE_URL
-      value: "postgresql://postgres:RoomEase2024%21@roomease-db.cru6oo86256i.eu-north-1.rds.amazonaws.com:5432/postgres"
+      value: "postgresql://postgres.<project-ref>:<url-encoded-password>@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require"
     - name: FIREBASE_CREDENTIAL_PATH
       value: "serviceAccount.json"
     - name: SESSION_TIMEOUT
