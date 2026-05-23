@@ -248,12 +248,43 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json(500, {"success": False, "error": f"{exc}"})
 
 
+class _FallbackAssistant:
+    """Keeps bridge alive when model initialization fails."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def generate_insights(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "status": "error",
+            "summary": {
+                "forecast": {},
+                "category_summary": {},
+                "budget_risk": {},
+                "anomaly": {},
+            },
+            "insights": [
+                {
+                    "type": "service_warning",
+                    "severity": "high",
+                    "message": f"ML model unavailable: {self.reason}",
+                }
+            ],
+        }
+
+
 def main() -> None:
     port = int(os.getenv("ML_API_PORT", "5001"))
     host = os.getenv("ML_API_HOST", "0.0.0.0")
     models_dir = os.getenv("V2_MODELS_DIR", "models_v2_nepal")
-    _Handler.assistant = FinanceAssistantV2(models_dir)
-    print(f"Loaded FinanceAssistantV2 from {models_dir}")
+    try:
+        _Handler.assistant = FinanceAssistantV2(models_dir)
+        print(f"Loaded FinanceAssistantV2 from {models_dir}")
+    except Exception as exc:  # pragma: no cover
+        reason = str(exc)
+        print(f"WARNING: Failed to load FinanceAssistantV2: {reason}")
+        print("WARNING: Starting in fallback mode with degraded analytics responses.")
+        _Handler.assistant = _FallbackAssistant(reason)
     server = HTTPServer((host, port), _Handler)
     print(f"ML bridge listening on http://{host}:{port}")
     server.serve_forever()
