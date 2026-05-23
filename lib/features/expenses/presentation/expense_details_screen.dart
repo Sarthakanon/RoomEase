@@ -28,17 +28,6 @@ class _ExpenseDetailsScreenState extends State<ExpenseDetailsScreen> {
     _expense = widget.expense;
   }
 
-  Future<void> _refreshExpense() async {
-    if (_expense.id == null) return;
-    setState(() => _isLoading = true);
-    try {
-      final updated = await _expenseService.getExpenseById(_expense.id!);
-      setState(() { _expense = updated; _isLoading = false; });
-    } catch (_) {
-      setState(() => _isLoading = false);
-    }
-  }
-
   Future<void> _deleteExpense() async {
     if (_expense.id == null) return;
     final confirmed = await showDialog<bool>(

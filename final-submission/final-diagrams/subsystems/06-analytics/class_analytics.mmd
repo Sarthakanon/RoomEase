@@ -1,0 +1,6 @@
+classDiagram
+  class AnalyticsHandler {+getSummary(); +getTrends(); +getAnomalies(); +getRecommendations()}
+  class AnalyticsService {+computeSummary(); +computeTrends(); +detectAnomalies()}
+  class AnalyticsCacheService {+getCache(); +setCache(); +cleanupExpired()}
+  AnalyticsHandler --> AnalyticsService
+  AnalyticsService --> AnalyticsCacheService

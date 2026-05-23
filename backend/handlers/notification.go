@@ -73,14 +73,17 @@ func (h *NotificationHandler) GetJoinRequests(c *gin.Context) {
 		return
 	}
 
-	// Get join requests for first roomspace (user can only be in one for now)
-	requests, err := h.dbService.GetJoinRequestsForRoomspace(roomspaces[0].ID.String())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get join requests"})
-		return
+	// Get join requests for ALL user's roomspaces (user can be in multiple)
+	var allRequests []models.JoinRequest
+	for _, roomspace := range roomspaces {
+		requests, err := h.dbService.GetJoinRequestsForRoomspace(roomspace.ID.String())
+		if err != nil {
+			continue // Skip if error for one roomspace
+		}
+		allRequests = append(allRequests, requests...)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": requests})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": allRequests})
 }
 
 type ProcessJoinRequestBody struct {

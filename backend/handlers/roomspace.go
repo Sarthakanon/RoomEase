@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"roomease/backend/models"
 	"roomease/backend/services"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -66,11 +68,18 @@ func (h *RoomspaceHandler) GetRoomspaceCount(c *gin.Context) {
 		return
 	}
 
+	limit := int64(2)
+	if user, userErr := h.dbService.GetUserByFirebaseUID(userID.(string)); userErr == nil && user != nil {
+		if strings.EqualFold(user.SubscriptionPlan, "pro") {
+			limit = 10
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"count":   count,
-		"limit":   5,
-		"can_join_more": count < 5,
+		"limit":   limit,
+		"can_join_more": count < limit,
 	})
 }
 
@@ -320,5 +329,44 @@ func (h *RoomspaceHandler) RemoveMember(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Member removed successfully",
+	})
+}
+
+// LeaveRoomspace allows any member (including creator) to leave a roomspace
+func (h *RoomspaceHandler) LeaveRoomspace(c *gin.Context) {
+	// Get user ID from context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "User not authenticated",
+		})
+		return
+	}
+
+	// Get roomspace ID from URL
+	idStr := c.Param("id")
+
+	// Leave roomspace with ownership transfer logic
+	result, err := h.dbService.LeaveRoomspace(idStr, userID.(string))
+	if err != nil {
+		log.Printf("❌ LeaveRoomspace failed | roomspace_id=%s user_id=%s error=%v", idStr, userID.(string), err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+			"details": gin.H{
+				"roomspace_id": idStr,
+				"user_id":      userID.(string),
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": result.Message,
+		"data": gin.H{
+			"ownership_transferred": result.OwnershipTransferred,
+			"new_creator_id":        result.NewCreatorID,
+			"roomspace_deleted":     result.RoomspaceDeleted,
+		},
 	})
 }

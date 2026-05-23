@@ -1,0 +1,5 @@
+name,month,start_day,end_day,multiplier
+dashain,10,1,20,1.65
+tihar,11,1,12,1.45
+teej,9,1,10,1.2
+new_year,4,10,18,1.18

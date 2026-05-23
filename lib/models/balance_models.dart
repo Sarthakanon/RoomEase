@@ -1,4 +1,5 @@
 /// Models for balance calculations and settlements
+library;
 
 /// Summary of balances for a roomspace
 class BalanceSummary {
@@ -222,9 +223,9 @@ class BalanceChange {
   String get description {
     final changeAmount = change.abs().toStringAsFixed(2);
     if (isPositiveChange) {
-      return 'Balance improved by \$${changeAmount} - $reason';
+      return 'Balance improved by \$$changeAmount - $reason';
     } else {
-      return 'Balance decreased by \$${changeAmount} - $reason';
+      return 'Balance decreased by \$$changeAmount - $reason';
     }
   }
 }

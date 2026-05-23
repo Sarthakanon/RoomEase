@@ -43,7 +43,11 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
       final data = res['data'] as List?;
       final List<PersonalExpenseData> fetched = data?.map((json) => PersonalExpenseData.fromJson(json)).where((e) => _searchQuery.isEmpty || e.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList() ?? [];
       setState(() {
-        if (reset) _expenses = fetched; else _expenses.addAll(fetched);
+        if (reset) {
+          _expenses = fetched;
+        } else {
+          _expenses.addAll(fetched);
+        }
         _hasMoreData = fetched.length >= _pageSize;
         _isLoading = false;
         _isLoadingMore = false;
@@ -97,11 +101,22 @@ class _PersonalExpensesScreenState extends State<PersonalExpensesScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Container(
+        height: 44,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(color: const Color(0xFFF7F7FB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFEEEEF2))),
         child: TextField(
-          controller: _searchController, style: const TextStyle(fontSize: 14),
-          decoration: InputDecoration(icon: Icon(Icons.search_rounded, size: 18, color: Colors.grey.shade400), hintText: 'Search expenses...', hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13), border: InputBorder.none),
+          controller: _searchController,
+          textAlignVertical: TextAlignVertical.center,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            prefixIcon: Icon(Icons.search_rounded, size: 18, color: Colors.grey.shade400),
+            prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            hintText: 'Search expenses...',
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+            border: InputBorder.none,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+          ),
           onChanged: (v) { setState(() => _searchQuery = v); _load(reset: true); },
         ),
       ),

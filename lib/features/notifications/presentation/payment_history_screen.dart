@@ -131,8 +131,8 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: notification.type == PaymentType.debit
-                        ? Colors.red.withOpacity(0.1)
-                        : Colors.green.withOpacity(0.1),
+                        ? Colors.red.withValues(alpha: 0.1)
+                        : Colors.green.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -186,8 +186,8 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: notification.source == 'sms'
-                            ? Colors.blue.withOpacity(0.1)
-                            : Colors.purple.withOpacity(0.1),
+                            ? Colors.blue.withValues(alpha: 0.1)
+                            : Colors.purple.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(

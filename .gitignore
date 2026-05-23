@@ -6,7 +6,13 @@
 *.pyc
 *.swp
 .DS_Store
-*.env
+# Ignore all env files (root + nested)
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
 
 # Commit scripts (don't commit to repo)
 commit_*.sh
@@ -110,6 +116,7 @@ __pycache__/
 
 # Documentation folder (diagrams, specs, etc.)
 docs/
+final-submission/
 
 # All markdown documentation files
 *.md

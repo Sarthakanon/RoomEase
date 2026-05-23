@@ -5,7 +5,8 @@ import '../../../services/firebase_auth_service.dart';
 import '../../../services/api_service.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../../../models/roomspace_data.dart';
-import '../../../core/widgets/skeleton_loader.dart';
+import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/utils/subscription_helper.dart';
 import 'payment_notification_settings_screen.dart';
 
 /// Settings screen — configuration for user profile, roomspaces, and app behavior.
@@ -156,6 +157,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () async {
               Navigator.pop(dialogContext);
               try {
+                // Reset providers BEFORE logout
+                context.read<SubscriptionProvider>().reset();
+                await context.read<RoomspaceProvider>().clear();
+                
                 await _apiService.logout();
                 await _authService.signOut();
                 await _apiService.clearCookies();
@@ -187,11 +192,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               try {
                 final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
                 await roomspaceProvider.leaveRoomspace(roomspace.id);
+                
+                // Reload roomspaces to update UI everywhere
+                await roomspaceProvider.loadRoomspaces(forceRefresh: true);
+                
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Left "${roomspace.name}"')));
-                  if (roomspaceProvider.roomspaceCount == 0) {
-                    Navigator.pushReplacementNamed(context, '/roomspace-selection');
-                  }
+                  
+                  // Navigate back to home - just pop back without clearing all routes
+                  Navigator.of(context).pop();
                 }
               } catch (e) {
                 if (mounted) {
@@ -210,8 +219,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return Consumer<RoomspaceProvider>(
-      builder: (context, roomspaceProvider, child) {
+    return Consumer2<RoomspaceProvider, SubscriptionProvider>(
+      builder: (context, roomspaceProvider, subscriptionProvider, child) {
+        final maxRoomspaces = subscriptionProvider.currentLimits.maxRoomspaces;
+        
         return Scaffold(
           backgroundColor: Colors.white,
           appBar: AppBar(
@@ -243,9 +254,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     if (roomspaceProvider.roomspaces.isEmpty)
                       _buildNoRoomCard(primaryColor)
                     else
-                      _buildRoomSelectorPanel(roomspaceProvider, primaryColor),
+                      _buildRoomSelectorPanel(roomspaceProvider, primaryColor, maxRoomspaces),
                     const SizedBox(height: 12),
-                    _buildJoinButton(roomspaceProvider, primaryColor),
+                    _buildRoomspaceActionButtons(roomspaceProvider, subscriptionProvider, primaryColor),
                     const SizedBox(height: 24),
                     _buildSectionTitle('ACCOUNT & APP'),
                     const SizedBox(height: 12),
@@ -303,7 +314,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildRoomSelectorPanel(RoomspaceProvider provider, Color primaryColor) {
+  Widget _buildRoomSelectorPanel(RoomspaceProvider provider, Color primaryColor, int maxRoomspaces) {
     final active = provider.activeRoomspace;
     return Container(
       decoration: BoxDecoration(
@@ -323,7 +334,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Icon(Icons.home_work_outlined, size: 16, color: Colors.grey.shade600),
                     const SizedBox(width: 8),
                     const Expanded(child: Text('Active Roomspace', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                    Text('${provider.roomspaceCount}/5', style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+                    Text('${provider.roomspaceCount}/$maxRoomspaces', style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -362,7 +373,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildDropdown(RoomspaceProvider provider, Color primaryColor) {
     return DropdownButtonFormField<String>(
-      value: provider.activeRoomspace?.id,
+      initialValue: provider.activeRoomspace?.id,
       decoration: InputDecoration(
         filled: true,
         fillColor: const Color(0xFFF7F7FB),
@@ -399,21 +410,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildJoinButton(RoomspaceProvider provider, Color primaryColor) {
-    final canJoin = provider.canJoinMore;
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: canJoin ? () => Navigator.pushNamed(context, '/join-roomspace') : null,
-        icon: Icon(Icons.add_rounded, size: 20, color: canJoin ? primaryColor : Colors.grey.shade400),
-        label: Text(canJoin ? "Join Another Room" : "Limit Reached (5/5)", 
-            style: TextStyle(color: canJoin ? primaryColor : Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.w600)),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          side: BorderSide(color: canJoin ? primaryColor.withValues(alpha: 0.2) : const Color(0xFFEEEEF2)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+  Widget _buildRoomspaceActionButtons(
+    RoomspaceProvider provider,
+    SubscriptionProvider subscriptionProvider,
+    Color primaryColor,
+  ) {
+    final maxRoomspaces = subscriptionProvider.currentLimits.maxRoomspaces;
+    final canJoin = provider.roomspaceCount < maxRoomspaces;
+    final limitLabel = 'Limit (${provider.roomspaceCount}/$maxRoomspaces)';
+    return Row(
+      children: [
+        // Create Roomspace Button
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => _handleCreateRoom(context),
+            icon: Icon(Icons.add_home_work_rounded, size: 20, color: primaryColor),
+            label: Text("Create Room", 
+                style: TextStyle(color: primaryColor, fontSize: 13, fontWeight: FontWeight.w600)),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: BorderSide(color: primaryColor.withValues(alpha: 0.2)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
         ),
-      ),
+        const SizedBox(width: 12),
+        // Join Roomspace Button
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: canJoin ? () => _handleJoinRoom(context) : null,
+            icon: Icon(Icons.add_rounded, size: 20, color: canJoin ? primaryColor : Colors.grey.shade400),
+            label: Text(canJoin ? "Join Room" : limitLabel, 
+                style: TextStyle(color: canJoin ? primaryColor : Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.w600)),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: BorderSide(color: canJoin ? primaryColor.withValues(alpha: 0.2) : const Color(0xFFEEEEF2)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -455,7 +491,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SwitchListTile.adaptive(
       value: value,
       onChanged: onChanged,
-      activeColor: color,
+      activeTrackColor: color.withValues(alpha: 0.5),
       secondary: Icon(icon, size: 20, color: Colors.grey.shade600),
       title: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -501,11 +537,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Icon(Icons.maps_home_work_outlined, size: 32, color: Colors.grey.shade400),
           const SizedBox(height: 12),
           const Text("No Active Roomspace", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E))),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: () => Navigator.pushReplacementNamed(context, '/roomspace-selection'),
-            style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            child: const Text("Create or Join", style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, '/create-roomspace'),
+                  icon: const Icon(Icons.add_home_work_rounded, size: 18),
+                  label: const Text("Create", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor, 
+                    foregroundColor: Colors.white, 
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, '/join-roomspace'),
+                  icon: Icon(Icons.add_rounded, size: 18, color: primaryColor),
+                  label: Text("Join", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: primaryColor)),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: primaryColor),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -528,5 +589,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
         suffixIcon: IconButton(icon: Icon(obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18), onPressed: onToggle),
       ),
     );
+  }
+
+  // Subscription-aware handlers
+  Future<void> _handleCreateRoom(BuildContext context) async {
+    final subscriptionProvider = context.read<SubscriptionProvider>();
+    
+    final canProceed = await SubscriptionHelper.checkAndHandleRoomspaceLimit(
+      context,
+      subscriptionProvider,
+      action: 'create',
+    );
+    
+    if (canProceed) {
+      Navigator.pushNamed(context, '/create-roomspace');
+    }
+  }
+
+  Future<void> _handleJoinRoom(BuildContext context) async {
+    final subscriptionProvider = context.read<SubscriptionProvider>();
+    
+    final canProceed = await SubscriptionHelper.checkAndHandleRoomspaceLimit(
+      context,
+      subscriptionProvider,
+      action: 'join',
+    );
+    
+    if (canProceed) {
+      Navigator.pushNamed(context, '/join-roomspace');
+    }
   }
 }

@@ -1,0 +1,12 @@
+%%{init: {'flowchart': {'curve': 'stepBefore'}} }%%
+flowchart TB
+  S([Start]) --> A[Open pending confirmations]
+  A --> B[Select confirmation]
+  B --> C{Approve or Reject?}
+  C -->|Approve| D[Set status confirmed]
+  C -->|Reject| E[Set status rejected]
+  D --> F[Update balance and history]
+  E --> G[Save rejection reason]
+  F --> H[Notify payer]
+  G --> H
+  H --> I([End])

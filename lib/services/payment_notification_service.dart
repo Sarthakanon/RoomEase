@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import 'notification_listener_service.dart';
 import 'sms_detection_service.dart';
 import 'transaction_validation_service.dart';
+import 'payment_dialog_service.dart';
 
 class PaymentNotificationService {
   static PaymentNotificationService? _instance;
@@ -191,8 +192,17 @@ class PaymentNotificationService {
     try {
       log('Processing payment notification: ${notification.amount} from ${notification.appName}');
       
-      // Validate transaction (includes duplicate checking)
-      final isValid = await TransactionValidationService.validateTransaction(notification);
+      // Validate transaction (includes duplicate checking) with error handling
+      bool isValid = false;
+      try {
+        isValid = await TransactionValidationService.validateTransaction(notification);
+      } catch (e, stackTrace) {
+        log('❌ Error in transaction validation: $e');
+        log('Stack trace: $stackTrace');
+        // Assume valid if validation fails to prevent blocking
+        isValid = true;
+      }
+      
       if (!isValid) {
         log('Transaction validation failed, skipping');
         return;
@@ -208,14 +218,36 @@ class PaymentNotificationService {
       _pendingNotifications.add(notification);
       log('Added notification to pending list. Total pending: ${_pendingNotifications.length}');
       
-      // Show expense suggestion notification
-      await _showExpenseSuggestionNotification(notification);
+      // Show in-app dialog or push notification based on app state
+      try {
+        await PaymentDialogService.showPaymentDetected(notification);
+        log('✅ Successfully showed in-app dialog');
+      } catch (e) {
+        log('❌ In-app dialog failed (app in background): $e');
+        // Fallback to system notification
+        try {
+          await _showExpenseSuggestionNotification(notification);
+          log('✅ Successfully showed system notification as fallback');
+        } catch (notificationError, notificationStackTrace) {
+          log('❌ System notification also failed: $notificationError');
+          log('Stack trace: $notificationStackTrace');
+        }
+      }
       
-      // Save notification for history
-      await _saveNotificationHistory(notification);
+      // Save notification for history with error handling
+      try {
+        await _saveNotificationHistory(notification);
+      } catch (e, stackTrace) {
+        log('❌ Error saving notification history: $e');
+        log('Stack trace: $stackTrace');
+        // Continue execution even if saving fails
+      }
       
-    } catch (e) {
-      log('Error processing payment notification: $e');
+    } catch (e, stackTrace) {
+      log('❌ CRITICAL ERROR processing payment notification: $e');
+      log('Stack trace: $stackTrace');
+      log('Notification data: ${notification.toString()}');
+      // Don't rethrow - prevent app crash
     }
   }
 

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import '../../../models/expense_models.dart';
 import '../../../models/payment_notification.dart';
 import '../../../services/payment_parser_service.dart';
@@ -10,17 +8,20 @@ import 'receipt_scanner_dialog.dart';
 class PersonalExpenseDialog extends StatefulWidget {
   final Function(PersonalExpenseData) onSubmit;
   final PaymentNotification? paymentNotification;
+  final PersonalExpenseData? initialData; // For editing
 
   const PersonalExpenseDialog({
     super.key,
     required this.onSubmit,
     this.paymentNotification,
+    this.initialData,
   });
 
   static Future<void> show(
     BuildContext context, {
     required Function(PersonalExpenseData) onSubmit,
     PaymentNotification? paymentNotification,
+    PersonalExpenseData? initialData,
   }) {
     final width = MediaQuery.of(context).size.width;
     final isTablet = width > 600;
@@ -34,6 +35,7 @@ class PersonalExpenseDialog extends StatefulWidget {
         child: PersonalExpenseDialog(
           onSubmit: onSubmit,
           paymentNotification: paymentNotification,
+          initialData: initialData,
         ),
       ),
     );

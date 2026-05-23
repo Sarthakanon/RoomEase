@@ -5,8 +5,10 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import 'ban_monitoring_service.dart';
+import 'real_time_data_service.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -18,6 +20,7 @@ class ApiService {
   late final Dio _dio;
   late CookieJar _cookieJar;
   bool _initialized = false;
+  String? _webSessionId; // Store session ID for web platform
 
   // Backend server IP address - update in lib/core/constants.dart
   static const String _backendIp = AppConstants.backendIp;
@@ -25,7 +28,8 @@ class ApiService {
 
   static String get baseUrl {
     if (kIsWeb) {
-      return 'http://localhost:$_backendPort';
+      // For web, use the configured backend IP
+      return 'http://$_backendIp:$_backendPort';
     }
 
     // Use machine IP for physical Android devices
@@ -51,6 +55,10 @@ class ApiService {
           'Accept': 'application/json',
           'Connection': 'keep-alive', // Keep connections alive
         },
+        // Enable credentials for web (cookies)
+        extra: {
+          'withCredentials': true,
+        },
       ),
     );
 
@@ -58,6 +66,28 @@ class ApiService {
     if (!kIsWeb) {
       _cookieJar = CookieJar();
       _dio.interceptors.add(CookieManager(_cookieJar));
+    } else {
+      // For web, manually manage session ID in Cookie header
+      _dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) async {
+            // Load session ID from storage if not already loaded
+            if (_webSessionId == null) {
+              await _loadWebSessionId();
+            }
+            
+            // Add session ID to Cookie header if available
+            if (_webSessionId != null) {
+              options.headers['Cookie'] = 'session_id=$_webSessionId';
+              print('🍪 Web: Adding session cookie to request: ${options.path}');
+            } else {
+              print('⚠️ Web: No session ID available for request: ${options.path}');
+            }
+            
+            handler.next(options);
+          },
+        ),
+      );
     }
 
     _dio.interceptors.add(
@@ -67,6 +97,11 @@ class ApiService {
     // Add ban detection interceptor
     _dio.interceptors.add(
       InterceptorsWrapper(
+        onRequest: (options, handler) {
+          print('📡 API Request: ${options.method} ${options.path}');
+          print('📡 Request Data: ${options.data}');
+          handler.next(options);
+        },
         onResponse: (response, handler) {
           print('📡 API Response: ${response.statusCode} - ${response.requestOptions.path}');
           print('📡 Response Data: ${response.data}');
@@ -74,7 +109,15 @@ class ApiService {
           // Check if response indicates user is banned
           if (response.data is Map<String, dynamic>) {
             final data = response.data as Map<String, dynamic>;
-            if (data['banned'] == true || 
+            
+            // Check for is_banned field (from ban-status endpoint)
+            if (data['is_banned'] == true) {
+              final reason = data['ban_reason']?.toString() ?? 'Your account has been suspended';
+              print('🚫 BAN DETECTED (is_banned field): $reason');
+              _handleBanResponse(reason);
+            }
+            // Check for banned field or error message
+            else if (data['banned'] == true || 
                 (data['error'] != null && 
                  (data['error'].toString().toLowerCase().contains('suspended') ||
                   data['error'].toString().toLowerCase().contains('banned')))) {
@@ -85,9 +128,46 @@ class ApiService {
           }
           handler.next(response);
         },
-        onError: (error, handler) {
+        onError: (error, handler) async {
           print('❌ API Error: ${error.response?.statusCode} - ${error.requestOptions.path}');
           print('❌ Error Data: ${error.response?.data}');
+          print('❌ Error Type: ${error.type}');
+          print('❌ Error Message: ${error.message}');
+          
+          // Enhanced error logging for connection issues
+          if (error.type == DioExceptionType.connectionError) {
+            print('🌐 Connection Error Details:');
+            print('   - Base URL: ${_dio.options.baseUrl}');
+            print('   - Request URL: ${error.requestOptions.uri}');
+            print('   - Timeout: ${_dio.options.connectTimeout}');
+            if (!kIsWeb) {
+              print('   - Platform: ${Platform.operatingSystem}');
+            }
+          }
+          
+          // Handle 401 Unauthorized - Session expired or invalid
+          if (error.response?.statusCode == 401) {
+            print('🔒 401 Unauthorized detected - logging out user');
+            await _handleUnauthorizedError();
+            handler.next(error);
+            return;
+          }
+          
+          // Handle 403 Forbidden - User banned or access denied
+          if (error.response?.statusCode == 403) {
+            print('🚫 403 Forbidden detected - checking if user is banned');
+            final data = error.response?.data;
+            if (data is Map<String, dynamic>) {
+              final errorMsg = data['error']?.toString() ?? '';
+              if (errorMsg.toLowerCase().contains('banned') || 
+                  errorMsg.toLowerCase().contains('suspended')) {
+                print('🚫 User is banned - logging out');
+                await _handleBanResponse(errorMsg);
+                handler.next(error);
+                return;
+              }
+            }
+          }
           
           // Check if error response indicates user is banned
           if (error.response?.data is Map<String, dynamic>) {
@@ -98,13 +178,33 @@ class ApiService {
                   data['error'].toString().toLowerCase().contains('banned')))) {
               final reason = data['error']?.toString() ?? 'Account suspended';
               print('🚫 BAN DETECTED in error: $reason');
-              _handleBanResponse(reason);
+              await _handleBanResponse(reason);
             }
           }
           handler.next(error);
         },
       ),
     );
+  }
+
+  /// Handle 401 Unauthorized errors - auto logout
+  Future<void> _handleUnauthorizedError() async {
+    try {
+      print('🔒 Handling unauthorized error - logging out user');
+      
+      // Stop ban monitoring
+      BanMonitoringService().stopMonitoring();
+      
+      // Clear cookies
+      await clearCookies();
+      
+      // Sign out from Firebase
+      await FirebaseAuth.instance.signOut();
+      
+      print('✅ User logged out due to unauthorized access');
+    } catch (e) {
+      print('❌ Error handling unauthorized error: $e');
+    }
   }
 
   /// Initialize persistent cookie storage
@@ -137,6 +237,54 @@ class ApiService {
     // Clear all cookies from the cookie jar (only on non-web platforms)
     if (!kIsWeb) {
       await _cookieJar.deleteAll();
+    } else {
+      // Clear web session ID
+      await _clearWebSessionId();
+    }
+  }
+
+  /// Save session ID to local storage (web only)
+  Future<void> _saveWebSessionId(String sessionId) async {
+    if (!kIsWeb) return;
+    
+    try {
+      _webSessionId = sessionId;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('web_session_id', sessionId);
+      print('✅ Web: Session ID saved to localStorage');
+    } catch (e) {
+      print('❌ Web: Failed to save session ID: $e');
+    }
+  }
+
+  /// Load session ID from local storage (web only)
+  Future<void> _loadWebSessionId() async {
+    if (!kIsWeb) return;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _webSessionId = prefs.getString('web_session_id');
+      if (_webSessionId != null) {
+        print('✅ Web: Session ID loaded from localStorage: $_webSessionId');
+      } else {
+        print('⚠️ Web: No session ID found in localStorage');
+      }
+    } catch (e) {
+      print('❌ Web: Failed to load session ID: $e');
+    }
+  }
+
+  /// Clear session ID from local storage (web only)
+  Future<void> _clearWebSessionId() async {
+    if (!kIsWeb) return;
+    
+    try {
+      _webSessionId = null;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('web_session_id');
+      print('✅ Web: Session ID cleared from localStorage');
+    } catch (e) {
+      print('❌ Web: Failed to clear session ID: $e');
     }
   }
 
@@ -146,6 +294,17 @@ class ApiService {
         '/api/auth/login',
         data: {'firebase_token': firebaseToken},
       );
+      
+      // Extract and save session ID for web platform
+      if (kIsWeb && response.data is Map<String, dynamic>) {
+        final sessionId = response.data['session_id'] as String?;
+        if (sessionId != null) {
+          print('🔑 Web: Extracted session_id from login response: $sessionId');
+          await _saveWebSessionId(sessionId);
+        } else {
+          print('⚠️ Web: No session_id found in login response');
+        }
+      }
       
       // After successful login, check if user is banned
       final user = FirebaseAuth.instance.currentUser;
@@ -189,10 +348,10 @@ class ApiService {
       // Stop ban monitoring
       BanMonitoringService().stopMonitoring();
       
-      // Trigger ban notification immediately
+      // Trigger ban notification immediately - this will show the dialog
       BanMonitoringService().notifyBanDetected(errorMessage);
       
-      print('🚫 Ban notification sent to UI');
+      print('🚫 Ban notification sent to UI - dialog should appear');
     } catch (e) {
       print('❌ Error handling ban response: $e');
     }
@@ -304,6 +463,7 @@ class ApiService {
   Future<Map<String, dynamic>> updateUserProfile({
     String? name,
     String? phone,
+    String? qrImageUrl,
   }) async {
     final data = <String, dynamic>{};
     if (name != null) {
@@ -311,6 +471,9 @@ class ApiService {
     }
     if (phone != null) {
       data['phone'] = phone;
+    }
+    if (qrImageUrl != null) {
+      data['qr_image_url'] = qrImageUrl;
     }
     return await put('/api/user/profile', data: data);
   }
@@ -373,13 +536,17 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> removeMemberFromRoomspace(
-    int roomspaceId,
+    String roomspaceId,
     String memberFirebaseUid,
   ) async {
     return await delete(
       '/api/roomspaces/$roomspaceId/members',
       data: {'member_firebase_uid': memberFirebaseUid},
     );
+  }
+
+  Future<Map<String, dynamic>> leaveRoomspace(String roomspaceId) async {
+    return await post('/api/roomspaces/$roomspaceId/leave');
   }
 
   // Notification APIs
@@ -417,6 +584,13 @@ class ApiService {
       // Debug: Print the expense data being sent
       print('Creating expense with data: $expenseData');
       final response = await post('/api/expenses', data: expenseData);
+      
+      // Notify real-time service about the new expense
+      final roomspaceId = expenseData['roomspace_id']?.toString();
+      if (roomspaceId != null) {
+        RealTimeDataService().notifyExpenseCreated(roomspaceId, response);
+      }
+      
       return response;
     } catch (e) {
       print('Error creating expense: $e');
@@ -431,6 +605,10 @@ class ApiService {
       // Debug: Print the personal expense data being sent
       print('Creating personal expense with data: $expenseData');
       final response = await post('/api/personal-expenses', data: expenseData);
+      
+      // Notify real-time service about the new personal expense
+      RealTimeDataService().notifyPersonalExpenseCreated(response);
+      
       return response;
     } catch (e) {
       print('Error creating personal expense: $e');
@@ -570,6 +748,14 @@ class ApiService {
     try {
       final response = await delete('/api/expenses/$expenseId');
       return response;
+    } on DioException catch (e) {
+      // Extract error message from response
+      if (e.response?.data is Map<String, dynamic>) {
+        final errorData = e.response!.data as Map<String, dynamic>;
+        final errorMessage = errorData['error'] ?? 'Failed to delete expense';
+        throw Exception(errorMessage);
+      }
+      throw Exception('Failed to delete expense: ${e.message}');
     } catch (e) {
       throw Exception('Failed to delete expense: ${e.toString()}');
     }
@@ -673,5 +859,114 @@ class ApiService {
     } else {
       return 'Network error: ${error.message}';
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // RECURRING EXPENSES
+  // ══════════════════════════════════════════════════════════════════
+
+  /// Get recurring expense templates for a roomspace
+  Future<Map<String, dynamic>> getRecurringExpenseTemplates(String roomspaceId) async {
+    try {
+      final response = await _dio.get('/api/roomspaces/$roomspaceId/recurring-expenses');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to get recurring expense templates: ${e.toString()}');
+    }
+  }
+
+  /// Create a recurring expense template
+  Future<Map<String, dynamic>> createRecurringExpenseTemplate(Map<String, dynamic> templateData) async {
+    try {
+      final response = await _dio.post('/api/recurring-expenses', data: templateData);
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to create recurring expense template: ${e.toString()}');
+    }
+  }
+
+  /// Update a recurring expense template
+  Future<Map<String, dynamic>> updateRecurringExpenseTemplate(int templateId, Map<String, dynamic> templateData) async {
+    try {
+      final response = await _dio.put('/api/recurring-expenses/$templateId', data: templateData);
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to update recurring expense template: ${e.toString()}');
+    }
+  }
+
+  /// Delete a recurring expense template
+  Future<Map<String, dynamic>> deleteRecurringExpenseTemplate(int templateId) async {
+    try {
+      final response = await _dio.delete('/api/recurring-expenses/$templateId');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to delete recurring expense template: ${e.toString()}');
+    }
+  }
+
+  /// Restore a soft-deleted recurring expense template
+  Future<Map<String, dynamic>> restoreRecurringExpenseTemplate(int templateId) async {
+    try {
+      final response = await _dio.post('/api/recurring-expenses/$templateId/restore');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to restore recurring expense template: ${e.toString()}');
+    }
+  }
+
+  /// Get recurring expense notifications
+  Future<Map<String, dynamic>> getRecurringExpenseNotifications() async {
+    try {
+      final response = await _dio.get('/api/recurring-expenses/notifications');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to get recurring expense notifications: ${e.toString()}');
+    }
+  }
+
+  /// Process a recurring expense notification
+  Future<Map<String, dynamic>> processRecurringExpenseNotification(
+    int notificationId, 
+    Map<String, dynamic> actionData
+  ) async {
+    try {
+      final response = await _dio.post(
+        '/api/recurring-expenses/notifications/$notificationId/process',
+        data: actionData,
+      );
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to process recurring expense notification: ${e.toString()}');
+    }
+  }
+
+  /// Get upcoming recurring expenses for a roomspace
+  Future<Map<String, dynamic>> getUpcomingRecurringExpenses(String roomspaceId, {int days = 30}) async {
+    try {
+      final response = await _dio.get('/api/roomspaces/$roomspaceId/recurring-expenses/upcoming?days=$days');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to get upcoming recurring expenses: ${e.toString()}');
+    }
+  }
+
+  /// Get recurring expense statistics for a roomspace
+  Future<Map<String, dynamic>> getRecurringExpenseStats(String roomspaceId) async {
+    try {
+      final response = await _dio.get('/api/roomspaces/$roomspaceId/recurring-expenses/stats');
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to get recurring expense statistics: ${e.toString()}');
+    }
+  }
+
+  /// Update backend IP address (for testing purposes)
+  Future<void> updateBackendIp(String newIp) async {
+    // For now, this is a placeholder method
+    // In a real implementation, you might want to update the base URL
+    // and reinitialize the Dio instance
+    print('Backend IP update requested: $newIp');
+    // Note: This would require reinitializing the Dio instance with new baseUrl
   }
 }

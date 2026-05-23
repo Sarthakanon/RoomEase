@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../services/api_service.dart';
+import '../../../providers/roomspace_provider.dart';
 import 'roomspace_details_screen.dart';
 import 'roomspace_selection_screen.dart';
 
@@ -66,12 +68,19 @@ class _RoomspaceRouterState extends State<RoomspaceRouter> {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context);
 
     if (_isLoading) {
       return Scaffold(
         backgroundColor: const Color(0xFFF8F9FA),
         body: Center(child: CircularProgressIndicator(color: primaryColor)),
       );
+    }
+
+    // Personal Space must always win over "has roomspace" checks.
+    // When user intentionally switches to personal mode, never force roomspace details.
+    if (roomspaceProvider.isPersonalSpace) {
+      return _buildPersonalSpaceScreen(primaryColor);
     }
 
     if (_hasRoomspace) {
@@ -83,6 +92,52 @@ class _RoomspaceRouterState extends State<RoomspaceRouter> {
     }
 
     return const RoomspaceSelectionScreen();
+  }
+
+  Widget _buildPersonalSpaceScreen(Color primaryColor) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.person_rounded,
+                    size: 60,
+                    color: primaryColor,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'You are in Personal Space',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Use Expenses and Analytics tabs for personal tracking. '
+                  'Switch to a roomspace anytime from the selector.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, color: Colors.grey[700]),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildPendingRequestScreen(Color primaryColor) {

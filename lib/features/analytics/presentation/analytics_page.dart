@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../models/analytics_models.dart';
 import '../../../services/analytics_service.dart';
-import '../../../services/smart_api_service.dart';
 import '../../../services/state_management_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
 import '../../../core/widgets/global_roomspace_selector.dart';
 import '../../../providers/roomspace_provider.dart';
-import '../../../widgets/smart_future_builder.dart';
 import '../widgets/spending_trends_chart.dart';
 import '../widgets/category_breakdown_chart.dart';
 import '../widgets/recommendations_card.dart';
@@ -25,7 +23,6 @@ class AnalyticsPage extends StatefulWidget {
 class _AnalyticsPageState extends State<AnalyticsPage> 
     with AutomaticKeepAliveClientMixin {
   final AnalyticsService _analyticsService = AnalyticsService();
-  final SmartApiService _smartApi = SmartApiService();
   final StateManagementService _state = StateManagementService();
 
   @override
@@ -36,8 +33,6 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   DateTime? _lastDataLoad;
   static const Duration _cacheValidDuration = Duration(minutes: 5);
   
-  String? _currentRoomspaceId;
-
   @override
   void initState() {
     super.initState();
@@ -99,8 +94,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       // Cache the data
       _cachedAnalyticsData = analyticsData;
       _lastDataLoad = DateTime.now();
-      _currentRoomspaceId = activeRoomspaceId;
-      debugPrint('💾 Analytics data cached at ${_lastDataLoad}');
+      debugPrint('💾 Analytics data cached at $_lastDataLoad');
 
       return analyticsData;
     } catch (e) {
@@ -225,7 +219,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.query_stats_rounded, size: 64, color: Colors.indigo.withOpacity(0.1)),
+            Icon(Icons.query_stats_rounded, size: 64, color: Colors.indigo.withValues(alpha: 0.1)),
             const SizedBox(height: 16),
             Text('No analytics found',
                 textAlign: TextAlign.center,
@@ -267,7 +261,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                 const FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text('Analytics',
-                      style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF1A1A2E), fontSize: 22, letterSpacing: -0.5)),
+                      style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E), fontSize: 20)),
                 ),
                 if (roomspaceName != null)
                   Text(roomspaceName,
@@ -429,7 +423,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         children: [
           Container(
             padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
             child: Icon(icon, color: color, size: 16),
           ),
           Column(
@@ -497,7 +491,7 @@ class _CircularProgressWithText extends StatelessWidget {
           child: CircularProgressIndicator(
             value: score / 100,
             strokeWidth: 7,
-            backgroundColor: Colors.white.withOpacity(0.05),
+            backgroundColor: Colors.white.withValues(alpha: 0.05),
             color: scoreColor,
             strokeCap: StrokeCap.round,
           ),

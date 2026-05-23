@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/roomspace_provider.dart';
 import '../../models/roomspace_data.dart';
+import '../../features/subscription/providers/subscription_provider.dart';
 
 /// Widget for switching between multiple roomspaces
 /// Displays a dropdown/bottom sheet UI for roomspace selection
@@ -265,6 +266,7 @@ class _RoomspaceSelectorSheetState extends State<_RoomspaceSelectorSheet>
   Widget build(BuildContext context) {
     final activeRoomspaceId = widget.provider.activeRoomspace?.id;
     final isLoading = widget.provider.isLoading;
+    final maxRoomspaces = context.watch<SubscriptionProvider>().currentLimits.maxRoomspaces;
     
     return FadeTransition(
       opacity: _fadeAnimation,
@@ -375,7 +377,7 @@ class _RoomspaceSelectorSheetState extends State<_RoomspaceSelectorSheet>
                           ),
                         ),
                         child: Text(
-                          '${widget.provider.roomspaceCount}/5',
+                          '${widget.provider.roomspaceCount}/$maxRoomspaces',
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,

@@ -196,7 +196,7 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('DOWNLOAD COMPLETE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
-                      Text('Saved to: $displayPath', style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.7))),
+                      Text('Saved to: $displayPath', style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.7))),
                     ],
                   ),
                 ),

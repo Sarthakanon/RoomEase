@@ -1,0 +1,40 @@
+%%{init: {'flowchart': {'curve': 'stepBefore'}} }%%
+flowchart TB
+    user((Roommate User))
+    admin((Admin User))
+
+    subgraph RoomEase System
+        UC1[Login and Profile Management]
+        UC2[Create or Join Roomspace]
+        UC3[Add and Manage Shared Expenses]
+        UC4[Add and Manage Personal Expenses]
+        UC5[View Balances and Settlements]
+        UC6[Submit and Confirm Payments]
+        UC7[View Notifications and Requests]
+        UC8[Use Offline Mode and Sync]
+        UC9[View Analytics Insights]
+        UC10[Manage Recurring Expenses]
+        UC11[Manage Subscription]
+
+        AC1[View System Statistics]
+        AC2[Manage Users and Ban Status]
+        AC3[Monitor Roomspaces and Expenses]
+        AC4[View Admin Analytics]
+    end
+
+    user --> UC1
+    user --> UC2
+    user --> UC3
+    user --> UC4
+    user --> UC5
+    user --> UC6
+    user --> UC7
+    user --> UC8
+    user --> UC9
+    user --> UC10
+    user --> UC11
+
+    admin --> AC1
+    admin --> AC2
+    admin --> AC3
+    admin --> AC4

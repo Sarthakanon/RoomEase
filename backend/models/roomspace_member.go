@@ -177,6 +177,13 @@ func (rm *RoomspaceMember) BeforeCreate(tx *gorm.DB) error {
 
 // BeforeUpdate hook for RoomspaceMember
 func (rm *RoomspaceMember) BeforeUpdate(tx *gorm.DB) error {
+	// Skip validation if role is empty (used as model reference in Where+Update queries)
+	// When using Model(&RoomspaceMember{}).Where(...).Update(...), the struct is empty
+	// and we should not validate the zero-value fields
+	if rm.Role == "" {
+		return nil
+	}
+	
 	// Validate role
 	if !rm.Role.IsValid() {
 		return gorm.ErrInvalidValue

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../controllers/auth_controller.dart';
 import '../../../services/auth_state_service.dart';
 import '../../../providers/roomspace_provider.dart';
+import '../../subscription/providers/subscription_provider.dart';
+import '../../../widgets/first_time_permissions_dialog.dart';
 
 /// Screen for user login, supporting email/password and Google authentication.
 class LoginScreen extends StatefulWidget {
@@ -19,6 +21,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _authController = AuthController();
   bool _obscurePassword = true;
   bool _rememberMe = false;
+  bool _isGoogleLoading = false; // Track Google sign-in loading state
+  bool _isEmailLoading = false; // Track email/password login loading state
 
   @override
   void initState() {
@@ -34,27 +38,82 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleSuccess(userCredential) async {
     if (_rememberMe) await AuthStateService.saveLoginState(userCredential.user?.email ?? '', true);
-    final provider = Provider.of<RoomspaceProvider>(context, listen: false);
-    await provider.loadRoomspaces();
-    if (mounted) Navigator.pushReplacementNamed(context, provider.roomspaceCount == 0 ? '/roomspace-selection' : '/home');
+    
+    // Reset providers for the new user
+    final subscriptionProvider = Provider.of<SubscriptionProvider>(context, listen: false);
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    
+    // Clear old user's data
+    subscriptionProvider.reset();
+    await roomspaceProvider.clear();
+    
+    // Load new user's data
+    await subscriptionProvider.initialize();
+    
+    // Small delay to ensure session cookie is persisted
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    await roomspaceProvider.loadRoomspaces();
+    
+    // Show permissions dialog on first login
+    if (mounted) {
+      await FirstTimePermissionsDialog.show(context);
+    }
+    
+    if (mounted) Navigator.pushReplacementNamed(context, roomspaceProvider.roomspaceCount == 0 ? '/roomspace-selection' : '/home');
   }
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_isEmailLoading) return; // Prevent double-tap
+    
+    setState(() => _isEmailLoading = true);
     try {
       final cred = await _authController.loginWithEmail(_emailController.text.trim(), _passwordController.text.trim());
       if (cred != null) await _handleSuccess(cred);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      if (mounted) {
+        setState(() => _isEmailLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isEmailLoading = false);
     }
   }
 
   Future<void> _googleLogin() async {
+    if (_isGoogleLoading) return; // Prevent double-tap
+    
+    setState(() => _isGoogleLoading = true);
     try {
+      debugPrint('🔵 LoginScreen: Starting Google login...');
       final cred = await _authController.loginWithGoogle();
-      if (cred != null) await _handleSuccess(cred);
+      if (cred != null) {
+        debugPrint('✅ LoginScreen: Google login successful, handling success...');
+        await _handleSuccess(cred);
+      } else {
+        debugPrint('⚪ LoginScreen: Google login returned null (user canceled)');
+        if (mounted) setState(() => _isGoogleLoading = false);
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      debugPrint('❌ LoginScreen: Google login failed: $e');
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
+        String errorMessage = e.toString();
+        // Clean up error message
+        if (errorMessage.startsWith('Exception: ')) {
+          errorMessage = errorMessage.substring(11);
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -155,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
       width: double.infinity,
       height: 48,
       child: ElevatedButton(
-        onPressed: _authController.isLoading ? null : _login,
+        onPressed: (_isEmailLoading || _isGoogleLoading) ? null : _login,
         style: ElevatedButton.styleFrom(
           backgroundColor: primary, 
           foregroundColor: Colors.white, 
@@ -163,7 +222,19 @@ class _LoginScreenState extends State<LoginScreen> {
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         ),
-        child: _authController.isLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)) : const Text('Sign In', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        child: _isEmailLoading 
+            ? const SizedBox(
+                width: 20, 
+                height: 20, 
+                child: CircularProgressIndicator(
+                  color: Colors.white, 
+                  strokeWidth: 2.5,
+                ),
+              )
+            : const Text(
+                'Sign In', 
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
       ),
     );
   }
@@ -183,28 +254,34 @@ class _LoginScreenState extends State<LoginScreen> {
       width: double.infinity,
       height: 48,
       child: OutlinedButton(
-        onPressed: _authController.isLoading ? null : _googleLogin,
+        onPressed: _isGoogleLoading ? null : _googleLogin,
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: Color(0xFFEEEEF2)), 
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
           foregroundColor: const Color(0xFF1A1A2E),
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('png/google.png', height: 18, width: 18),
-            const SizedBox(width: 10),
-            const Flexible(
-              child: Text(
-                'Continue with Google', 
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
+        child: _isGoogleLoading
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset('png/google.png', height: 18, width: 18),
+                  const SizedBox(width: 10),
+                  const Flexible(
+                    child: Text(
+                      'Continue with Google', 
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -1,0 +1,13 @@
+sequenceDiagram
+  actor U as User
+  participant APP as Mobile App
+  participant API as Analytics API
+  participant AN as Analytics Service
+  participant DB as PostgreSQL
+  U->>APP: Open analytics summary
+  APP->>API: GET /api/analytics/summary
+  API->>AN: Build summary data
+  AN->>DB: Query expense aggregates
+  DB-->>AN: Aggregate results
+  AN-->>API: Summary payload
+  API-->>APP: Summary response

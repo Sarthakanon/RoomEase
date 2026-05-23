@@ -1,0 +1,16 @@
+[
+  "participant_count",
+  "amount_npr",
+  "month",
+  "is_festival_month",
+  "amount_per_person_npr",
+  "split_custom",
+  "split_equal",
+  "split_percentage",
+  "category_entertainment",
+  "category_festivals_gifts",
+  "category_groceries",
+  "category_restaurants_cafes",
+  "category_travel",
+  "category_utilities"
+]

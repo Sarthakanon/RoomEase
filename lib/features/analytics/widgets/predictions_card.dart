@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../models/analytics_models.dart';
 import '../../../services/analytics_service.dart';
 import 'skeleton_loader.dart';
-import 'analytics_shared.dart';
 
 class PredictionsCard extends StatefulWidget {
   final String? roomspaceId;
@@ -85,14 +84,14 @@ class _PredictionsCardState extends State<PredictionsCard> {
               borderRadius: BorderRadius.circular(10),
               child: LinearProgressIndicator(
                 value: (_predictions!.dataDays / 30).clamp(0.0, 1.0),
-                backgroundColor: Colors.indigo.withOpacity(0.05),
+                backgroundColor: Colors.indigo.withValues(alpha: 0.05),
                 color: Colors.indigo,
                 minHeight: 8,
               ),
             ),
             const SizedBox(height: 8),
             Text('${_predictions!.dataDays}/30 days collected', 
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.indigo.withOpacity(0.5))),
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.indigo.withValues(alpha: 0.5))),
           ],
         ),
       );

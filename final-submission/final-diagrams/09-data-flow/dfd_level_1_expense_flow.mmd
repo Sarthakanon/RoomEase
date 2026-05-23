@@ -1,0 +1,32 @@
+%%{init: {'flowchart': {'curve': 'stepBefore'}} }%%
+flowchart TB
+    U[User]
+
+    P1((P1 Create Expense))
+    P2((P2 Calculate Splits and Balances))
+    P3((P3 Notify Members))
+    P4((P4 Handle Offline Queue and Sync))
+
+    D1[(D1 Expenses Store)]
+    D2[(D2 Expense Splits Store)]
+    D3[(D3 Balance and Settlement Store)]
+    D4[(D4 Notifications Store)]
+    D5[(D5 Local Offline Store)]
+
+    U -->|Expense details| P1
+    P1 -->|Expense record| D1
+    P1 -->|Split inputs| P2
+
+    P2 -->|Split records| D2
+    P2 -->|Balance updates| D3
+    P2 -->|Balance summary| U
+
+    P1 -->|Trigger alerts| P3
+    P3 -->|Notification data| D4
+    P3 -->|Notification status| U
+
+    U -->|Offline action| P4
+    P4 -->|Queue operation| D5
+    P4 -->|Sync to main stores| D1
+    P4 -->|Sync to split store| D2
+    P4 -->|Sync update| U

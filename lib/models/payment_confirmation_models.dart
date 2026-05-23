@@ -1,4 +1,5 @@
 /// Models for payment confirmation system
+library;
 
 enum PaymentStatus {
   pending('PENDING'),
@@ -53,6 +54,7 @@ class PaymentConfirmation {
   final PaymentType paymentType;
   final PaymentStatus status;
   final String? notes;
+  final String? paymentProofUrl;
   final DateTime paymentDate;
   final DateTime? confirmedAt;
   final String? rejectionReason;
@@ -70,6 +72,7 @@ class PaymentConfirmation {
     required this.paymentType,
     required this.status,
     this.notes,
+    this.paymentProofUrl,
     required this.paymentDate,
     this.confirmedAt,
     this.rejectionReason,
@@ -89,6 +92,7 @@ class PaymentConfirmation {
       paymentType: PaymentType.fromString(json['payment_type'] as String),
       status: PaymentStatus.fromString(json['status'] as String),
       notes: json['notes'] as String?,
+      paymentProofUrl: json['payment_proof_url'] as String?,
       paymentDate: DateTime.parse(json['payment_date'] as String),
       confirmedAt: json['confirmed_at'] != null
           ? DateTime.parse(json['confirmed_at'] as String)
@@ -111,6 +115,7 @@ class PaymentConfirmation {
       'payment_type': paymentType.value,
       'status': status.value,
       'notes': notes,
+      'payment_proof_url': paymentProofUrl,
       'payment_date': paymentDate.toIso8601String(),
       'confirmed_at': confirmedAt?.toIso8601String(),
       'rejection_reason': rejectionReason,
@@ -152,6 +157,7 @@ class PaymentConfirmationRequest {
   final double amount;
   final PaymentType paymentType;
   final String? notes;
+  final String? paymentProofUrl;
   final DateTime paymentDate;
 
   PaymentConfirmationRequest({
@@ -159,6 +165,7 @@ class PaymentConfirmationRequest {
     required this.amount,
     required this.paymentType,
     this.notes,
+    this.paymentProofUrl,
     required this.paymentDate,
   });
 
@@ -168,6 +175,7 @@ class PaymentConfirmationRequest {
       'amount': amount,
       'payment_type': paymentType.value,
       'notes': notes,
+      'payment_proof_url': paymentProofUrl,
       'payment_date': paymentDate.toUtc().toIso8601String(),
     };
   }

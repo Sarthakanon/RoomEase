@@ -1,0 +1,97 @@
+classDiagram
+    class User {
+      +String id
+      +String email
+      +String name
+      +String subscriptionPlan
+      +login()
+      +updateProfile()
+    }
+
+    class Roomspace {
+      +String id
+      +String name
+      +String code
+      +String creatorId
+      +createRoomspace()
+      +joinRoomspace()
+      +leaveRoomspace()
+    }
+
+    class Expense {
+      +int id
+      +String roomspaceId
+      +String title
+      +double amount
+      +String paidBy
+      +createExpense()
+      +updateExpense()
+      +deleteExpense()
+    }
+
+    class ExpenseSplit {
+      +int id
+      +int expenseId
+      +String userId
+      +double splitAmount
+      +String splitType
+    }
+
+    class BalanceService {
+      +calculateRoomspaceBalances(roomspaceId)
+      +getUserBalance(roomspaceId, userId)
+      +generateSettlementSuggestions(roomspaceId)
+    }
+
+    class PaymentConfirmation {
+      +int id
+      +String payerId
+      +String payeeId
+      +double amount
+      +String status
+      +createConfirmation()
+      +confirmPayment()
+      +rejectPayment()
+    }
+
+    class OfflineExpenseService {
+      +initialize()
+      +createExpenseOffline()
+      +syncAll()
+      +getUnsyncedCount()
+    }
+
+    class SyncService {
+      +initialize()
+      +syncAll()
+      +forceSync()
+    }
+
+    class AnalyticsService {
+      +getSummary()
+      +getTrends()
+      +getAnomalies()
+      +getRecommendations()
+      +getPredictions()
+    }
+
+    class RecurringExpenseTemplate {
+      +int id
+      +String roomspaceId
+      +String frequency
+      +boolean isActive
+      +createTemplate()
+      +updateTemplate()
+      +deleteTemplate()
+    }
+
+    User "1" --> "many" Roomspace : creates
+    User "many" --> "many" Roomspace : member_of
+    Roomspace "1" --> "many" Expense : contains
+    Expense "1" --> "many" ExpenseSplit : has
+    User "1" --> "many" Expense : pays
+    BalanceService --> Expense : computes_from
+    PaymentConfirmation --> Roomspace : belongs_to
+    SyncService --> OfflineExpenseService : uses
+    AnalyticsService --> Expense : analyzes
+    RecurringExpenseTemplate --> Roomspace : belongs_to

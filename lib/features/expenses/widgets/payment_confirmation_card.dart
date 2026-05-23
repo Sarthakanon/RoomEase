@@ -54,6 +54,22 @@ class PaymentConfirmationCard extends StatelessWidget {
                 Text(payment.paymentTypeText, style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600, fontSize: 12)),
                 Text('Rs. ${payment.amount.toStringAsFixed(0)}', style: TextStyle(color: typeColor, fontWeight: FontWeight.w900, fontSize: 16)),
               ])),
+              if (payment.paymentProofUrl?.isNotEmpty == true) ...[
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () => _openProofFullScreen(context, payment.paymentProofUrl!),
+                  borderRadius: BorderRadius.circular(10),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      payment.paymentProofUrl!,
+                      height: 150,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ],
               if (payment.notes?.isNotEmpty == true) ...[const SizedBox(height: 12), Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: const Color(0xFFFAFBFD), borderRadius: BorderRadius.circular(8)), child: Row(children: [Icon(Icons.notes_rounded, size: 14, color: Colors.grey.shade400), const SizedBox(width: 8), Expanded(child: Text(payment.notes!, style: TextStyle(color: Colors.grey.shade700, fontSize: 12, height: 1.4)))]))],
               const SizedBox(height: 12),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -108,6 +124,31 @@ class PaymentConfirmationCard extends StatelessWidget {
   String _getMonth(int m) {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return months[m - 1];
+  }
+
+  void _openProofFullScreen(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4.0,
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

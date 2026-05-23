@@ -1,0 +1,8 @@
+classDiagram
+  class ConnectivityService {+initialize(); +isConnected; +connectivityStream}
+  class OfflineExpenseService {+initialize(); +createExpense(); +syncAll(); +getUnsyncedCount()}
+  class SyncService {+initialize(); +syncAll(); +forceSync()}
+  class LocalDatabaseService {+saveExpense(); +getPendingQueue(); +markSynced()}
+  SyncService --> ConnectivityService
+  SyncService --> OfflineExpenseService
+  OfflineExpenseService --> LocalDatabaseService

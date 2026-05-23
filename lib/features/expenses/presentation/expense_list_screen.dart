@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:room_ease/models/expense_models.dart';
 import 'package:room_ease/services/expense_service.dart';
 import 'package:room_ease/services/cached_api_service.dart';
+import 'package:room_ease/services/real_time_data_service.dart';
 import 'package:room_ease/providers/roomspace_provider.dart';
 import 'package:room_ease/core/widgets/skeleton_loader.dart';
-import 'package:room_ease/features/expenses/presentation/expense_details_screen.dart';
 import 'package:room_ease/features/home/widgets/add_expense_dialog.dart';
 import 'package:room_ease/features/home/widgets/personal_expense_dialog.dart';
+import 'package:room_ease/widgets/enhanced_expense_tile.dart';
+import 'dart:async';
 
 /// Screen displaying a paginated list of expenses (shared or personal).
 class ExpenseListScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class ExpenseListScreen extends StatefulWidget {
 class _ExpenseListScreenState extends State<ExpenseListScreen> {
   final ExpenseService _expenseService = ExpenseService();
   final CachedApiService _cachedApiService = CachedApiService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
   final ScrollController _scrollController = ScrollController();
   
   List<ExpenseData> _expenses = [];
@@ -42,12 +45,41 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   String? _selectedCategory;
   final TextEditingController _searchController = TextEditingController();
 
+  // Stream subscriptions for real-time updates
+  StreamSubscription<ExpenseUpdateEvent>? _expenseUpdateSubscription;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadExpenses(reset: true);
+      _setupRealTimeListeners();
+    });
+  }
+
+  void _setupRealTimeListeners() {
+    _expenseUpdateSubscription = _realTimeService.expenseUpdates.listen((event) {
+      debugPrint('🔄 ExpenseList: Update received: ${event.type}');
+      
+      // Check if this update affects current screen
+      final currentRoomspaceId = widget.roomspaceId ?? 
+          Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+      
+      bool shouldRefresh = false;
+      
+      if (event.type == ExpenseUpdateType.clearCache) {
+        shouldRefresh = true;
+      } else if (widget.isPersonalExpenses && event.type == ExpenseUpdateType.personalCreated) {
+        shouldRefresh = true;
+      } else if (!widget.isPersonalExpenses && event.roomspaceId == currentRoomspaceId) {
+        shouldRefresh = true;
+      }
+      
+      if (shouldRefresh && mounted) {
+        debugPrint('🔄 ExpenseList: Refreshing data');
+        _loadExpenses(reset: true);
+      }
     });
   }
 
@@ -55,6 +87,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   void dispose() {
     _scrollController.dispose();
     _searchController.dispose();
+    _expenseUpdateSubscription?.cancel();
     super.dispose();
   }
 
@@ -83,10 +116,23 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       }
       
       if (widget.isPersonalExpenses) {
-         expenses = await _expenseService.getUserExpenses(
+        final personal = await _expenseService.getPersonalExpenses(
           limit: _pageSize,
           offset: _currentPage * _pageSize,
         );
+        expenses = personal
+            .map((p) => ExpenseData(
+                  id: p.id,
+                  title: p.title,
+                  amount: p.amount,
+                  description: p.description,
+                  category: p.category,
+                  selectedRoommateIds: const [],
+                  splitType: SplitType.exact,
+                  customSplits: const {},
+                  createdAt: p.createdAt,
+                ))
+            .toList();
       } else if (effectiveId != null) {
         final response = await _expenseService.getRoomspaceExpenses(
           effectiveId,
@@ -109,8 +155,11 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       }
 
       setState(() {
-        if (reset) _expenses = expenses;
-        else _expenses.addAll(expenses);
+        if (reset) {
+          _expenses = expenses;
+        } else {
+          _expenses.addAll(expenses);
+        }
         _hasMoreData = expenses.length >= _pageSize;
         _isLoading = false;
         _isLoadingMore = false;
@@ -203,20 +252,23 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   Widget _buildSearchBar() {
     return Container(
-      height: 40,
+      height: 44,
       decoration: BoxDecoration(
         color: const Color(0xFFF7F7FB),
         borderRadius: BorderRadius.circular(10),
       ),
       child: TextField(
         controller: _searchController,
+        textAlignVertical: TextAlignVertical.center,
         style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Search expenses...',
           hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
           prefixIcon: Icon(Icons.search_rounded, size: 18, color: Colors.grey.shade400),
+          prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
         ),
         onChanged: (val) => setState(() => _searchQuery = val),
       ),
@@ -237,10 +289,11 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
             return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator(strokeWidth: 2)));
           }
           final expense = _expenses[index];
-          return _ExpenseTile(
+          return EnhancedExpenseTile(
             expense: expense,
             themeColor: themeColor,
             isPersonal: widget.isPersonalExpenses,
+            onUpdated: () => _loadExpenses(reset: true),
           );
         },
       ),
@@ -396,7 +449,8 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       if (!mounted) return;
       AddExpenseDialog.show(context, roommates: roommates, roomspaceId: active.id, onSubmit: (ex) async {
         await _cachedApiService.createExpense(ExpenseCreateRequest.fromExpenseData(ex, active.id).toJson());
-        _loadExpenses(reset: true);
+        // Real-time service will automatically notify listeners
+        // No need to manually refresh here
       });
     } catch (_) {}
   }
@@ -404,80 +458,8 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
   void _showPersonalExpenseDialog() {
     PersonalExpenseDialog.show(context, onSubmit: (ex) async {
       await _cachedApiService.createPersonalExpense(PersonalExpenseCreateRequest.fromExpenseData(ex).toJson());
-      _loadExpenses(reset: true);
+      // Real-time service will automatically notify listeners
+      // No need to manually refresh here
     });
-  }
-}
-
-class _ExpenseTile extends StatelessWidget {
-  final ExpenseData expense;
-  final Color themeColor;
-  final bool isPersonal;
-
-  const _ExpenseTile({required this.expense, required this.themeColor, required this.isPersonal});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFEEEEF2)),
-      ),
-      child: InkWell(
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ExpenseDetailsScreen(expense: expense))),
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: themeColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                child: Icon(_getIcon(expense.category), color: themeColor, size: 20),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(expense.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Color(0xFF1A1A2E)), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text(expense.category + (isPersonal ? '' : ' • ${expense.payerName ?? 'Self'}'), 
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('Rs. ${expense.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: themeColor)),
-                  if (expense.createdAt != null)
-                    Text(_formatDate(expense.createdAt!), style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _getIcon(String cat) {
-    switch (cat.toLowerCase()) {
-      case 'groceries': return Icons.shopping_basket_outlined;
-      case 'utilities': return Icons.bolt_rounded;
-      case 'rent': return Icons.home_outlined;
-      case 'food': return Icons.restaurant_rounded;
-      default: return Icons.receipt_long_outlined;
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    if (now.difference(date).inDays == 0) return 'Today';
-    if (now.difference(date).inDays == 1) return 'Yesterday';
-    return '${date.day}/${date.month}';
   }
 }

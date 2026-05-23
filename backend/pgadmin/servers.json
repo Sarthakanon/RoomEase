@@ -1,0 +1,15 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "RoomEase Local",
+      "Group": "Servers",
+      "Host": "roomease-postgres",
+      "Port": 5432,
+      "MaintenanceDB": "roomease",
+      "Username": "postgres",
+      "Password": "roomease_dev_password",
+      "SSLMode": "prefer",
+      "PassFile": "/pgpass"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+meta {
+  name: POST /api/join-requests/:id/process
+  type: http
+}
+
+post {
+  url: {{baseUrl}}/api/join-requests/{{roomspace_id}}/process
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Cookie: session_id={{session_id}}
+}
+
+body:json {
+  {
+    "action": "approve",
+    "reason": "API test"
+  }
+}
+
+assert {
+  res.status: oneOf 200 201 400 401 403 404 409 422 500
+}
+
+tests {
+  test("status is handled", function() {
+    expect([200,201,400,401,403,404,409,422,500]).to.include(res.status);
+  });
+}

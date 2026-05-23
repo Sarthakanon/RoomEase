@@ -1,0 +1,16 @@
+erDiagram
+  USERS ||--o{ ROOMSPACES : creates
+  ROOMSPACES ||--o{ ROOMSPACE_MEMBERS : has
+  USERS ||--o{ ROOMSPACE_MEMBERS : joins
+  ROOMSPACES {
+    string id PK
+    string name
+    string code
+    string creator_id FK
+  }
+  ROOMSPACE_MEMBERS {
+    int id PK
+    string roomspace_id FK
+    string user_id FK
+    boolean is_active
+  }

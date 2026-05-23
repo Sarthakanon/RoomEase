@@ -1,0 +1,13 @@
+headers {
+  User-Agent: Bruno/1.0 RoomEase-API-Tests
+}
+
+auth {
+  mode: none
+}
+
+tests {
+  test("response time < 10s", function() {
+    expect(res.responseTime).to.be.below(10000);
+  });
+}

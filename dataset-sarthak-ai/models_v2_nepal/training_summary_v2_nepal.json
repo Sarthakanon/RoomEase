@@ -1,0 +1,48 @@
+{
+  "monthly_forecast": {
+    "mae_npr": 32290.531551695654,
+    "rmse_npr": 44124.81089236916,
+    "r2": 0.4157818563444312,
+    "baseline_mae_npr": 44018.00377037037,
+    "train_rows": 7800,
+    "test_rows": 2700
+  },
+  "budget_risk": {
+    "threshold": 0.35999999999999993,
+    "accuracy": 0.8507407407407407,
+    "precision": 0.8531571218795888,
+    "recall": 0.9442036836403034,
+    "f1": 0.8963743893031628,
+    "auc": 0.9215298093732636
+  },
+  "anomaly_detection": {
+    "threshold": 0.6599999999999999,
+    "accuracy": 0.8942732653475551,
+    "precision": 0.4627831715210356,
+    "recall": 0.40497168030207675,
+    "f1": 0.4319516697432455,
+    "auc": 0.7790660555959774
+  },
+  "spending_profiles": {
+    "clusters": 7,
+    "users": 300
+  },
+  "shared_settlement": {
+    "threshold": 0.13999999999999999,
+    "accuracy": 0.6787689689405758,
+    "precision": 0.23774807614418794,
+    "recall": 0.6051546391752577,
+    "f1": 0.341378307647572,
+    "auc": 0.7013299833688504
+  },
+  "classification_thresholds": {
+    "budget_risk": 0.35999999999999993,
+    "anomaly_detection": 0.6599999999999999,
+    "shared_settlement": 0.13999999999999999
+  },
+  "notes": [
+    "V2 trains on NPR-normalized amounts while preserving original currency fields.",
+    "Features use prior-period rolling values where prediction needs future safety.",
+    "The assistant response should avoid storing raw names, email, phone, or notes."
+  ]
+}

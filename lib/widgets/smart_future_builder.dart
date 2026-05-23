@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../services/smart_api_service.dart';
 import '../services/state_management_service.dart';
 
 /// Smart future builder with advanced caching, pull-to-refresh, and state management
@@ -17,7 +16,7 @@ class SmartFutureBuilder<T> extends StatefulWidget {
   final String? emptyMessage;
 
   const SmartFutureBuilder({
-    Key? key,
+    super.key,
     required this.screenKey,
     required this.dataLoader,
     required this.builder,
@@ -29,7 +28,7 @@ class SmartFutureBuilder<T> extends StatefulWidget {
     this.enableAutoRefresh = false,
     this.autoRefreshInterval,
     this.emptyMessage,
-  }) : super(key: key);
+  });
 
   @override
   State<SmartFutureBuilder<T>> createState() => _SmartFutureBuilderState<T>();
@@ -37,8 +36,6 @@ class SmartFutureBuilder<T> extends StatefulWidget {
 
 class _SmartFutureBuilderState<T> extends State<SmartFutureBuilder<T>>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
-  
-  final SmartApiService _smartApi = SmartApiService();
   final StateManagementService _state = StateManagementService();
   
   late Future<T> _future;
@@ -347,7 +344,7 @@ class SmartListBuilder<T> extends StatelessWidget {
   final bool enablePullToRefresh;
 
   const SmartListBuilder({
-    Key? key,
+    super.key,
     required this.screenKey,
     required this.dataLoader,
     required this.itemBuilder,
@@ -359,7 +356,7 @@ class SmartListBuilder<T> extends StatelessWidget {
     this.padding,
     this.emptyMessage,
     this.enablePullToRefresh = true,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

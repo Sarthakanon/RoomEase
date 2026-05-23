@@ -2,22 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/mobile_scaffold.dart';
-import '../../core/widgets/roomspace_switcher.dart';
 import '../../core/widgets/global_roomspace_selector.dart';
 import '../../core/widgets/skeleton_loader.dart';
+import '../../core/mixins/auto_refresh_mixin.dart';
 import '../../services/smart_api_service.dart';
 import '../../services/state_management_service.dart';
-import '../../services/balance_service.dart';
 import '../../services/payment_notification_service.dart';
 import '../../services/ocr_service.dart';
+import '../../services/real_time_data_service.dart';
+import '../../services/recurring_notification_service.dart';
+import 'dart:async';
 import '../../models/payment_notification.dart';
 import '../../models/expense_models.dart';
 import '../../providers/roomspace_provider.dart';
-import '../../widgets/smart_future_builder.dart';
 import 'widgets/add_expense_dialog.dart';
 import 'widgets/personal_expense_dialog.dart';
 import 'widgets/receipt_scanner_dialog.dart';
 import 'widgets/balance_details_dialog.dart';
+import '../expenses/presentation/expense_history_screen.dart';
+import '../expenses/presentation/expense_list_screen.dart';
 
 /// Home dashboard — shows balance summary, quick actions, and recent expenses.
 class MobileDashboard extends StatefulWidget {
@@ -28,15 +31,14 @@ class MobileDashboard extends StatefulWidget {
 }
 
 class _MobileDashboardState extends State<MobileDashboard>
-    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, AutoRefreshMixin {
   final SmartApiService _smartApi = SmartApiService();
   final StateManagementService _state = StateManagementService();
-  final BalanceService _balanceService = BalanceService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
 
   @override
   bool get wantKeepAlive => true; // Keep state alive when switching tabs
 
-  bool _hasRoomspace = false;
   List<RoommateItem> _roommates = [];
   String? _currentRoomspaceId;
   
@@ -48,6 +50,12 @@ class _MobileDashboardState extends State<MobileDashboard>
   // Add a flag to track if we're currently loading
   bool _isLoading = false;
   Future<Map<String, dynamic>>? _currentFuture;
+  
+  // Stream subscriptions for real-time updates
+  StreamSubscription<ExpenseUpdateEvent>? _expenseUpdateSubscription;
+  StreamSubscription<BalanceUpdateEvent>? _balanceUpdateSubscription;
+  StreamSubscription<NotificationEvent>? _notificationUpdateSubscription;
+  RoomspaceProvider? _roomspaceProvider;
 
   @override
   void initState() {
@@ -60,18 +68,81 @@ class _MobileDashboardState extends State<MobileDashboard>
 
     // Listen for roomspace changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final roomspaceProvider =
-          Provider.of<RoomspaceProvider>(context, listen: false);
-      roomspaceProvider.addListener(_onRoomspaceChanged);
+      _roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      _roomspaceProvider?.addListener(_onRoomspaceChanged);
+      
+      // Set up real-time listeners for auto-refresh
+      _setupRealTimeListeners();
+    });
+  }
+  
+  void _setupRealTimeListeners() {
+    debugPrint('🔄 Dashboard: Setting up real-time listeners');
+    
+    // Listen for expense updates (both shared and personal)
+    _expenseUpdateSubscription = _realTimeService.expenseUpdates.listen((event) {
+      debugPrint('🔄 Dashboard: Expense update received: ${event.type}');
+      
+      // Check if this update affects current roomspace
+      final currentRoomspaceId = _roomspaceProvider?.getActiveRoomspaceId();
+      
+      if (event.type == ExpenseUpdateType.clearCache ||
+          event.roomspaceId == currentRoomspaceId ||
+          event.type == ExpenseUpdateType.personalCreated) {
+        // Clear cache and refresh dashboard
+        debugPrint('🔄 Dashboard: Clearing cache and refreshing');
+        _cachedDashboardData = null;
+        _lastDataLoad = null;
+        
+        if (mounted) {
+          setState(() {}); // Trigger rebuild with fresh data
+        }
+      }
+    });
+
+    // Listen for balance updates
+    _balanceUpdateSubscription = _realTimeService.balanceUpdates.listen((event) {
+      debugPrint('🔄 Dashboard: Balance update received: ${event.type}');
+      
+      final currentRoomspaceId = _roomspaceProvider?.getActiveRoomspaceId();
+      
+      if (event.type == BalanceUpdateType.clearCache ||
+          event.roomspaceId == currentRoomspaceId) {
+        // Clear cache and refresh dashboard
+        debugPrint('🔄 Dashboard: Clearing cache and refreshing balances');
+        _cachedDashboardData = null;
+        _lastDataLoad = null;
+        
+        if (mounted) {
+          setState(() {}); // Trigger rebuild
+        }
+      }
+    });
+
+    // Listen for notification updates (mark read / mark all read)
+    _notificationUpdateSubscription = _realTimeService.notifications.listen((event) async {
+      if (!mounted) return;
+      if (event.type == NotificationType.notificationsUpdated ||
+          event.type == NotificationType.profileUpdated) {
+        _cachedDashboardData = null;
+        _lastDataLoad = null;
+        _state.forceRefresh(ScreenKeys.dashboard);
+        await _loadDashboardData(forceRefresh: true);
+        if (mounted) setState(() {});
+      }
     });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    final roomspaceProvider =
-        Provider.of<RoomspaceProvider>(context, listen: false);
-    roomspaceProvider.removeListener(_onRoomspaceChanged);
+    _roomspaceProvider?.removeListener(_onRoomspaceChanged);
+    
+    // Cancel real-time subscriptions
+    _expenseUpdateSubscription?.cancel();
+    _balanceUpdateSubscription?.cancel();
+    _notificationUpdateSubscription?.cancel();
+    
     super.dispose();
   }
 
@@ -105,6 +176,10 @@ class _MobileDashboardState extends State<MobileDashboard>
       await paymentService.initializeBackgroundService();
       await paymentService.startBackgroundMonitoring();
       paymentService.onExpenseRequested = _showExpenseDialogFromPayment;
+
+      final recurringNotificationService = RecurringNotificationService();
+      await recurringNotificationService.initialize();
+      unawaited(recurringNotificationService.syncAndNotifyPending());
     } catch (e) {
       debugPrint('Error initializing payment notifications: $e');
     }
@@ -112,8 +187,11 @@ class _MobileDashboardState extends State<MobileDashboard>
 
   /// Smart data loader for dashboard with aggressive caching
   Future<Map<String, dynamic>> _loadDashboardData({bool forceRefresh = false}) async {
+    final shouldForceByState = _state.needsRefresh(ScreenKeys.dashboard);
+    final effectiveForceRefresh = forceRefresh || shouldForceByState;
+
     // Return cached data if valid and not forcing refresh
-    if (!forceRefresh && 
+    if (!effectiveForceRefresh && 
         _cachedDashboardData != null && 
         _lastDataLoad != null &&
         DateTime.now().difference(_lastDataLoad!) < _cacheValidDuration) {
@@ -130,7 +208,7 @@ class _MobileDashboardState extends State<MobileDashboard>
     debugPrint('🌐 Loading fresh dashboard data...');
     _isLoading = true;
     
-    _currentFuture = _performDataLoad(forceRefresh);
+    _currentFuture = _performDataLoad(effectiveForceRefresh);
     
     try {
       final result = await _currentFuture!;
@@ -146,13 +224,21 @@ class _MobileDashboardState extends State<MobileDashboard>
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
     final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+    final hasAnyRoomspaces = roomspaceProvider.roomspaces.isNotEmpty; // Check if user has any roomspaces
 
     // Load data in parallel with extended cache times
     final futures = <String, Future<Map<String, dynamic>>>{};
     
-    // Always load notifications and personal expenses
+    // Always load notifications, profile, and personal expenses
     futures['notifications'] = _smartApi.getNotifications(forceRefresh: forceRefresh);
+    futures['userProfile'] = _smartApi.getUserProfile(forceRefresh: forceRefresh);
     futures['personalExpenses'] = _smartApi.getPersonalExpenses(limit: 3, offset: 0, forceRefresh: forceRefresh);
+    futures['personalExpensesMonthly'] = _smartApi.getPersonalExpenses(
+      limit: 500,
+      offset: 0,
+      month: DateTime(DateTime.now().year, DateTime.now().month, 1),
+      forceRefresh: forceRefresh,
+    );
     
     // Load roomspace-specific data if in a roomspace
     if (!isPersonalSpace && activeRoomspaceId != null) {
@@ -175,14 +261,18 @@ class _MobileDashboardState extends State<MobileDashboard>
     final dashboardData = {
       'roomspaceId': activeRoomspaceId,
       'isPersonalSpace': isPersonalSpace,
-      'hasRoomspace': activeRoomspaceId != null,
+      'hasRoomspace': hasAnyRoomspaces, // Use hasAnyRoomspaces instead of activeRoomspaceId != null
       ...results,
     };
 
     // Cache the data
     _cachedDashboardData = dashboardData;
     _lastDataLoad = DateTime.now();
-    debugPrint('💾 Dashboard data cached at ${_lastDataLoad}');
+    _state.markRefreshed(ScreenKeys.dashboard);
+    debugPrint('💾 Dashboard data cached at $_lastDataLoad');
+
+    // Non-blocking recurring reminder sync for Android system notifications.
+    unawaited(RecurringNotificationService().syncAndNotifyPending());
 
     return dashboardData;
   }
@@ -193,6 +283,15 @@ class _MobileDashboardState extends State<MobileDashboard>
 
   void _showAddExpenseDialog() {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    
+    // If in personal space, directly show personal expense dialog
+    if (roomspaceProvider.isPersonalSpace) {
+      _showPersonalExpenseDialog();
+      return;
+    }
+    
+    // Otherwise, show the expense type selection dialog
     _showExpenseOptions(context, primaryColor);
   }
 
@@ -420,7 +519,15 @@ class _MobileDashboardState extends State<MobileDashboard>
           final request = PersonalExpenseCreateRequest.fromExpenseData(expense);
           await _smartApi.createPersonalExpense(request.toJson());
 
+          // Clear cache and trigger immediate refresh
+          _cachedDashboardData = null;
+          _lastDataLoad = null;
+          
+          // Notify real-time service to update all listeners
+          _realTimeService.notifyPersonalExpenseCreated(expense.toJson());
+          
           if (mounted) {
+            setState(() {}); // Trigger rebuild
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
@@ -447,8 +554,6 @@ class _MobileDashboardState extends State<MobileDashboard>
   }
 
   void _showScannedExpenseTypeDialog(OcrScanResult scanResult) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
-
     // Build a payment notification from scan data so dialogs can auto-fill
     final notification = PaymentNotification(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -591,29 +696,39 @@ class _MobileDashboardState extends State<MobileDashboard>
   }
 
   Future<void> _handleExpenseSubmission(ExpenseData expense) async {
-    try {
-      final request = ExpenseCreateRequest.fromExpenseData(
-          expense, _currentRoomspaceId!);
-      
-      // Debug: Log the request data
-      debugPrint('Creating expense with paid_by: ${request.paidBy}');
-      debugPrint('Request JSON: ${request.toJson()}');
-      
-      await _smartApi.createExpense(request.toJson());
+    await performOperationWithRefresh(
+      () async {
+        final request = ExpenseCreateRequest.fromExpenseData(
+            expense, _currentRoomspaceId!);
+        
+        // Debug: Log the request data
+        debugPrint('Creating expense with paid_by: ${request.paidBy}');
+        debugPrint('Request JSON: ${request.toJson()}');
+        
+        await _smartApi.createExpense(request.toJson());
+        
+        // Clear cache and trigger immediate refresh
+        _cachedDashboardData = null;
+        _lastDataLoad = null;
+        
+        // Notify real-time service to update all listeners
+        _realTimeService.notifyExpenseCreated(
+          _currentRoomspaceId!,
+          expense.toJson(),
+        );
+      },
+      successMessage: 'Added: ${expense.title} · Rs. ${expense.amount.toStringAsFixed(2)}',
+      errorMessage: 'Failed to add expense',
+    );
+  }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'Added: ${expense.title} · Rs. ${expense.amount.toStringAsFixed(2)}')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add expense: $e')),
-        );
-      }
+  @override
+  Future<void> refreshData() async {
+    // Clear cached data to force refresh
+    _cachedDashboardData = null;
+    _lastDataLoad = null;
+    if (mounted) {
+      setState(() {}); // Trigger rebuild with fresh data
     }
   }
 
@@ -700,23 +815,40 @@ class _MobileDashboardState extends State<MobileDashboard>
     User? user,
     Color primaryColor,
   ) {
+    Map<String, dynamic> asStringKeyedMap(dynamic value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return Map<String, dynamic>.from(value);
+      return <String, dynamic>{};
+    }
+
     final isPersonalSpace = dashboardData['isPersonalSpace'] as bool? ?? true;
     final hasRoomspace = dashboardData['hasRoomspace'] as bool? ?? false;
     final roomspaceId = dashboardData['roomspaceId'] as String?;
     
     // Extract data with better null safety
-    final notifications = dashboardData['notifications'] as Map<String, dynamic>? ?? {'data': []};
-    final personalExpenses = dashboardData['personalExpenses'] as Map<String, dynamic>? ?? {'data': []};
-    final roomspaceExpenses = dashboardData['roomspaceExpenses'] as Map<String, dynamic>? ?? {'data': []};
-    final balances = dashboardData['balances'] as Map<String, dynamic>? ?? {'data': {}};
-    final members = dashboardData['members'] as Map<String, dynamic>? ?? {'data': []};
+    final notifications = asStringKeyedMap(dashboardData['notifications']);
+    final personalExpenses = asStringKeyedMap(dashboardData['personalExpenses']);
+    final roomspaceExpenses = asStringKeyedMap(dashboardData['roomspaceExpenses']);
+    final balances = asStringKeyedMap(dashboardData['balances']);
+    final members = asStringKeyedMap(dashboardData['members']);
+    final personalExpensesMonthly = asStringKeyedMap(dashboardData['personalExpensesMonthly']);
+    final userProfile = asStringKeyedMap(dashboardData['userProfile']);
+    final userProfileData = asStringKeyedMap(userProfile['data']);
+    final backendUserName = userProfileData['name'] as String?;
+
+    final monthlyPersonalList = personalExpensesMonthly['data'] as List<dynamic>? ?? [];
+    final personalMonthlyTotal = monthlyPersonalList.fold<double>(0.0, (sum, item) {
+      if (item is Map && item['amount'] is num) {
+        return sum + (item['amount'] as num).toDouble();
+      }
+      return sum;
+    });
 
     // Calculate unread notifications
     final notificationsList = notifications['data'] as List<dynamic>? ?? [];
     final unreadCount = notificationsList.where((n) => n['is_read'] != true).length;
 
     // Update local state for dialogs
-    _hasRoomspace = hasRoomspace;
     _currentRoomspaceId = roomspaceId;
     
     // Safely process members data
@@ -751,7 +883,15 @@ class _MobileDashboardState extends State<MobileDashboard>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header ──
-          _buildHeader(user, primaryColor, isPersonalSpace, balances, unreadCount),
+          _buildHeader(
+            user,
+            backendUserName,
+            primaryColor,
+            isPersonalSpace,
+            balances,
+            unreadCount,
+            personalMonthlyTotal,
+          ),
 
           // ── Quick actions ──
           Padding(
@@ -760,11 +900,12 @@ class _MobileDashboardState extends State<MobileDashboard>
           ),
 
           // ── No roomspace prompt ──
-          if (!hasRoomspace)
+          if (!hasRoomspace) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: _buildNoRoomspaceCard(primaryColor),
             ),
+          ],
 
           // ── Recent Activity ──
           Padding(
@@ -780,16 +921,52 @@ class _MobileDashboardState extends State<MobileDashboard>
                     color: Color(0xFF1A1A2E),
                   ),
                 ),
-                TextButton(
-                  onPressed: () =>
-                      Navigator.pushNamed(context, '/expenses'),
-                  child: Text(
-                    'View All',
-                    style: TextStyle(
+                Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        final roomspaceProvider =
+                            Provider.of<RoomspaceProvider>(context, listen: false);
+                        final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => isPersonalSpace
+                                ? const ExpenseListScreen(isPersonalExpenses: true)
+                                : const ExpenseHistoryScreen(),
+                          ),
+                        );
+                      },
+                      icon: Icon(
+                        Icons.history_rounded,
+                        size: 18,
                         color: primaryColor,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600),
-                  ),
+                      ),
+                      label: Text(
+                        'History',
+                        style: TextStyle(
+                          color: primaryColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/expenses'),
+                      child: Text(
+                        'View All',
+                        style: TextStyle(
+                            color: primaryColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -841,7 +1018,18 @@ class _MobileDashboardState extends State<MobileDashboard>
   // ──────────────────────────────────────────
   // HEADER
   // ──────────────────────────────────────────
-  Widget _buildHeader(User? user, Color primaryColor, bool isPersonalSpace, Map<String, dynamic> balances, int unreadCount) {
+  Widget _buildHeader(
+    User? user,
+    String? backendUserName,
+    Color primaryColor,
+    bool isPersonalSpace,
+    Map<String, dynamic> balances,
+    int unreadCount,
+    double personalMonthlyTotal,
+  ) {
+    // Debug logging for balance data
+    debugPrint('🏠 Header - isPersonalSpace: $isPersonalSpace');
+    debugPrint('💰 Balance data received: $balances');
 
     return Container(
       width: double.infinity,
@@ -861,7 +1049,7 @@ class _MobileDashboardState extends State<MobileDashboard>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Hello, ${user?.displayName?.split(' ').first ?? 'there'} 👋',
+                      'Hello, ${(backendUserName ?? user?.displayName)?.split(' ').first ?? 'there'} 👋',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -893,7 +1081,10 @@ class _MobileDashboardState extends State<MobileDashboard>
           const SizedBox(height: 16),
 
           // Balance row — only in roomspace mode
-          if (!isPersonalSpace) _buildBalanceRow(balances),
+          if (!isPersonalSpace)
+            _buildBalanceRow(balances)
+          else
+            _buildPersonalMonthTotalCard(primaryColor, personalMonthlyTotal),
         ],
       ),
     );
@@ -903,9 +1094,14 @@ class _MobileDashboardState extends State<MobileDashboard>
     return GestureDetector(
       onTap: () async {
         await Navigator.pushNamed(context, '/notifications');
-        // Force refresh dashboard to update notification count
+        // Hard refresh dashboard to update notification badge immediately
+        _cachedDashboardData = null;
+        _lastDataLoad = null;
         _state.forceRefresh(ScreenKeys.dashboard);
-        setState(() {});
+        await _loadDashboardData(forceRefresh: true);
+        if (mounted) {
+          setState(() {});
+        }
       },
       child: Stack(
         children: [
@@ -947,26 +1143,89 @@ class _MobileDashboardState extends State<MobileDashboard>
   }
 
   Widget _buildBalanceRow(Map<String, dynamic> balances) {
-    // Extract balance data - handle both object and array responses
+    // Debug logging for balance data
+    debugPrint('🔍 Raw balance response: $balances');
+    
+    // Extract balance data - handle the new response structure
     dynamic balanceData = balances['data'];
+    debugPrint('🔍 Balance data extracted: $balanceData');
     
-    // If data is a list, try to get the first item, otherwise use as map
-    Map<String, dynamic> balanceMap = {};
-    if (balanceData is List && balanceData.isNotEmpty) {
-      balanceMap = balanceData.first as Map<String, dynamic>? ?? {};
-    } else if (balanceData is Map<String, dynamic>) {
-      balanceMap = balanceData;
+    // Initialize default values
+    double youOwe = 0.0;
+    double youAreOwed = 0.0;
+    
+    // Handle the response structure with you_owe and you_are_owed fields
+    if (balanceData is Map<String, dynamic>) {
+      // Extract the breakdown values (not your_balance which is the net)
+      youOwe = (balanceData['you_owe'] as num?)?.toDouble() ?? 0.0;
+      youAreOwed = (balanceData['you_are_owed'] as num?)?.toDouble() ?? 0.0;
+      
+      // Debug logging
+      debugPrint('💰 Balance breakdown: you_owe=$youOwe, you_are_owed=$youAreOwed');
+      debugPrint('💰 Net balance: ${balanceData['your_balance']}');
     }
-    
-    final youOwe = (balanceMap['you_owe'] as num?)?.toDouble() ?? 0.0;
-    final youAreOwed = (balanceMap['you_are_owed'] as num?)?.toDouble() ?? 0.0;
+    final netYouOwe = (youOwe - youAreOwed).clamp(0.0, double.infinity);
+    final netYouAreOwed = (youAreOwed - youOwe).clamp(0.0, double.infinity);
     
     return Row(
       children: [
-        Expanded(child: _buildBalanceTile('You\'ll get back', youAreOwed, true)),
+        Expanded(child: _buildBalanceTile('You\'ll get back', netYouAreOwed, true)),
         const SizedBox(width: 10),
-        Expanded(child: _buildBalanceTile('You need to pay', youOwe, false)),
+        Expanded(child: _buildBalanceTile('You need to pay', netYouOwe, false)),
       ],
+    );
+  }
+
+  Widget _buildPersonalMonthTotalCard(Color primaryColor, double total) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEEEEF2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: primaryColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.account_balance_wallet_outlined,
+              color: primaryColor,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Total Expense This Month',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Rs. ${total.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1A1A2E),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1103,21 +1362,117 @@ class _MobileDashboardState extends State<MobileDashboard>
   // ──────────────────────────────────────────
   Widget _buildNoRoomspaceCard(Color primaryColor) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.indigo.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.indigo.shade100),
+        gradient: LinearGradient(
+          colors: [
+            primaryColor.withValues(alpha: 0.1),
+            primaryColor.withValues(alpha: 0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Icon(Icons.home_work_outlined, color: Colors.indigo.shade400),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Create or join a room to split expenses with roommates.',
-              style: TextStyle(fontSize: 13),
-            ),
+          // Icon and message
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.home_work_outlined,
+                  color: primaryColor,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'No Roomspace Yet',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A1A2E),
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Create or join a room to split expenses with roommates',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // Action buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/create-roomspace');
+                  },
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text(
+                    'Create Room',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/join-roomspace');
+                  },
+                  icon: Icon(Icons.group_add_rounded, size: 18, color: primaryColor),
+                  label: Text(
+                    'Join Room',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: primaryColor,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(color: primaryColor, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1288,7 +1643,7 @@ class _MobileDashboardState extends State<MobileDashboard>
             // Return empty container for invalid expense data
             return const SizedBox.shrink();
           }
-        }).where((widget) => widget is! SizedBox || (widget as SizedBox).height != 0),
+        }).where((widget) => widget is! SizedBox || (widget).height != 0),
         const SizedBox(height: 100),
       ],
     );
@@ -1317,7 +1672,9 @@ class _MobileDashboardState extends State<MobileDashboard>
 
     return _ExpenseTile(
       title: title,
-      subtitle: isPaidByMe ? 'You paid' : '${payerName ?? 'Someone'} paid',
+      subtitle: isPaidByMe
+          ? 'Shared · You paid'
+          : 'Shared · ${payerName ?? 'Someone'} paid',
       amount: 'Rs. ${amount.toStringAsFixed(0)}',
       amountColor: isPaidByMe ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
       date: _formatDate(date),
@@ -1342,35 +1699,10 @@ class _MobileDashboardState extends State<MobileDashboard>
 
     return _ExpenseTile(
       title: title,
-      subtitle: category,
+      subtitle: 'Personal · $category',
       amount: 'Rs. ${amount.toStringAsFixed(0)}',
       amountColor: const Color(0xFF1A1A2E),
       date: _formatDate(date),
-      icon: Icons.account_balance_wallet_outlined,
-    );
-  }
-
-  Widget _buildSharedTile(ExpenseData expense) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final isPaidByMe = expense.paidBy == currentUser?.uid;
-
-    return _ExpenseTile(
-      title: expense.title,
-      subtitle: isPaidByMe ? 'You paid' : '${expense.payerName ?? 'Someone'} paid',
-      amount: 'Rs. ${expense.amount.toStringAsFixed(0)}',
-      amountColor: isPaidByMe ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
-      date: _formatDate(expense.createdAt),
-      icon: Icons.receipt_long_outlined,
-    );
-  }
-
-  Widget _buildPersonalTile(PersonalExpenseData expense) {
-    return _ExpenseTile(
-      title: expense.title,
-      subtitle: expense.category,
-      amount: 'Rs. ${expense.amount.toStringAsFixed(0)}',
-      amountColor: const Color(0xFF1A1A2E),
-      date: _formatDate(expense.createdAt),
       icon: Icons.account_balance_wallet_outlined,
     );
   }
@@ -1379,7 +1711,9 @@ class _MobileDashboardState extends State<MobileDashboard>
   // HELPERS
   // ──────────────────────────────────────────
   String _greeting() {
-    final hour = DateTime.now().hour;
+    // Nepal time is UTC+05:45
+    final nepalNow = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 45));
+    final hour = nepalNow.hour;
     if (hour < 12) return 'Good morning';
     if (hour < 17) return 'Good afternoon';
     return 'Good evening';

@@ -7,9 +7,9 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"strings"
 	"roomease/backend/config"
 	"roomease/backend/models"
+	"strings"
 	"time"
 )
 
@@ -23,7 +23,7 @@ type AnalyticsService struct {
 func NewAnalyticsService(dbService *PostgresService) *AnalyticsService {
 	// Get ML API configuration
 	mlConfig := config.GetMLConfig()
-	
+
 	return &AnalyticsService{
 		dbService: dbService,
 		mlAPIURL:  mlConfig.APIURL,
@@ -58,9 +58,9 @@ type MLExpense struct {
 
 // MLPredictionResponse represents ML API prediction response
 type MLPredictionResponse struct {
-	Success          bool `json:"success"`
+	Success          bool           `json:"success"`
 	Predictions      []MLPrediction `json:"predictions"`
-	InsufficientData bool `json:"insufficient_data"`
+	InsufficientData bool           `json:"insufficient_data"`
 }
 
 // MLPrediction represents a single ML prediction
@@ -75,7 +75,7 @@ type MLPrediction struct {
 
 // MLRecommendationResponse represents ML API recommendation response
 type MLRecommendationResponse struct {
-	Success         bool `json:"success"`
+	Success         bool               `json:"success"`
 	Recommendations []MLRecommendation `json:"recommendations"`
 }
 
@@ -94,7 +94,7 @@ type MLRecommendation struct {
 
 // MLAnomalyResponse represents ML API anomaly response
 type MLAnomalyResponse struct {
-	Success   bool `json:"success"`
+	Success   bool        `json:"success"`
 	Anomalies []MLAnomaly `json:"anomalies"`
 }
 
@@ -139,7 +139,7 @@ func (s *AnalyticsService) callMLAPI(endpoint string, payload interface{}) ([]by
 // convertExpensesToMLFormat converts database expenses to ML API format
 func (s *AnalyticsService) convertExpensesToMLFormat(expenses []models.Expense, userUID string) []MLExpense {
 	var mlExpenses []MLExpense
-	
+
 	for _, expense := range expenses {
 		// Get user's amount from splits
 		userAmount := s.getUserAmountFromExpense(&expense, userUID)
@@ -153,7 +153,7 @@ func (s *AnalyticsService) convertExpensesToMLFormat(expenses []models.Expense, 
 			})
 		}
 	}
-	
+
 	return mlExpenses
 }
 
@@ -338,18 +338,53 @@ func (s *AnalyticsService) getExpensesForPeriod(userUID string, roomspaceID *str
 	if roomspaceID != nil {
 		// Get roomspace expenses
 		query = query.Where("roomspace_id = ?", *roomspaceID)
+		query = query.Preload("Splits").Order("created_at DESC")
+		if err := query.Find(&expenses).Error; err != nil {
+			return nil, err
+		}
+		return expenses, nil
 	} else {
-		// Get all expenses where user is involved (paid or has a split)
-		query = query.Where("paid_by = ? OR id IN (SELECT expense_id FROM expense_splits WHERE user_uid = ?)", userUID, userUID)
+		// Personal analytics mode:
+		// 1) Shared/roomspace expenses where user has a split.
+		query = query.Where("id IN (SELECT expense_id FROM expense_splits WHERE user_uid = ?)", userUID)
+		query = query.Preload("Splits").Order("created_at DESC")
+		if err := query.Find(&expenses).Error; err != nil {
+			return nil, err
+		}
+
+		// 2) Personal expenses owned by this user, mapped into compatible expense shape.
+		var personalExpenses []models.PersonalExpense
+		if err := config.DB.Where("user_uid = ? AND created_at >= ? AND created_at <= ?", userUID, startDate, endDate).
+			Order("created_at DESC").
+			Find(&personalExpenses).Error; err != nil {
+			return nil, err
+		}
+
+		for _, personal := range personalExpenses {
+			expenses = append(expenses, models.Expense{
+				ID:          personal.ID,
+				RoomspaceID: "",
+				Title:       personal.Title,
+				Description: personal.Description,
+				Amount:      personal.Amount,
+				Category:    personal.Category,
+				PaidBy:      personal.UserUID,
+				SplitType:   models.SplitTypeExact,
+				CreatedAt:   personal.CreatedAt,
+				UpdatedAt:   personal.UpdatedAt,
+				Splits: []models.ExpenseSplit{
+					{
+						ExpenseID: personal.ID,
+						UserUID:   personal.UserUID,
+						Amount:    personal.Amount,
+						CreatedAt: personal.CreatedAt,
+					},
+				},
+			})
+		}
+
+		return expenses, nil
 	}
-
-	query = query.Preload("Splits").Order("created_at DESC")
-
-	if err := query.Find(&expenses).Error; err != nil {
-		return nil, err
-	}
-
-	return expenses, nil
 }
 
 // getUserAmountFromExpense calculates the amount a user owes/paid for an expense
@@ -680,7 +715,7 @@ func (s *AnalyticsService) getRuleBasedRecommendations(userUID string, roomspace
 		userAmount := s.getUserAmountFromExpense(&expense, userUID)
 		categorySpending60[expense.Category] += userAmount
 		categoryCount[expense.Category]++
-		
+
 		// Track last 30 days separately for trend analysis
 		if expense.CreatedAt.After(thirtyDaysAgo) {
 			categorySpending30[expense.Category] += userAmount
@@ -700,10 +735,10 @@ func (s *AnalyticsService) getRuleBasedRecommendations(userUID string, roomspace
 	for category, spending60 := range categorySpending60 {
 		percentage := (spending60 / totalSpending) * 100.0
 		spending30 := categorySpending30[category]
-		
+
 		// Calculate monthly average
 		monthlyAvg := spending60 / 2.0 // 60 days = ~2 months
-		
+
 		// Determine trend
 		trend := "stable"
 		if spending30 > monthlyAvg*1.15 {
@@ -720,7 +755,7 @@ func (s *AnalyticsService) getRuleBasedRecommendations(userUID string, roomspace
 			} else if percentage < 20.0 {
 				priority = 3 // Low
 			}
-			
+
 			suggestedLimit := monthlyAvg * 0.80 // 20% reduction target
 			potentialSavings := monthlyAvg - suggestedLimit
 
@@ -768,32 +803,32 @@ func (s *AnalyticsService) generateCategoryRecommendation(category string, curre
 	} else if trend == "decreasing" {
 		trendEmoji = "↓"
 	}
-	
+
 	categoryLower := strings.ToLower(category)
-	
+
 	// Category-specific actionable recommendations
 	if strings.Contains(categoryLower, "food") || strings.Contains(categoryLower, "groceries") {
 		return fmt.Sprintf("%s Food spending is high. Try: Cook 2-3 more meals at home weekly, buy in bulk with roommates, meal prep on weekends, use grocery apps for discounts. Target: Save Rs. %.0f/month", trendEmoji, potentialSavings)
 	}
-	
+
 	if strings.Contains(categoryLower, "utilities") || strings.Contains(categoryLower, "bill") {
 		return fmt.Sprintf("%s Utility costs are high. Try: Turn off unused appliances, use energy-efficient bulbs, set AC to 24°C, share internet/streaming costs with roommates. Target: Save Rs. %.0f/month", trendEmoji, potentialSavings)
 	}
-	
+
 	if strings.Contains(categoryLower, "transport") || strings.Contains(categoryLower, "travel") {
 		return fmt.Sprintf("%s Transport costs are high. Try: Carpool with roommates, use public transport, get monthly passes, combine errands into single trips. Target: Save Rs. %.0f/month", trendEmoji, potentialSavings)
 	}
-	
+
 	if strings.Contains(categoryLower, "entertainment") {
 		return fmt.Sprintf("%s Entertainment spending is high. Try: Share streaming subscriptions, look for free events, use student discounts, limit dining out to 2x/week. Target: Save Rs. %.0f/month", trendEmoji, potentialSavings)
 	}
-	
+
 	if strings.Contains(categoryLower, "rent") {
 		return fmt.Sprintf("%s Rent is a major expense. Consider: Negotiating with landlord, finding additional roommates, moving to a more affordable area, or subletting unused space. Potential: Save Rs. %.0f/month", trendEmoji, potentialSavings)
 	}
-	
+
 	// Generic recommendation for other categories
-	return fmt.Sprintf("%s %s spending is %.0f%% of your budget. Try: Track expenses daily, set category limits, find cheaper alternatives, delay non-urgent purchases. Target: Save Rs. %.0f/month", 
+	return fmt.Sprintf("%s %s spending is %.0f%% of your budget. Try: Track expenses daily, set category limits, find cheaper alternatives, delay non-urgent purchases. Target: Save Rs. %.0f/month",
 		trendEmoji, category, (currentSpending/potentialSavings)*100, potentialSavings)
 }
 
@@ -937,12 +972,12 @@ func (s *AnalyticsService) getStatisticalAnomalies(expenses []models.Expense) ([
 
 // RoomspaceAnalytics represents analytics for a roomspace
 type RoomspaceAnalytics struct {
-	RoomspaceID         string                   `json:"roomspace_id"`
-	RoomspaceName       string                   `json:"roomspace_name"`
-	TotalSharedExpenses float64                  `json:"total_shared_expenses"`
-	MemberContributions []MemberContribution     `json:"member_contributions"`
-	CategoryBreakdown   []CategorySpend          `json:"category_breakdown"`
-	TimeRange           TimeRange                `json:"time_range"`
+	RoomspaceID         string               `json:"roomspace_id"`
+	RoomspaceName       string               `json:"roomspace_name"`
+	TotalSharedExpenses float64              `json:"total_shared_expenses"`
+	MemberContributions []MemberContribution `json:"member_contributions"`
+	CategoryBreakdown   []CategorySpend      `json:"category_breakdown"`
+	TimeRange           TimeRange            `json:"time_range"`
 }
 
 // MemberContribution represents a member's contribution to roomspace expenses
@@ -967,7 +1002,7 @@ func (s *AnalyticsService) GetRoomspaceAnalytics(roomspaceID string, startDate, 
 	// Only shared expenses (those with roomspace_id) are included
 	var expenses []models.Expense
 
-	query := config.DB.Where("roomspace_id = ? AND created_at >= ? AND created_at <= ?", 
+	query := config.DB.Where("roomspace_id = ? AND created_at >= ? AND created_at <= ?",
 		roomspaceID, startDate, endDate)
 	query = query.Preload("Splits").Preload("Splits.User").Preload("Payer")
 
@@ -1027,13 +1062,13 @@ func (s *AnalyticsService) GetRoomspaceAnalytics(roomspaceID string, startDate, 
 		if totalSharedExpenses > 0 {
 			member.Percentage = (member.TotalOwed / totalSharedExpenses) * 100.0
 		}
-		
+
 		// Round values
 		member.TotalPaid = math.Round(member.TotalPaid*100) / 100
 		member.TotalOwed = math.Round(member.TotalOwed*100) / 100
 		member.NetContribution = math.Round(member.NetContribution*100) / 100
 		member.Percentage = math.Round(member.Percentage*100) / 100
-		
+
 		contributions = append(contributions, *member)
 	}
 

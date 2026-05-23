@@ -1,0 +1,6 @@
+{
+  "version": "1",
+  "name": "RoomEase API Tests",
+  "type": "collection",
+  "ignore": ["node_modules", ".git"]
+}

@@ -1,0 +1,12 @@
+erDiagram
+  USERS ||--o{ SESSIONS : has
+  USERS {
+    string id PK
+    string email
+    string name
+  }
+  SESSIONS {
+    string session_id PK
+    string user_id FK
+    datetime expires_at
+  }

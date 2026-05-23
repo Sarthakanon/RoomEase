@@ -1,0 +1,25 @@
+erDiagram
+  ROOMSPACES ||--o{ EXPENSES : contains
+  EXPENSES ||--o{ EXPENSE_SPLITS : split_into
+  ROOMSPACES ||--o{ SETTLEMENTS : has
+  USERS ||--o{ SETTLEMENTS : pays
+  USERS ||--o{ SETTLEMENTS : receives
+  EXPENSES {
+    int id PK
+    string roomspace_id FK
+    decimal amount
+    string paid_by FK
+  }
+  EXPENSE_SPLITS {
+    int id PK
+    int expense_id FK
+    string user_id FK
+    decimal split_amount
+  }
+  SETTLEMENTS {
+    int id PK
+    string roomspace_id FK
+    string payer_id FK
+    string payee_id FK
+    decimal amount
+  }

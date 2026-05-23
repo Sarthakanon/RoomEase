@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -106,7 +105,7 @@ class ReportService {
                         pw.Expanded(child: pw.Text(insight, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800))),
                       ],
                     ),
-                  )).toList(),
+                  )),
                 ],
               ),
             ),
@@ -144,7 +143,7 @@ class ReportService {
                   decoration: const pw.BoxDecoration(color: PdfColors.green50, border: pw.Border(left: pw.BorderSide(color: PdfColors.green, width: 3))),
                   child: pw.Text('${s.fromUserName} should pay Rs. ${s.amount.toStringAsFixed(2)} to ${s.toUserName}', style: const pw.TextStyle(fontSize: 10)),
                 ),
-              )).toList(),
+              )),
               pw.SizedBox(height: 30),
             ],
 
@@ -231,7 +230,7 @@ class ReportService {
                           pw.Text('Rs. ${s.amount.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: PdfColors.indigo700)),
                         ],
                       ),
-                    )).toList(),
+                    )),
                   
                   pw.SizedBox(height: 15),
                   pw.Divider(color: PdfColors.grey400, thickness: 0.5),
@@ -311,7 +310,7 @@ class ReportService {
 
     // Category Insight
     final categories = <String, double>{};
-    for (var e in [...shared, ...personal.map((p) => ExpenseData(id: p.id, title: p.title, amount: p.amount, description: p.description ?? "", category: p.category, selectedRoommateIds: const [], splitType: SplitType.equal, customSplits: const {}, paidBy: "", payerName: "", createdAt: p.createdAt))]) {
+    for (var e in [...shared, ...personal.map((p) => ExpenseData(id: p.id, title: p.title, amount: p.amount, description: p.description, category: p.category, selectedRoommateIds: const [], splitType: SplitType.equal, customSplits: const {}, paidBy: "", payerName: "", createdAt: p.createdAt))]) {
       categories[e.category] = (categories[e.category] ?? 0) + e.amount;
     }
 

@@ -1,0 +1,16 @@
+erDiagram
+  LOCAL_EXPENSES ||--o{ SYNC_QUEUE : queued_as
+  SYNC_QUEUE {
+    int id PK
+    string operation_type
+    text payload
+    string status
+    datetime created_at
+  }
+  LOCAL_EXPENSES {
+    int id PK
+    string roomspace_id
+    decimal amount
+    string local_status
+    datetime created_at
+  }

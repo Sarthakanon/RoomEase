@@ -1,0 +1,14 @@
+sequenceDiagram
+  actor U as User
+  participant APP as Mobile App
+  participant API as Expense API
+  participant BAL as Balance Service
+  participant DB as PostgreSQL
+  U->>APP: Add shared expense
+  APP->>API: POST /api/expenses
+  API->>DB: Insert expense + splits
+  API->>BAL: Refresh roomspace balance cache
+  BAL->>DB: Recalculate balances
+  DB-->>BAL: Computed data
+  BAL-->>API: Updated summary
+  API-->>APP: Success + updated balance

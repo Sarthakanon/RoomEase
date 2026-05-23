@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/roomspace_provider.dart';
-import '../../models/roomspace_data.dart';
 
 /// Global roomspace selector widget for app bar.
 /// Uses a premium, minimalist design with neutral colors and subtle borders.
@@ -49,9 +48,13 @@ class _GlobalRoomspaceSelectorState extends State<GlobalRoomspaceSelector> {
 
     showMenu(context: context, position: RelativeRect.fromLTRB(MediaQuery.of(context).size.width - 200, kToolbarHeight + 10, 20, 0), items: items, elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), color: Colors.white).then((v) {
       if (v == null) return;
-      if (v == 'add_new') Navigator.pushNamed(context, '/settings');
-      else if (v == 'personal') _switch(context, provider, null);
-      else _switch(context, provider, v);
+      if (v == 'add_new') {
+        Navigator.pushNamed(context, '/settings');
+      } else if (v == 'personal') {
+        _switch(context, provider, null);
+      } else {
+        _switch(context, provider, v);
+      }
     });
   }
 
@@ -66,8 +69,11 @@ class _GlobalRoomspaceSelectorState extends State<GlobalRoomspaceSelector> {
 
   Future<void> _switch(BuildContext context, RoomspaceProvider provider, String? id) async {
     try {
-      if (id == null) await provider.switchToPersonalSpace();
-      else await provider.setActiveRoomspace(id);
+      if (id == null) {
+        await provider.switchToPersonalSpace();
+      } else {
+        await provider.setActiveRoomspace(id);
+      }
       if (mounted) widget.onRoomspaceChanged?.call();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to switch')));

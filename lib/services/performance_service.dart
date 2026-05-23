@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'cached_api_service.dart';
 
 class PerformanceService {

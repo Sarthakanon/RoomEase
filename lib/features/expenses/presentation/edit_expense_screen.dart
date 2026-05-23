@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:room_ease/models/expense_models.dart';
-import 'package:room_ease/services/expense_service.dart';
 import 'package:room_ease/services/api_service.dart';
+import 'package:room_ease/services/smart_api_service.dart';
 
 /// Professional, minimalist screen for editing shared expenses.
 class EditExpenseScreen extends StatefulWidget {
@@ -15,8 +15,8 @@ class EditExpenseScreen extends StatefulWidget {
 
 class _EditExpenseScreenState extends State<EditExpenseScreen> {
   final _formKey = GlobalKey<FormState>();
-  final ExpenseService _expenseService = ExpenseService();
   final ApiService _apiService = ApiService();
+  final SmartApiService _smartApi = SmartApiService();
   
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
@@ -26,7 +26,7 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
   late SplitType _selectedSplitType;
   List<Map<String, dynamic>> _roommates = [];
   List<String> _selectedRoommateIds = [];
-  Map<String, double> _customSplits = {};
+  final Map<String, double> _customSplits = {};
   
   bool _isLoading = false;
   bool _isLoadingRoommates = true;
@@ -78,12 +78,31 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
         selectedRoommates: _selectedRoommateIds,
         customSplits: _selectedSplitType != SplitType.equal ? _customSplits : null,
       );
-      final updated = await _expenseService.updateExpense(widget.expense.id!, req);
-      if (mounted) Navigator.pop(context, updated);
+      
+      await _smartApi.updateExpense(widget.expense.id!, req.toJson());
+      
+      // SmartApiService already handles cache invalidation + real-time updates
+      
+      if (mounted) {
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Expense updated successfully! Teammates have been notified.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        Navigator.pop(context, true); // Return true to indicate success
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update expense: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -194,7 +213,11 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
       child: Column(children: _roommates.map((r) {
         final id = (r['user_id'] ?? r['firebase_uid']).toString();
         final active = _selectedRoommateIds.contains(id);
-        return CheckboxListTile(title: Text(r['name'] ?? 'Member', style: TextStyle(fontSize: 14, fontWeight: active ? FontWeight.w700 : FontWeight.w500)), value: active, activeColor: primary, controlAffinity: ListTileControlAffinity.trailing, checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), onChanged: (v) => setState(() { if (v!) _selectedRoommateIds.add(id); else _selectedRoommateIds.remove(id); }));
+        return CheckboxListTile(title: Text(r['name'] ?? 'Member', style: TextStyle(fontSize: 14, fontWeight: active ? FontWeight.w700 : FontWeight.w500)), value: active, activeColor: primary, controlAffinity: ListTileControlAffinity.trailing, checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), onChanged: (v) => setState(() { if (v!) {
+          _selectedRoommateIds.add(id);
+        } else {
+          _selectedRoommateIds.remove(id);
+        } }));
       }).toList()),
     );
   }

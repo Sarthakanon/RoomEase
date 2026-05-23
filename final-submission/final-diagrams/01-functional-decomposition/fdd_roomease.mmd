@@ -1,0 +1,68 @@
+%%{init: {'flowchart': {'curve': 'stepBefore'}} }%%
+flowchart LR
+    A[RoomEase System]
+
+    A --> B[Authentication and User Management]
+    A --> C[Roomspace Management]
+    A --> D[Expense Management]
+    A --> E[Balance and Settlement]
+    A --> F[Payment Confirmation]
+    A --> G[Notifications]
+    A --> H[Offline and Sync]
+    A --> I[Analytics and Insights]
+    A --> J[Recurring Expenses]
+    A --> K[Subscription Module]
+    A --> L[Admin Module]
+
+    B --> B1[Login]
+    B --> B2[Session Verify and Refresh]
+    B --> B3[Profile Update]
+
+    C --> C1[Create Roomspace]
+    C --> C2[Join by Code]
+    C --> C3[Leave Roomspace]
+    C --> C4[Member Management]
+
+    D --> D1[Create Shared Expense]
+    D --> D2[Update and Delete Expense]
+    D --> D3[Personal Expenses]
+    D --> D4[Expense History]
+    D --> D5[Receipt OCR Support]
+
+    E --> E1[Balance Summary]
+    E --> E2[User Balance]
+    E --> E3[Settlement Suggestions]
+    E --> E4[Settlement History]
+
+    F --> F1[Create Confirmation]
+    F --> F2[Approve or Reject Confirmation]
+    F --> F3[Payment Stats and History]
+
+    G --> G1[In-App Notifications]
+    G --> G2[Join Request Processing]
+    G --> G3[Payment Reminders]
+
+    H --> H1[Local Storage]
+    H --> H2[Offline Queue]
+    H --> H3[Connectivity Tracking]
+    H --> H4[Sync on Reconnect]
+
+    I --> I1[Summary]
+    I --> I2[Trends]
+    I --> I3[Patterns]
+    I --> I4[Anomalies]
+    I --> I5[Recommendations]
+    I --> I6[Predictions]
+
+    J --> J1[Recurring Template CRUD]
+    J --> J2[Upcoming Recurring Items]
+    J --> J3[Recurring Notifications]
+
+    K --> K1[Current Plan]
+    K --> K2[Cancel and Reactivate]
+    K --> K3[Subscription History]
+
+    L --> L1[System Stats]
+    L --> L2[User Monitoring]
+    L --> L3[Roomspace Monitoring]
+    L --> L4[Admin Analytics]

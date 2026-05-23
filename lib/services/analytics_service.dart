@@ -5,9 +5,8 @@ import 'api_service.dart';
 
 /// Service for handling analytics API calls and caching
 /// 
-/// NOTE: This service communicates with the backend which provides
-/// simplified statistical analysis. For advanced ML-based analytics,
-/// the Analytics_Model Python service should be integrated.
+/// NOTE: This service communicates with the backend analytics endpoints.
+/// Advanced model behavior is provided server-side via the active ML bridge.
 /// 
 /// Provides methods to fetch:
 /// - Spending summaries

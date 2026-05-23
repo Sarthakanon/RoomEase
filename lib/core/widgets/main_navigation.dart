@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:developer';
 import '../../features/home/mobile_dashboard.dart';
 import '../../features/roomspace/presentation/roomspace_router.dart';
 import '../../features/expenses/presentation/expense_screen.dart';
 import '../../features/analytics/presentation/analytics_page.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../providers/roomspace_provider.dart';
+import '../../services/payment_dialog_service.dart';
 
 /// Main navigation widget that maintains state across tab switches
 /// Uses IndexedStack to keep all screens alive and prevent reloading
@@ -21,7 +23,7 @@ class MainNavigation extends StatefulWidget {
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _MainNavigationState extends State<MainNavigation> {
+class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObserver {
   late int _currentIndex;
 
   // Keep all screens alive to prevent reloading
@@ -40,6 +42,50 @@ class _MainNavigationState extends State<MainNavigation> {
       const AnalyticsPage(),    // Analytics
       const ProfileScreen(),    // Profile
     ];
+    
+    // Add lifecycle observer for app state changes
+    WidgetsBinding.instance.addObserver(this);
+    
+    // Set context for payment dialog service
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PaymentDialogService.setContext(context);
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // Update payment dialog service about app state
+    switch (state) {
+      case AppLifecycleState.resumed:
+        PaymentDialogService.setAppForegroundState(true);
+        PaymentDialogService.setContext(context);
+        log('App resumed - foreground state: true');
+        break;
+      case AppLifecycleState.paused:
+        PaymentDialogService.setAppForegroundState(false);
+        log('App paused - foreground state: false');
+        break;
+      case AppLifecycleState.inactive:
+        PaymentDialogService.setAppForegroundState(false);
+        log('App inactive - foreground state: false');
+        break;
+      case AppLifecycleState.detached:
+        PaymentDialogService.setAppForegroundState(false);
+        log('App detached - foreground state: false');
+        break;
+      case AppLifecycleState.hidden:
+        PaymentDialogService.setAppForegroundState(false);
+        log('App hidden - foreground state: false');
+        break;
+    }
   }
 
   void _onTabTapped(int index) {
@@ -55,6 +101,16 @@ class _MainNavigationState extends State<MainNavigation> {
     return Consumer<RoomspaceProvider>(
       builder: (context, roomspaceProvider, child) {
         final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+
+        // If user switches to Personal Space while currently on Rooms tab,
+        // move to Expenses tab to avoid showing roomspace-only context.
+        if (isPersonalSpace && _currentIndex == 1) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _currentIndex == 1) {
+              setState(() => _currentIndex = 2);
+            }
+          });
+        }
         
         return Scaffold(
           backgroundColor: Colors.white,
@@ -207,23 +263,6 @@ class _NavBarItem extends StatelessWidget {
               color: isActive ? primaryColor : Colors.grey[400],
               size: iconSize,
             ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: isActive ? (screenWidth < 360 ? 4 : 8) : 0,
-            ),
-            if (isActive)
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
-                  ),
-                ),
-              ),
           ],
         ),
       ),

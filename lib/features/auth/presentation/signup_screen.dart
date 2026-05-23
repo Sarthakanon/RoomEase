@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../controllers/auth_controller.dart';
 import '../../../providers/roomspace_provider.dart';
+import '../../subscription/providers/subscription_provider.dart';
+import '../../../main.dart' show navigatorKey;
+import '../../../services/firebase_auth_service.dart';
 
 /// Screen for user registration, supporting email/password and Google authentication.
 class SignupScreen extends StatefulWidget {
@@ -21,8 +24,17 @@ class _SignupScreenState extends State<SignupScreen> {
   
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isGoogleLoading = false; // Track Google sign-in loading state
+  bool _isEmailLoading = false; // Track email/password signup loading state
 
   Future<void> _handleSuccess(userCredential) async {
+    // Initialize subscription provider for the new user
+    final subscriptionProvider = Provider.of<SubscriptionProvider>(context, listen: false);
+    await subscriptionProvider.initialize();
+    
+    // Small delay to ensure session cookie is persisted
+    await Future.delayed(const Duration(milliseconds: 500));
+    
     final provider = Provider.of<RoomspaceProvider>(context, listen: false);
     await provider.loadRoomspaces();
     if (mounted) Navigator.pushReplacementNamed(context, provider.roomspaceCount == 0 ? '/roomspace-selection' : '/home');
@@ -30,52 +42,122 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _signup() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_isEmailLoading) return; // Prevent double-tap
+    
+    setState(() => _isEmailLoading = true);
     try {
-      final cred = await _authController.signUpWithEmail(email: _emailController.text.trim(), password: _passwordController.text.trim(), name: _nameController.text.trim());
-      if (cred != null) _showVerifyDialog();
+      final cred = await _authController.signUpWithEmail(
+        email: _emailController.text.trim(), 
+        password: _passwordController.text.trim(), 
+        name: _nameController.text.trim(),
+      );
+      if (mounted) {
+        setState(() => _isEmailLoading = false);
+        if (cred != null) {
+          _showVerifyDialog();
+        }
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      if (mounted) {
+        setState(() => _isEmailLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
   Future<void> _googleLogin() async {
+    if (_isGoogleLoading) return; // Prevent double-tap
+    
+    setState(() => _isGoogleLoading = true);
     try {
       final cred = await _authController.loginWithGoogle();
       if (cred != null) await _handleSuccess(cred);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
   void _showVerifyDialog() {
+    if (!mounted) return;
+    
     final primary = Theme.of(context).colorScheme.primary;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), shape: BoxShape.circle), child: const Icon(Icons.mark_email_unread_rounded, color: Colors.orange, size: 28)),
-            const SizedBox(height: 16),
-            const Text('Verify Your Email', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            const Text('Check your inbox for a verification link.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-                style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(vertical: 12)),
-                child: const Text('Go to Login'),
-              ),
+    
+    // Use WidgetsBinding to ensure dialog is shown after the current frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => PopScope(
+          canPop: false, // Prevent back button from dismissing
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12), 
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1), 
+                    shape: BoxShape.circle
+                  ), 
+                  child: const Icon(Icons.mark_email_unread_rounded, color: Colors.orange, size: 28)
+                ),
+                const SizedBox(height: 16),
+                const Text('Verify Your Email', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text(
+                  'We\'ve sent a verification link to ${_emailController.text.trim()}. Please check your inbox and verify your email before logging in.',
+                  textAlign: TextAlign.center, 
+                  style: const TextStyle(fontSize: 13, color: Colors.grey)
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      // Just sign out from Firebase (no backend call needed since user never logged in to backend)
+                      try {
+                        await FirebaseAuthService().signOut();
+                      } catch (e) {
+                        debugPrint('Firebase signout error: $e');
+                      }
+                      
+                      // Navigate to login immediately
+                      final navigator = navigatorKey.currentState;
+                      if (navigator != null) {
+                        navigator.pushNamedAndRemoveUntil(
+                          '/login',
+                          (route) => false,
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primary, 
+                      foregroundColor: Colors.white, 
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), 
+                      padding: const EdgeInsets.symmetric(vertical: 12)
+                    ),
+                    child: const Text('Go to Login'),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   @override
@@ -148,7 +230,11 @@ class _SignupScreenState extends State<SignupScreen> {
             filled: true,
             fillColor: const Color(0xFFF7F7FB),
             prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade400),
-            suffixIcon: isPassword ? IconButton(icon: Icon((isConfirm ? _obscureConfirmPassword : _obscurePassword) ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: Colors.grey.shade400), onPressed: () => setState(() { if (isConfirm) _obscureConfirmPassword = !_obscureConfirmPassword; else _obscurePassword = !_obscurePassword; })) : null,
+            suffixIcon: isPassword ? IconButton(icon: Icon((isConfirm ? _obscureConfirmPassword : _obscurePassword) ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: Colors.grey.shade400), onPressed: () => setState(() { if (isConfirm) {
+              _obscureConfirmPassword = !_obscureConfirmPassword;
+            } else {
+              _obscurePassword = !_obscurePassword;
+            } })) : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
           ),
           validator: (v) {
@@ -166,7 +252,7 @@ class _SignupScreenState extends State<SignupScreen> {
       width: double.infinity,
       height: 48,
       child: ElevatedButton(
-        onPressed: _authController.isLoading ? null : _signup,
+        onPressed: (_isEmailLoading || _isGoogleLoading) ? null : _signup,
         style: ElevatedButton.styleFrom(
           backgroundColor: primary, 
           foregroundColor: Colors.white, 
@@ -174,7 +260,19 @@ class _SignupScreenState extends State<SignupScreen> {
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         ),
-        child: _authController.isLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)) : const Text('Create Account', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        child: _isEmailLoading 
+            ? const SizedBox(
+                width: 20, 
+                height: 20, 
+                child: CircularProgressIndicator(
+                  color: Colors.white, 
+                  strokeWidth: 2.5,
+                ),
+              )
+            : const Text(
+                'Create Account', 
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
       ),
     );
   }
@@ -194,28 +292,34 @@ class _SignupScreenState extends State<SignupScreen> {
       width: double.infinity,
       height: 48,
       child: OutlinedButton(
-        onPressed: _authController.isLoading ? null : _googleLogin,
+        onPressed: _isGoogleLoading ? null : _googleLogin,
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: Color(0xFFEEEEF2)), 
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
           foregroundColor: const Color(0xFF1A1A2E),
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('png/google.png', height: 18, width: 18),
-            const SizedBox(width: 10),
-            const Flexible(
-              child: Text(
-                'Sign up with Google', 
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
+        child: _isGoogleLoading
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset('png/google.png', height: 18, width: 18),
+                  const SizedBox(width: 10),
+                  const Flexible(
+                    child: Text(
+                      'Sign up with Google', 
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

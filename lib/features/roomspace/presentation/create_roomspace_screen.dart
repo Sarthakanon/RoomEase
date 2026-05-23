@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../services/roomspace_service.dart';
 import '../../../providers/roomspace_provider.dart';
+import '../../subscription/providers/subscription_provider.dart';
 
 class CreateRoomController {
   final _roomspaceService = RoomspaceService();
@@ -47,14 +48,26 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
   }
   
   void _checkLimit() {
-    final provider = Provider.of<RoomspaceProvider>(context, listen: false);
-    if (!provider.canJoinMore) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Limit reached (5/5)'), backgroundColor: Colors.orange));
+    if (!mounted) return;
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final subscriptionProvider = Provider.of<SubscriptionProvider>(context, listen: false);
+    final maxRoomspaces = subscriptionProvider.currentLimits.maxRoomspaces;
+    
+    if (roomspaceProvider.roomspaceCount >= maxRoomspaces) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Limit reached (${roomspaceProvider.roomspaceCount}/$maxRoomspaces)'), 
+          backgroundColor: Colors.orange
+        )
+      );
     }
   }
 
   Future<void> _handleCreate() async {
-    if (!Provider.of<RoomspaceProvider>(context, listen: false).canJoinMore) return;
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final subscriptionProvider = Provider.of<SubscriptionProvider>(context, listen: false);
+    final maxRoomspaces = subscriptionProvider.currentLimits.maxRoomspaces;
+    if (roomspaceProvider.roomspaceCount >= maxRoomspaces) return;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -63,11 +76,22 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
       address: _addressController.text,
       description: _descriptionController.text,
     );
+    
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (result['success'] == true) _showSuccess(result['inviteCode']);
-    else ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
+    if (result['success'] == true) {
+      _showSuccess(result['inviteCode']);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']), 
+            backgroundColor: Colors.red
+          )
+        );
+      }
+    }
   }
 
   void _showSuccess(String code) {
@@ -115,9 +139,11 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return Consumer<RoomspaceProvider>(
-      builder: (context, provider, child) {
-        final isDisabled = !provider.canJoinMore;
+    return Consumer2<RoomspaceProvider, SubscriptionProvider>(
+      builder: (context, roomspaceProvider, subscriptionProvider, child) {
+        final maxRoomspaces = subscriptionProvider.currentLimits.maxRoomspaces;
+        final isDisabled = roomspaceProvider.roomspaceCount >= maxRoomspaces;
+        
         return Scaffold(
           backgroundColor: Colors.white,
           appBar: AppBar(
@@ -135,7 +161,7 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
                 key: _formKey,
                 child: Column(
                   children: [
-                    _buildCounter(provider),
+                    _buildCounter(roomspaceProvider, maxRoomspaces),
                     const SizedBox(height: 32),
                     _buildField(controller: _roomNameController, label: 'Room Name', hint: 'e.g. Dream Suite', icon: Icons.home_outlined, isDisabled: isDisabled, validator: (v) => v!.isEmpty ? 'Name required' : null),
                     const SizedBox(height: 16),
@@ -154,8 +180,8 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
     );
   }
 
-  Widget _buildCounter(RoomspaceProvider provider) {
-    final isLimit = !provider.canJoinMore;
+  Widget _buildCounter(RoomspaceProvider provider, int maxRoomspaces) {
+    final isLimit = provider.roomspaceCount >= maxRoomspaces;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(color: isLimit ? Colors.orange.shade50 : const Color(0xFFF7F7FB), borderRadius: BorderRadius.circular(10), border: Border.all(color: isLimit ? Colors.orange.shade200 : const Color(0xFFEEEEF2))),
@@ -164,7 +190,7 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
         children: [
           Icon(isLimit ? Icons.warning_amber_rounded : Icons.info_outline_rounded, size: 16, color: isLimit ? Colors.orange.shade800 : Colors.grey.shade600),
           const SizedBox(width: 10),
-          Text('${provider.roomspaceCount}/5 roomspaces used', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isLimit ? Colors.orange.shade800 : Colors.grey.shade600)),
+          Text('${provider.roomspaceCount}/$maxRoomspaces roomspaces used', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isLimit ? Colors.orange.shade800 : Colors.grey.shade600)),
         ],
       ),
     );

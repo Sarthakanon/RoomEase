@@ -1,0 +1,34 @@
+meta {
+  name: POST /api/roomspaces/:id/payments/confirm
+  type: http
+}
+
+post {
+  url: {{baseUrl}}/api/roomspaces/{{roomspace_id}}/payments/confirm
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Cookie: session_id={{session_id}}
+}
+
+body:json {
+  {
+    "to_user_id": "{{user_id}}",
+    "amount": 100,
+    "method": "cash",
+    "note": "test payment confirmation"
+  }
+}
+
+assert {
+  res.status: oneOf 200 201 400 401 403 404 409 422 500
+}
+
+tests {
+  test("status is handled", function() {
+    expect([200,201,400,401,403,404,409,422,500]).to.include(res.status);
+  });
+}

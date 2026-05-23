@@ -210,6 +210,30 @@ class ExpenseService {
     }
   }
 
+  /// Retrieves only personal expenses for the current user.
+  Future<List<PersonalExpenseData>> getPersonalExpenses({
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final response = await _apiService.getPersonalExpenses(
+        limit: limit,
+        offset: offset,
+      );
+      if (response['success'] == true) {
+        final data = response['data'];
+        if (data is List) {
+          return data.map((e) => PersonalExpenseData.fromJson(e)).toList();
+        }
+        return [];
+      }
+      throw Exception(response['error'] ?? 'Failed to retrieve personal expenses');
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Failed to retrieve personal expenses: ${e.toString()}');
+    }
+  }
+
   /// Updates an existing expense
   /// 
   /// Throws [Exception] if the update fails

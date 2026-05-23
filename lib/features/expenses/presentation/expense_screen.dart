@@ -4,18 +4,24 @@ import '../../../core/widgets/mobile_scaffold.dart';
 import '../../../core/widgets/global_roomspace_selector.dart';
 import '../../../services/smart_api_service.dart';
 import '../../../services/state_management_service.dart';
+import '../../../services/real_time_data_service.dart';
 import '../../../models/expense_models.dart';
+import '../../../models/recurring_expense_models.dart';
 import '../../../providers/roomspace_provider.dart';
-import '../../../widgets/smart_future_builder.dart';
+import '../../../widgets/enhanced_expense_tile.dart';
+import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/utils/subscription_helper.dart';
 import '../widgets/month_selector.dart';
 import 'expense_list_screen.dart';
 import 'personal_expenses_screen.dart';
 import 'personal_expense_details_screen.dart';
 import 'payment_confirmation_screen.dart';
 import 'who_owes_who_screen.dart';
-import 'report_preview_screen.dart';
+import 'balance_breakdown_screen.dart';
 import 'report_options_screen.dart';
 import 'settlements_screen.dart';
+import 'recurring_payments_screen.dart';
+import 'dart:async';
 
 /// Main expense screen — acts as a router for different expense-related views.
 class ExpenseScreen extends StatefulWidget {
@@ -29,6 +35,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     with AutomaticKeepAliveClientMixin {
   final SmartApiService _smartApi = SmartApiService();
   final StateManagementService _state = StateManagementService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
 
   @override
   bool get wantKeepAlive => true; // Keep state alive when switching tabs
@@ -38,9 +45,14 @@ class _ExpenseScreenState extends State<ExpenseScreen>
   DateTime? _lastDataLoad;
   static const Duration _cacheValidDuration = Duration(minutes: 3);
   
-  String? _currentRoomspaceId;
   // Initialize with first day of current month
   late DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
+
+  // Stream subscriptions for real-time updates
+  StreamSubscription<ExpenseUpdateEvent>? _expenseUpdateSubscription;
+  StreamSubscription<BalanceUpdateEvent>? _balanceUpdateSubscription;
+  StreamSubscription<NotificationEvent>? _notificationSubscription;
+  RoomspaceProvider? _roomspaceProvider;
 
   @override
   void initState() {
@@ -48,17 +60,74 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     
     // Listen for roomspace changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final roomspaceProvider =
-          Provider.of<RoomspaceProvider>(context, listen: false);
-      roomspaceProvider.addListener(_onRoomspaceChanged);
+      _roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      _roomspaceProvider?.addListener(_onRoomspaceChanged);
+      
+      // Set up real-time listeners
+      _setupRealTimeListeners();
+    });
+  }
+
+  void _setupRealTimeListeners() {
+    // Listen for expense updates
+    _expenseUpdateSubscription = _realTimeService.expenseUpdates.listen((event) {
+      debugPrint('🔄 Expense update received: ${event.type}');
+      
+      // Check if this update affects current roomspace
+      final currentRoomspaceId = _roomspaceProvider?.getActiveRoomspaceId();
+      
+      if (event.type == ExpenseUpdateType.clearCache ||
+          event.roomspaceId == currentRoomspaceId ||
+          event.type == ExpenseUpdateType.personalCreated) {
+        // Clear cache and refresh
+        _cachedExpenseData = null;
+        _lastDataLoad = null;
+        
+        if (mounted) {
+          setState(() {}); // Trigger rebuild with fresh data
+        }
+      }
+    });
+
+    // Listen for balance updates
+    _balanceUpdateSubscription = _realTimeService.balanceUpdates.listen((event) {
+      debugPrint('🔄 Balance update received: ${event.type}');
+      
+      final currentRoomspaceId = _roomspaceProvider?.getActiveRoomspaceId();
+      
+      if (event.type == BalanceUpdateType.clearCache ||
+          event.roomspaceId == currentRoomspaceId) {
+        // Clear cache and refresh
+        _cachedExpenseData = null;
+        _lastDataLoad = null;
+        
+        if (mounted) {
+          setState(() {}); // Trigger rebuild
+        }
+      }
+    });
+
+    // Listen for profile updates (QR upload/change) and refresh this screen live
+    _notificationSubscription = _realTimeService.notifications.listen((event) {
+      if (event.type == NotificationType.profileUpdated) {
+        _cachedExpenseData = null;
+        _lastDataLoad = null;
+        if (mounted) {
+          setState(() {});
+        }
+      }
     });
   }
 
   @override
   void dispose() {
-    final roomspaceProvider =
-        Provider.of<RoomspaceProvider>(context, listen: false);
-    roomspaceProvider.removeListener(_onRoomspaceChanged);
+    _roomspaceProvider?.removeListener(_onRoomspaceChanged);
+    
+    // Cancel real-time subscriptions
+    _expenseUpdateSubscription?.cancel();
+    _balanceUpdateSubscription?.cancel();
+    _notificationSubscription?.cancel();
+    
     super.dispose();
   }
 
@@ -75,13 +144,23 @@ class _ExpenseScreenState extends State<ExpenseScreen>
 
   /// Smart data loader for expenses with caching
   Future<Map<String, dynamic>> _loadExpenseData({bool forceRefresh = false}) async {
-    // Return cached data if valid and not forcing refresh
+    // Return cached data if valid and not forcing refresh.
+    // If recurring count is 0 in roomspace mode, bypass cache to avoid stale empty state.
     if (!forceRefresh && 
         _cachedExpenseData != null && 
         _lastDataLoad != null &&
         DateTime.now().difference(_lastDataLoad!) < _cacheValidDuration) {
-      debugPrint('🚀 Using cached expense data');
-      return _cachedExpenseData!;
+      final cachedIsPersonal = _cachedExpenseData!['isPersonalSpace'] as bool? ?? true;
+      final cachedRecurring = _cachedExpenseData!['recurringExpenses'];
+      final cachedRecurringCount = (cachedRecurring is Map<String, dynamic>)
+          ? (cachedRecurring['count'] as int? ?? 0)
+          : 0;
+      if (!cachedIsPersonal && cachedRecurringCount == 0) {
+        debugPrint('🚀 Cached recurring count is 0 in roomspace, fetching fresh data');
+      } else {
+        debugPrint('🚀 Using cached expense data');
+        return _cachedExpenseData!;
+      }
     }
 
     debugPrint('🌐 Loading fresh expense data...');
@@ -110,8 +189,12 @@ class _ExpenseScreenState extends State<ExpenseScreen>
         forceRefresh: forceRefresh,
       );
       
+      // Load recurring expenses separately
+      futures['recurringExpenses'] = _loadRecurringExpenses(activeRoomspaceId);
+      
       // Load pending payments count
       futures['pendingPayments'] = _loadPendingPaymentsCount(activeRoomspaceId);
+      futures['userProfile'] = _smartApi.getUserProfile(forceRefresh: true);
     }
 
     // Wait for all data to load
@@ -135,8 +218,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     // Cache the data
     _cachedExpenseData = expenseData;
     _lastDataLoad = DateTime.now();
-    _currentRoomspaceId = activeRoomspaceId;
-    debugPrint('💾 Expense data cached at ${_lastDataLoad}');
+    debugPrint('💾 Expense data cached at $_lastDataLoad');
 
     return expenseData;
   }
@@ -154,6 +236,92 @@ class _ExpenseScreenState extends State<ExpenseScreen>
       return {'data': [], 'count': 0};
     } catch (e) {
       debugPrint('Error loading pending payments count: $e');
+      return {'data': [], 'count': 0, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> _loadRecurringExpenses(String roomspaceId) async {
+    try {
+      debugPrint('🔄 Loading recurring expenses for roomspace: $roomspaceId');
+      
+      // First try to get recurring expense templates
+      final response = await _smartApi.dio.get(
+        '/api/roomspaces/$roomspaceId/recurring-expenses',
+      );
+      
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final dynamic rawData = response.data['data'];
+        final List<dynamic> recurringData = rawData is List
+            ? rawData
+            : (rawData is Map<String, dynamic> && rawData['data'] is List ? rawData['data'] as List : <dynamic>[]);
+        debugPrint('🔄 Found ${recurringData.length} recurring expense templates');
+        if (recurringData.isNotEmpty) {
+          return {'data': recurringData, 'count': recurringData.length};
+        }
+        debugPrint('🔄 No templates found, trying fallback from regular expenses');
+      }
+
+      // Fallback 1: Upcoming recurring endpoint
+      try {
+        final upcomingResponse = await _smartApi.dio.get(
+          '/api/roomspaces/$roomspaceId/recurring-expenses/upcoming?days=365',
+        );
+        if (upcomingResponse.statusCode == 200 && upcomingResponse.data['success'] == true) {
+          final List<dynamic> upcomingData = upcomingResponse.data['data'] ?? [];
+          debugPrint('🔄 Upcoming fallback found ${upcomingData.length} recurring items');
+          if (upcomingData.isNotEmpty) {
+            return {'data': upcomingData, 'count': upcomingData.length};
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ Upcoming recurring fallback failed: $e');
+      }
+      
+      // Fallback 2: Filter regular expenses for recurring ones
+      debugPrint('🔄 Fallback: Filtering regular expenses for recurring ones');
+      final expensesResponse = await _smartApi.getRoomspaceExpenses(
+        roomspaceId,
+        limit: 50, // Get more to filter
+        offset: 0,
+      );
+      
+      if (expensesResponse['success'] == true && expensesResponse['data'] != null) {
+        final List<dynamic> allExpenses = expensesResponse['data'];
+        final recurringExpenses = allExpenses.where((expense) {
+          final recurringConfig = expense['recurring_config'];
+          return recurringConfig != null && recurringConfig['is_recurring'] == true;
+        }).toList();
+        
+        debugPrint('🔄 Found ${recurringExpenses.length} recurring expenses from ${allExpenses.length} total');
+        return {'data': recurringExpenses, 'count': recurringExpenses.length};
+      }
+      
+      return {'data': [], 'count': 0};
+    } catch (e) {
+      debugPrint('❌ Error loading recurring expenses: $e');
+      
+      // Fallback: Try to filter from regular expenses
+      try {
+        final expensesResponse = await _smartApi.getRoomspaceExpenses(
+          roomspaceId,
+          limit: 50,
+          offset: 0,
+        );
+        
+        if (expensesResponse['success'] == true && expensesResponse['data'] != null) {
+          final List<dynamic> allExpenses = expensesResponse['data'];
+          final recurringExpenses = allExpenses.where((expense) {
+            final recurringConfig = expense['recurring_config'];
+            return recurringConfig != null && recurringConfig['is_recurring'] == true;
+          }).toList();
+          
+          debugPrint('🔄 Fallback successful: Found ${recurringExpenses.length} recurring expenses');
+          return {'data': recurringExpenses, 'count': recurringExpenses.length};
+        }
+      } catch (fallbackError) {
+        debugPrint('❌ Fallback also failed: $fallbackError');
+      }
+      
       return {'data': [], 'count': 0, 'error': e.toString()};
     }
   }
@@ -246,33 +414,60 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     Map<String, dynamic> expenseData,
     Color primaryColor,
   ) {
+    Map<String, dynamic> asStringKeyedMap(dynamic value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return Map<String, dynamic>.from(value);
+      return <String, dynamic>{};
+    }
+
     final isPersonalSpace = expenseData['isPersonalSpace'] as bool? ?? true;
-    final personalExpenses = expenseData['personalExpenses'] as Map<String, dynamic>? ?? {'data': []};
-    final sharedExpenses = expenseData['sharedExpenses'] as Map<String, dynamic>? ?? {'data': []};
-    final pendingPayments = expenseData['pendingPayments'] as Map<String, dynamic>? ?? {'data': [], 'count': 0};
+    final personalExpenses = asStringKeyedMap(expenseData['personalExpenses']);
+    final sharedExpenses = asStringKeyedMap(expenseData['sharedExpenses']);
+    final recurringExpenses = asStringKeyedMap(expenseData['recurringExpenses']);
+    final pendingPayments = asStringKeyedMap(expenseData['pendingPayments']);
+    final userProfile = asStringKeyedMap(expenseData['userProfile']);
     
     // Extract data safely
     final personalExpensesList = personalExpenses['data'] as List<dynamic>? ?? [];
     final sharedExpensesList = sharedExpenses['data'] as List<dynamic>? ?? [];
+    final recurringExpensesList = recurringExpenses['data'] as List<dynamic>? ?? [];
     final pendingPaymentsCount = pendingPayments['count'] as int? ?? 0;
+    final profileData = asStringKeyedMap(userProfile['data']);
+    final qrImageUrl = profileData['qr_image_url'] as String?;
     
     // Convert to models
     final recentPersonalExpenses = personalExpensesList
         .map((json) => PersonalExpenseData.fromJson(json))
         .toList();
-    final recentSharedExpenses = sharedExpensesList
+    
+    // Filter out recurring expenses from shared expenses to avoid duplication
+    final nonRecurringSharedExpenses = sharedExpensesList
+        .where((expense) {
+          final recurringConfig = expense['recurring_config'];
+          return recurringConfig == null || recurringConfig['is_recurring'] != true;
+        })
         .map((json) => ExpenseData.fromJson(json))
         .toList();
     
-    final totalRecentSpending = recentSharedExpenses.fold(0.0, (sum, item) => sum + item.amount) +
-        recentPersonalExpenses.fold(0.0, (sum, item) => sum + item.amount);
+    final recurringTemplates = recurringExpensesList
+        .map((json) => RecurringExpenseTemplate.fromJson(Map<String, dynamic>.from(json)))
+        .where((template) => !template.isDeleted)
+        .toList();
+    
+    final totalRecentSpending = nonRecurringSharedExpenses.fold(0.0, (sum, item) => sum + item.amount) +
+        recentPersonalExpenses.fold(0.0, (sum, item) => sum + item.amount) +
+        recurringTemplates.fold(0.0, (sum, item) => sum + item.amount);
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
           children: [
             // ── Header Section ──
-            _buildHeader(primaryColor, totalRecentSpending),
+            _buildHeader(
+              primaryColor,
+              totalRecentSpending,
+              showQrSetupMessage: !isPersonalSpace && (qrImageUrl == null || qrImageUrl.isEmpty),
+            ),
 
             // ── Month Selector ──
             MonthSelector(
@@ -286,7 +481,14 @@ class _ExpenseScreenState extends State<ExpenseScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Shared Expenses
+                  // Recurring Payments Section
+                  if (!isPersonalSpace) ...[
+                    const SizedBox(height: 12),
+                    _buildRecurringPaymentsSection(primaryColor, recurringTemplates),
+                    const SizedBox(height: 24),
+                  ],
+                  
+                  // Shared Expenses (Non-recurring)
                   if (!isPersonalSpace) ...[
                     const SizedBox(height: 12),
                     _buildSectionHeader(
@@ -301,26 +503,28 @@ class _ExpenseScreenState extends State<ExpenseScreen>
                       ),
                       primaryColor: primaryColor,
                     ),
-                    _buildSharedList(primaryColor, recentSharedExpenses),
+                    _buildSharedList(primaryColor, nonRecurringSharedExpenses),
                     const SizedBox(height: 24),
                     
                     // Settle Up Actions (Who Owes Who + Pending Payments)
-                    _buildSettleUpSection(primaryColor, pendingPaymentsCount),
+                    _buildSettleUpSection(primaryColor, pendingPaymentsCount, qrImageUrl),
                     const SizedBox(height: 24),
                   ],
 
-                  // Personal Expenses
-                  _buildSectionHeader(
-                    title: "Personal Expenses", 
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const PersonalExpensesScreen(),
+                  if (isPersonalSpace) ...[
+                    // Personal Expenses
+                    _buildSectionHeader(
+                      title: "Personal Expenses",
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PersonalExpensesScreen(),
+                        ),
                       ),
+                      primaryColor: Colors.orange.shade700,
                     ),
-                    primaryColor: Colors.orange.shade700,
-                  ),
-                  _buildPersonalList(recentPersonalExpenses),
+                    _buildPersonalList(recentPersonalExpenses),
+                  ],
                   
                   const SizedBox(height: 100), // Extra space for bottom nav
                 ],
@@ -373,7 +577,11 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     );
   }
 
-  Widget _buildHeader(Color primaryColor, double totalRecentSpending) {
+  Widget _buildHeader(
+    Color primaryColor,
+    double totalRecentSpending, {
+    bool showQrSetupMessage = false,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 56, 16, 20),
@@ -407,6 +615,19 @@ class _ExpenseScreenState extends State<ExpenseScreen>
               ),
             ],
           ),
+          if (showQrSetupMessage) ...[
+            const SizedBox(height: 12),
+            _buildQrSetupMessage(
+              color: Colors.teal.shade700,
+              onTap: () async {
+                await Navigator.pushNamed(context, '/profile');
+                _cachedExpenseData = null;
+                _lastDataLoad = null;
+                _state.forceRefresh(ScreenKeys.expenses);
+                if (mounted) setState(() {});
+              },
+            ),
+          ],
           const SizedBox(height: 16),
           _buildSpendingSummaryPanel(primaryColor, totalRecentSpending),
         ],
@@ -494,19 +715,293 @@ class _ExpenseScreenState extends State<ExpenseScreen>
 
     return Column(
       children: recentSharedExpenses.map((expense) {
-        return _ExpenseTile(
-          title: expense.title,
-          subtitle: expense.category,
-          amount: 'Rs. ${expense.amount.toStringAsFixed(0)}',
-          amountColor: primaryColor,
-          date: _formatDate(expense.createdAt),
-          icon: Icons.receipt_long_outlined,
-          onTap: () {
-            // No details view for shared yet, or could navigate to a summary
+        return EnhancedExpenseTile(
+          expense: expense,
+          themeColor: primaryColor,
+          isPersonal: false,
+          onUpdated: () {
+            // Clear cache and refresh when expense is updated
+            _cachedExpenseData = null;
+            _lastDataLoad = null;
+            setState(() {});
           },
         );
       }).toList(),
     );
+  }
+
+  Widget _buildRecurringPaymentsSection(Color primaryColor, List<RecurringExpenseTemplate> recurringExpenses) {
+    final isEmpty = recurringExpenses.isEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section Header with special styling for recurring payments
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.repeat_rounded,
+                    size: 16,
+                    color: Colors.purple.shade700,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Recurring Payments',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A2E),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                
+              ],
+            ),
+            TextButton(
+              onPressed: _openRecurringManager,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Manage All',
+                style: TextStyle(
+                  color: Colors.purple.shade700,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Automatically scheduled payments',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade500,
+          ),
+        ),
+        const SizedBox(height: 12),
+        
+        // Recurring Payments List
+        if (isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200, width: 1),
+            ),
+            child: Text(
+              'No recurring payments found in this roomspace yet. Tap "Manage All" to open recurring manager.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200, width: 1),
+            ),
+            child: Column(
+              children: recurringExpenses.take(3).map((expense) {
+                final isLast = expense == recurringExpenses.take(3).last;
+                return Container(
+                  decoration: BoxDecoration(
+                    border: isLast ? null : Border(
+                      bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+                    ),
+                  ),
+                  child: _buildRecurringPaymentTile(expense, Colors.purple.shade700),
+                );
+              }).toList(),
+            ),
+          ),
+        
+        // Show more indicator if there are more than 3
+        if (recurringExpenses.length > 3) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton.icon(
+              onPressed: _openRecurringManager,
+              icon: Icon(Icons.expand_more_rounded, size: 16, color: Colors.purple.shade600),
+              label: Text(
+                '+${recurringExpenses.length - 3} more recurring payments',
+                style: TextStyle(
+                  color: Colors.purple.shade600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                backgroundColor: Colors.purple.shade50,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRecurringPaymentTile(RecurringExpenseTemplate template, Color themeColor) {
+    final nextPayment = template.getNextScheduledDate();
+    
+    return InkWell(
+      onTap: _openRecurringManager,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: themeColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                _getIcon(template.category),
+                color: themeColor,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    template.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: Color(0xFF1A1A2E),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        template.recurringConfig.interval?.label ?? 'Monthly',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: themeColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (nextPayment != null) ...[
+                        Text(
+                          ' • Next: ${_formatUpcomingDate(nextPayment)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // Amount
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'Rs. ${template.amount.toStringAsFixed(0)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: themeColor,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: themeColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'AUTO',
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: themeColor,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openRecurringManager() {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    if (activeRoomspaceId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active roomspace selected')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RecurringPaymentsScreen(
+          roomspaceId: activeRoomspaceId,
+          recurringExpenses: const [],
+        ),
+      ),
+    );
+  }
+
+  IconData _getIcon(String category) {
+    switch (category.toLowerCase()) {
+      case 'groceries':
+        return Icons.shopping_basket_outlined;
+      case 'utilities':
+        return Icons.bolt_rounded;
+      case 'rent':
+        return Icons.home_outlined;
+      case 'food':
+        return Icons.restaurant_rounded;
+      case 'transport':
+        return Icons.directions_car_rounded;
+      case 'entertainment':
+        return Icons.movie_creation_rounded;
+      default:
+        return Icons.receipt_long_outlined;
+    }
   }
 
   Widget _buildPersonalList(List<PersonalExpenseData> recentPersonalExpenses) {
@@ -536,7 +1031,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     );
   }
 
-  Widget _buildSettleUpSection(Color primaryColor, int pendingPaymentsCount) {
+  Widget _buildSettleUpSection(Color primaryColor, int pendingPaymentsCount, String? qrImageUrl) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -615,18 +1110,89 @@ class _ExpenseScreenState extends State<ExpenseScreen>
         ),
         const SizedBox(height: 12),
         _ManagementActionCard(
-          title: 'Generate Report',
-          subtitle: 'Export expenses as professional PDF',
-          icon: Icons.picture_as_pdf_rounded,
-          color: Colors.red.shade700,
+          title: 'Balance Calculation',
+          subtitle: 'See full overall balance math breakdown',
+          icon: Icons.calculate_rounded,
+          color: Colors.deepPurple.shade600,
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ReportOptionsScreen()),
+            final roomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+            if (roomspaceId != null) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => BalanceBreakdownScreen(roomspaceId: roomspaceId),
+                ),
+              );
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        Consumer<SubscriptionProvider>(
+          builder: (context, subscriptionProvider, child) {
+            final canExport = subscriptionProvider.currentLimits.exportFeatures;
+            
+            return _ManagementActionCard(
+              title: 'Generate Report',
+              subtitle: canExport 
+                  ? 'Export expenses as professional PDF'
+                  : '🔒 Pro feature - Upgrade to export',
+              icon: Icons.picture_as_pdf_rounded,
+              color: canExport ? Colors.red.shade700 : Colors.grey.shade400,
+              onTap: () {
+                if (canExport) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ReportOptionsScreen()),
+                  );
+                } else {
+                  // Show upgrade dialog
+                  SubscriptionHelper.showFeatureBlockedDialog(
+                    context,
+                    featureName: 'Export Reports',
+                    description: 'Export your expenses as professional PDF or Excel reports with detailed analytics.',
+                  );
+                }
+              },
             );
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildQrSetupMessage({
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.qr_code_rounded, size: 18, color: color),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Add your payment QR',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: color),
+          ],
+        ),
+      ),
     );
   }
 
@@ -661,6 +1227,24 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     if (difference.inDays == 1) return 'Yesterday';
     if (difference.inDays < 7) return '${difference.inDays}d ago';
     
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[date.month - 1]} ${date.day}';
+  }
+
+  String _formatUpcomingDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(date.year, date.month, date.day);
+    final dayDiff = target.difference(today).inDays;
+
+    if (dayDiff == 0) return 'Today';
+    if (dayDiff == 1) return 'Tomorrow';
+    if (dayDiff > 1 && dayDiff < 7) return 'In $dayDiff days';
+    if (dayDiff < 0) return 'Overdue';
+
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'

@@ -1,0 +1,26 @@
+%%{init: {'flowchart': {'curve': 'stepBefore'}} }%%
+flowchart TB
+    S([Start]) --> A[Monitor Connectivity]
+    A --> B{Internet Restored?}
+    B -->|No| C[Keep Pending Queue]
+    C --> A
+
+    B -->|Yes| D[Load Pending Operations]
+    D --> E{Queue Empty?}
+    E -->|Yes| F[Set Sync Status to Idle]
+    E -->|No| G[Process Next Operation]
+
+    G --> H{Operation Success?}
+    H -->|Yes| I[Mark Operation Synced]
+    H -->|No| J[Mark Operation Failed]
+
+    I --> K{More Operations?}
+    K -->|Yes| G
+    K -->|No| L[Fetch Latest Server Data]
+
+    J --> M[Keep Failed Ops for Retry]
+    M --> L
+
+    L --> N[Update Local Cache]
+    N --> F
+    F --> O([End])

@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"roomease/backend/config"
 	"roomease/backend/models"
 	"roomease/backend/services"
 	"strconv"
@@ -49,6 +50,7 @@ func (h *BalanceHandler) GetRoomspaceBalances(c *gin.Context) {
 	// Calculate balances
 	summary, err := h.balanceService.CalculateRoomspaceBalances(roomspaceID)
 	if err != nil {
+		fmt.Printf("❌ Error calculating balances for roomspace %s: %v\n", roomspaceID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to calculate balances",
 			"details": err.Error(),
@@ -56,9 +58,82 @@ func (h *BalanceHandler) GetRoomspaceBalances(c *gin.Context) {
 		return
 	}
 
+	// Debug: Print the entire summary
+	fmt.Printf("🏠 Balance Summary for roomspace %s:\n", roomspaceID)
+	fmt.Printf("📊 Total expenses: %.2f\n", summary.TotalExpenses)
+	fmt.Printf("📊 Expense count: %d\n", summary.ExpenseCount)
+	fmt.Printf("📊 User balances: %+v\n", summary.UserBalances)
+	fmt.Printf("📊 Members count: %d\n", len(summary.Members))
+
+	// Get current user's balance from the summary
+	currentUserBalance, exists := summary.UserBalances[userID.(string)]
+	if !exists {
+		fmt.Printf("⚠️  User %s not found in balance summary\n", userID.(string))
+		currentUserBalance = 0.0
+	}
+	
+	// Calculate you_owe and you_are_owed by summing up actual expense splits
+	// This gives the TRUE breakdown, not just the net balance
+	youOwe := 0.0
+	youAreOwed := 0.0
+	
+	// Get all expenses for this roomspace
+	var expenses []models.Expense
+	if err := config.DB.
+		Preload("Splits").
+		Where("roomspace_id = ?", roomspaceID).
+		Find(&expenses).Error; err != nil {
+		fmt.Printf("❌ Error fetching expenses: %v\n", err)
+	} else {
+		// For each expense, check if user paid or owes
+		for _, expense := range expenses {
+			isPaidByMe := expense.PaidBy == userID.(string)
+			
+			// Find my split in this expense
+			var mySplit *models.ExpenseSplit
+			for i := range expense.Splits {
+				if expense.Splits[i].UserUID == userID.(string) {
+					mySplit = &expense.Splits[i]
+					break
+				}
+			}
+			
+			if mySplit == nil {
+				continue // User not involved in this expense
+			}
+			
+			if isPaidByMe {
+				// I paid for this expense
+				// Others owe me: (total amount - my share)
+				othersOweMe := expense.Amount - mySplit.Amount
+				if othersOweMe > 0 {
+					youAreOwed += othersOweMe
+				}
+			} else {
+				// Someone else paid
+				// I owe my share
+				youOwe += mySplit.Amount
+			}
+		}
+	}
+
+	// Debug logging
+	fmt.Printf("🏠 Balance calculation for user %s in roomspace %s:\n", userID.(string), roomspaceID)
+	fmt.Printf("💰 Current user net balance: %.2f\n", currentUserBalance)
+	fmt.Printf("💰 You owe (sum of splits): %.2f\n", youOwe)
+	fmt.Printf("💰 You are owed (sum of others' shares): %.2f\n", youAreOwed)
+
+	// Create response with both summary and current user's specific balance
+	responseData := map[string]interface{}{
+		"summary":       summary,
+		"you_owe":       youOwe,
+		"you_are_owed":  youAreOwed,
+		"your_balance":  currentUserBalance,
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    summary,
+		"data":    responseData,
 	})
 }
 

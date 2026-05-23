@@ -1,0 +1,15 @@
+%%{init: {'flowchart': {'curve': 'stepBefore'}} }%%
+flowchart TB
+  U((User))
+  subgraph Offline and Sync Subsystem
+    UC1[Create Expense Offline]
+    UC2[Queue Pending Operations]
+    UC3[Show Sync Status]
+    UC4[Manual Sync]
+    UC5[Auto Sync on Reconnect]
+  end
+  U --> UC1
+  U --> UC2
+  U --> UC3
+  U --> UC4
+  U --> UC5

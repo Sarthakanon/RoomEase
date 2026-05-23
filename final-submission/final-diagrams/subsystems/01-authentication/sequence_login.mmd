@@ -1,0 +1,13 @@
+sequenceDiagram
+  actor U as User
+  participant APP as Mobile App
+  participant API as Auth API
+  participant FB as Firebase Auth
+  participant DB as User Store
+  U->>APP: Login
+  APP->>API: POST /api/auth/login
+  API->>FB: Verify token
+  FB-->>API: Token result
+  API->>DB: Upsert user + session
+  DB-->>API: Success
+  API-->>APP: Session + profile

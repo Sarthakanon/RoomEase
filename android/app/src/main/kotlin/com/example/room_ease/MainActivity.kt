@@ -2,15 +2,18 @@ package com.example.room_ease
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.IntentFilter
 import android.provider.Settings
 import android.text.TextUtils
-import io.flutter.embedding.android.FlutterActivity
+import android.util.Log
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private val NOTIFICATION_CHANNEL = "payment_notification_channel"
     private val SMS_CHANNEL = "sms_detection_channel"
+    private var smsReceiver: SmsReceiver? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -43,19 +46,20 @@ class MainActivity : FlutterActivity() {
         }
 
         // SMS channel
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SMS_CHANNEL).setMethodCallHandler { call, result ->
+        val smsChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SMS_CHANNEL)
+        smsChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startSmsListener" -> {
-                    // For now, just return success
-                    // In a full implementation, this would start the SMS listener service
+                    startSmsListener(smsChannel)
                     result.success(true)
                 }
                 "stopSmsListener" -> {
-                    // For now, just return success
+                    stopSmsListener()
                     result.success(true)
                 }
                 "processRecentSms" -> {
                     // For now, just return success
+                    // Could implement reading recent SMS from content provider
                     result.success(true)
                 }
                 else -> {
@@ -63,6 +67,45 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    private fun startSmsListener(methodChannel: MethodChannel) {
+        try {
+            Log.d("MainActivity", "Starting SMS listener")
+            
+            // Set the method channel for the SmsReceiver
+            SmsReceiver.setMethodChannel(methodChannel)
+            
+            if (smsReceiver == null) {
+                smsReceiver = SmsReceiver()
+            }
+            
+            val intentFilter = IntentFilter("android.provider.Telephony.SMS_RECEIVED")
+            intentFilter.priority = 1000
+            
+            registerReceiver(smsReceiver, intentFilter)
+            Log.d("MainActivity", "SMS receiver registered successfully")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error starting SMS listener: ${e.message}")
+        }
+    }
+
+    private fun stopSmsListener() {
+        try {
+            Log.d("MainActivity", "Stopping SMS listener")
+            
+            smsReceiver?.let {
+                unregisterReceiver(it)
+                Log.d("MainActivity", "SMS receiver unregistered successfully")
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error stopping SMS listener: ${e.message}")
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopSmsListener()
     }
 
     private fun openNotificationSettings() {

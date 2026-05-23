@@ -1,0 +1,34 @@
+{
+  "monthly_forecast": {
+    "mae_npr": 35358.77768505324,
+    "rmse_npr": 49464.90698486791,
+    "r2": 0.41122842838404416,
+    "baseline_mae_npr": 46397.14543055555,
+    "train_rows": 2080,
+    "test_rows": 720
+  },
+  "budget_risk": {
+    "accuracy": 0.8319444444444445,
+    "f1": 0.864501679731243,
+    "auc": 0.9082479784366577
+  },
+  "anomaly_detection": {
+    "accuracy": 0.8242158165328404,
+    "f1": 0.38011815033611734,
+    "auc": 0.7688725508677627
+  },
+  "spending_profiles": {
+    "clusters": 7,
+    "users": 80
+  },
+  "shared_settlement": {
+    "accuracy": 0.8723849372384938,
+    "f1": 0.046875,
+    "auc": 0.6312998405103668
+  },
+  "notes": [
+    "V2 trains on NPR-normalized amounts while preserving original currency fields.",
+    "Features use prior-period rolling values where prediction needs future safety.",
+    "The assistant response should avoid storing raw names, email, phone, or notes."
+  ]
+}

@@ -1,0 +1,22 @@
+%%{init: {'flowchart': {'curve': 'stepBefore'}} }%%
+flowchart TB
+    S([Start]) --> A[Open Add Expense Screen]
+    A --> B[Enter Expense Details]
+    B --> C{Internet Available?}
+
+    C -->|Yes| D[Call Backend Create Expense API]
+    C -->|No| E[Save Expense in Local Storage]
+
+    D --> F{API Success?}
+    F -->|Yes| G[Update Expense List]
+    F -->|No| H[Show Error Message]
+
+    E --> I[Add to Offline Sync Queue]
+    I --> J[Show Saved Offline Message]
+    J --> G
+
+    G --> K[Trigger Notification Flow]
+    K --> L[Show Success Message]
+
+    H --> M([End])
+    L --> M

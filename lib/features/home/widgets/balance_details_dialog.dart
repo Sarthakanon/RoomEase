@@ -259,8 +259,8 @@ class _BalanceDetailsDialogState extends State<BalanceDetailsDialog> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: widget.isOwed
-                      ? const Color(0xFF2E7D32).withOpacity(0.1)
-                      : const Color(0xFFC62828).withOpacity(0.1),
+                      ? const Color(0xFF2E7D32).withValues(alpha: 0.1)
+                      : const Color(0xFFC62828).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -285,21 +285,11 @@ class _BalanceDetailsDialogState extends State<BalanceDetailsDialog> {
                     ),
                     Text(
                       widget.isOwed
-                          ? 'Expenses where others owe you'
-                          : 'Expenses where you owe others',
+                          ? 'Your share from expenses you paid'
+                          : 'Your share of expenses others paid',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Balance: Rs. ${widget.actualBalance.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: widget.isOwed ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -335,7 +325,7 @@ class _BalanceDetailsDialogState extends State<BalanceDetailsDialog> {
               ),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                side: BorderSide(color: primaryColor.withOpacity(0.3)),
+                side: BorderSide(color: primaryColor.withValues(alpha: 0.3)),
                 foregroundColor: primaryColor,
               ),
             ),
@@ -472,7 +462,7 @@ class _BalanceDetailsDialogState extends State<BalanceDetailsDialog> {
                   Icon(Icons.info_outline, color: Colors.amber.shade900, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    'Balance Calculation',
+                    'About These Amounts',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -483,46 +473,26 @@ class _BalanceDetailsDialogState extends State<BalanceDetailsDialog> {
               ),
               const SizedBox(height: 12),
               Text(
-                'The expenses shown above are only from ${widget.isOwed ? "your payments" : "others\' payments"}. Your actual balance considers:',
+                widget.isOwed
+                    ? 'These are expenses you paid. The amounts shown are what others owe you (total expense minus your share).'
+                    : 'These are expenses others paid. The amounts shown are your share of each expense.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.amber.shade900,
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 8),
-              _buildCalculationRow('Expenses you paid', '+', Colors.green.shade700),
-              _buildCalculationRow('Your share of all expenses', '-', Colors.red.shade700),
-              if (_settlements.isNotEmpty)
-                _buildCalculationRow('Settlements (payments made)', '±', Colors.blue.shade700),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
+              if (_settlements.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Note: Settlements (payments made) will reduce these amounts.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.amber.shade800,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.calculate_outlined,
-                      size: 16,
-                      color: Colors.amber.shade900,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Actual Balance: Rs. ${widget.actualBalance.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.amber.shade900,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              ],
             ],
           ),
         ),
@@ -570,7 +540,7 @@ class _BalanceDetailsDialogState extends State<BalanceDetailsDialog> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -595,8 +565,8 @@ class _BalanceDetailsDialogState extends State<BalanceDetailsDialog> {
                     const SizedBox(height: 2),
                     Text(
                       isPaidByMe 
-                          ? 'You paid Rs. ${expense.amount.toStringAsFixed(0)}'
-                          : '$payerName paid Rs. ${expense.amount.toStringAsFixed(0)}',
+                          ? 'You paid this expense'
+                          : 'Paid by $payerName',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade500,
@@ -680,43 +650,6 @@ class _BalanceDetailsDialogState extends State<BalanceDetailsDialog> {
     return '${months[date.month - 1]} ${date.day}';
   }
 
-  Widget _buildCalculationRow(String label, String operator, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              operator,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.amber.shade800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildTotalCard(Color primaryColor) {
     double total = 0.0;
     for (final expense in _expenses) {
@@ -738,9 +671,9 @@ class _BalanceDetailsDialogState extends State<BalanceDetailsDialog> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
+        color: color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         children: [

@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant NET as ConnectivityService
+  participant SYNC as SyncService
+  participant OFS as OfflineExpenseService
+  participant API as Backend API
+  NET-->>SYNC: online event
+  SYNC->>OFS: getPendingQueue()
+  OFS-->>SYNC: operations
+  loop each operation
+    SYNC->>API: execute request
+    API-->>SYNC: response
+    SYNC->>OFS: markSynced or keepRetry
+  end
+  SYNC->>OFS: updateLocalData()

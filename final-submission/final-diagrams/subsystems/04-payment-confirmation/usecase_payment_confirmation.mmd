@@ -1,0 +1,17 @@
+%%{init: {'flowchart': {'curve': 'stepBefore'}} }%%
+flowchart TB
+  P((Payer))
+  R((Receiver))
+  subgraph Payment Confirmation Subsystem
+    UC1[Submit Payment Confirmation]
+    UC2[View Pending Confirmations]
+    UC3[Approve Confirmation]
+    UC4[Reject Confirmation]
+    UC5[View Payment History]
+  end
+  P --> UC1
+  P --> UC5
+  R --> UC2
+  R --> UC3
+  R --> UC4
+  R --> UC5

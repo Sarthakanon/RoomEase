@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/roomspace_data.dart';
 import '../services/smart_api_service.dart';
 
@@ -52,7 +51,15 @@ class RoomspaceProvider extends ChangeNotifier {
   String? get error => _error;
   RoomspaceErrorType? get errorType => _errorType;
   bool get hasMultipleRoomspaces => _roomspaces.length > 1;
-  bool get canJoinMore => _roomspaces.length < 5;
+  
+  /// Check if user can join more roomspaces based on their subscription
+  /// This should be checked against subscription limits, not hardcoded
+  bool get canJoinMore {
+    // Fallback used only in places where subscription provider is unavailable.
+    // Keep this aligned with current default product limit.
+    return _roomspaces.length < 10;
+  }
+  
   int get roomspaceCount => _roomspaces.length;
   bool get hasNoRoomspaces => _roomspaces.isEmpty;
   bool get isPersonalSpace => _activeRoomspace == null;
@@ -96,6 +103,8 @@ class RoomspaceProvider extends ChangeNotifier {
         // Restore active roomspace from SharedPreferences
         await _restoreActiveRoomspace();
         print('🎯 Active roomspace: ${_activeRoomspace?.name ?? "Personal Space"}');
+        print('🏠 Has roomspaces: ${_roomspaces.isNotEmpty}');
+        print('🔍 Is personal space: ${_activeRoomspace == null}');
         
         // Don't automatically set first roomspace - respect personal space mode
         // User can explicitly switch using the global selector
@@ -151,6 +160,7 @@ class RoomspaceProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       print('✅ loadRoomspaces completed. Count: ${_roomspaces.length}, Active: ${_activeRoomspace?.name ?? "None"}');
+      print('📊 Final state - hasNoRoomspaces: ${_roomspaces.isEmpty}, isPersonalSpace: ${_activeRoomspace == null}');
     }
   }
   
@@ -273,20 +283,9 @@ class RoomspaceProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
-      // Get current user's Firebase UID
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        throw RoomspaceException(
-          'You must be logged in to leave a roomspace.',
-          RoomspaceErrorType.authenticationRequired,
-        );
-      }
-      
-      // Call API to leave roomspace
-      await _smartApi.removeMemberFromRoomspace(
-        int.parse(roomspaceId),
-        currentUser.uid,
-      );
+      // Call API to leave roomspace using new endpoint
+      // Pass the UUID string directly, don't try to parse as int
+      await _smartApi.leaveRoomspace(roomspaceId);
       
       // Remove from local list
       _roomspaces.removeWhere((r) => r.id == roomspaceId);
@@ -294,20 +293,24 @@ class RoomspaceProvider extends ChangeNotifier {
       // Update cache
       await _cacheRoomspaces();
       
-      // If we left the active roomspace, switch to another one
+      // If we left the active roomspace, switch to another one or Personal Space
       if (_activeRoomspace?.id == roomspaceId) {
         if (_roomspaces.isNotEmpty) {
+          // Switch to the first available roomspace
           await setActiveRoomspace(_roomspaces.first.id);
+          print('✅ Switched to roomspace: ${_roomspaces.first.name}');
         } else {
+          // No roomspaces left - switch to Personal Space
           _activeRoomspace = null;
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove(_activeRoomspaceKey);
-          throw RoomspaceException(
-            'No roomspaces available. Please create or join a roomspace.',
-            RoomspaceErrorType.noRoomspaces,
-          );
+          print('✅ Switched to Personal Space (no roomspaces left)');
         }
       }
+      
+      _isLoading = false;
+      notifyListeners();
+      print('✅ Leave roomspace completed successfully');
     } on RoomspaceException catch (e) {
       _error = e.message;
       _errorType = e.type;
@@ -515,7 +518,7 @@ class RoomspaceProvider extends ChangeNotifier {
       case RoomspaceErrorType.authenticationRequired:
         return 'Please log in to continue.';
       case RoomspaceErrorType.limitReached:
-        return 'You have reached the maximum limit of 5 roomspaces.';
+        return 'You have reached your roomspace limit. Upgrade to Pro for more roomspaces.';
       case RoomspaceErrorType.unknown:
       default:
         return _error ?? 'An unexpected error occurred. Please try again.';

@@ -1,0 +1,23 @@
+%%{init: {'flowchart': {'curve': 'stepBefore'}} }%%
+flowchart TB
+  U((User))
+  G((Google Identity))
+  subgraph Auth Subsystem
+    UC1[Create Account with Email and Password]
+    UC2[Login with Email and Password]
+    UC7[Google Sign-In or Sign-Up]
+    UC8[Forgot Password and Reset]
+    UC3[Verify Session]
+    UC4[Refresh Session]
+    UC5[Logout]
+    UC6[Update Profile]
+  end
+  U --> UC1
+  U --> UC2
+  U --> UC7
+  U --> UC8
+  U --> UC3
+  U --> UC4
+  U --> UC5
+  U --> UC6
+  G --> UC7

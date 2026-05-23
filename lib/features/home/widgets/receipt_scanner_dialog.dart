@@ -36,8 +36,11 @@ class _ReceiptScannerDialogState extends State<ReceiptScannerDialog> {
     try {
       final res = await method();
       if (res != null) {
-        if (res.hasData) widget.onScanComplete(res);
-        else _showResult(res);
+        if (res.hasData) {
+          widget.onScanComplete(res);
+        } else {
+          _showResult(res);
+        }
       }
     } on PermissionDeniedException catch (e) {
       setState(() { _error = e.message; _showSettings = e.isPermanent; });
@@ -114,10 +117,64 @@ class _ReceiptScannerDialogState extends State<ReceiptScannerDialog> {
   }
 
   Widget _buildError() {
-    return Container(margin: const EdgeInsets.symmetric(horizontal: 24), padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.05), border: Border.all(color: Colors.red.withValues(alpha: 0.1)), borderRadius: BorderRadius.circular(16)), child: Column(children: [
-      Row(children: [const Icon(Icons.error_outline_rounded, color: Colors.red, size: 20), const SizedBox(width: 8), Expanded(child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w600)))]),
-      if (_showSettings) Padding(padding: const EdgeInsets.only(top: 12), child: SizedBox(width: double.infinity, height: 40, child: ElevatedButton(onPressed: _ocrService.openSettings, style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 0), child: const Text('Open Settings')))),
-    ]));
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.05),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.1)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.red, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_showSettings)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: SizedBox(
+                width: double.infinity,
+                height: 44, // Increased height for better text visibility
+                child: ElevatedButton(
+                  onPressed: _ocrService.openSettings,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  child: const Text(
+                    'Open Settings',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

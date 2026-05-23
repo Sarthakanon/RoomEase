@@ -1,0 +1,11 @@
+sequenceDiagram
+  actor U as User
+  participant APP as Mobile App
+  participant API as Roomspace API
+  participant DB as PostgreSQL
+  U->>APP: Create roomspace
+  APP->>API: POST /api/roomspaces
+  API->>DB: Insert roomspace
+  API->>DB: Insert creator membership
+  DB-->>API: Success
+  API-->>APP: Roomspace data + code

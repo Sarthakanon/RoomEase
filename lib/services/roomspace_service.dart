@@ -1,4 +1,3 @@
-import '../models/roomspace_model.dart';
 import 'api_service.dart';
 
 class RoomspaceService {

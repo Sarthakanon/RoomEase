@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:ui';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'features/auth/presentation/splash_screen.dart';
@@ -16,37 +18,70 @@ import 'features/settings/presentation/settings_screen.dart';
 import 'features/notifications/presentation/notification_screen.dart';
 import 'features/expenses/presentation/expense_list_screen.dart';
 import 'features/expenses/presentation/personal_expenses_screen.dart';
+import 'features/subscription/providers/subscription_provider.dart';
 import 'core/widgets/main_navigation.dart';
 import 'services/api_service.dart';
 import 'services/performance_service.dart';
 import 'services/loading_service.dart';
 import 'providers/roomspace_provider.dart';
 import 'widgets/ban_listener_widget.dart';
+import 'widgets/auth_state_listener.dart';
+import 'dart:developer';
+
+// Global navigator key for navigation from anywhere in the app
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
+  // Set up global error handling to prevent app crashes
+  FlutterError.onError = (FlutterErrorDetails details) {
+    log('Flutter Error: ${details.exception}');
+    log('Stack trace: ${details.stack}');
+    // Don't crash the app, just log the error
+  };
+
+  // Handle errors in async operations
+  PlatformDispatcher.instance.onError = (error, stack) {
+    log('Platform Error: $error');
+    log('Stack trace: $stack');
+    return true; // Prevent crash
+  };
+
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    // Initialize Firebase
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Initialize persistent cookie storage for API service
-  await ApiService().initializePersistentCookies();
+    // Initialize Stripe
+    Stripe.publishableKey = 'pk_test_51TU9vSHqZqdKUPbJu11tfIfeUWuwYxZvCfCQUMzAGWBXip0YbLbykzxIBUOqgVvu5KXBP6S8qo9EZe66ykmoqMpm00eZ5U1MGu';
+    await Stripe.instance.applySettings();
+    
+    debugPrint('✅ Stripe initialized');
 
-  // Initialize performance optimizations
-  await PerformanceService().initialize();
+    // Initialize persistent cookie storage for API service
+    await ApiService().initializePersistentCookies();
 
-  // Configure system UI overlay style for status bar
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
-      systemNavigationBarColor: Colors.white,
-      systemNavigationBarIconBrightness: Brightness.dark,
-    ),
-  );
+    // Initialize performance optimizations
+    await PerformanceService().initialize();
 
-  runApp(const RoomEaseApp());
+    // Configure system UI overlay style for status bar
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+    );
+
+    runApp(const RoomEaseApp());
+  } catch (e, stackTrace) {
+    log('Error during app initialization: $e');
+    log('Stack trace: $stackTrace');
+    // Still try to run the app even if some initialization fails
+    runApp(const RoomEaseApp());
+  }
 }
 
 class RoomEaseApp extends StatelessWidget {
@@ -59,11 +94,23 @@ class RoomEaseApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => RoomspaceProvider()),
         ChangeNotifierProvider(create: (_) => LoadingService()),
+        ChangeNotifierProvider(
+          create: (_) {
+            final provider = SubscriptionProvider();
+            // Initialize subscription data when provider is created
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              provider.initialize();
+            });
+            return provider;
+          },
+        ),
       ],
       child: BanListenerWidget(
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'RoomEase',
+        child: AuthStateListener(
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            debugShowCheckedModeBanner: false,
+            title: 'RoomEase',
           theme: ThemeData(
             primarySwatch: Colors.indigo,
             colorScheme: ColorScheme.fromSeed(
@@ -142,6 +189,7 @@ class RoomEaseApp extends StatelessWidget {
             '/expense-list': (context) => const ExpenseListScreen(),
             '/personal-expenses': (context) => const PersonalExpensesScreen(),
           },
+        ),
         ),
       ),
     );

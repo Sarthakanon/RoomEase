@@ -51,21 +51,47 @@ class AuthController extends ChangeNotifier {
   Future<UserCredential?> loginWithGoogle() async {
     setLoading(true);
     try {
+      debugPrint('🔵 AuthController: Starting Google login...');
+      
       final userCredential = await _authService.signInWithGoogle();
 
-      if (userCredential != null) {
-        // Get Firebase ID token
-        final idToken = await userCredential.user!.getIdToken();
+      if (userCredential == null) {
+        debugPrint('⚪ AuthController: User canceled Google Sign-In');
+        setLoading(false);
+        return null;
+      }
 
-        if (idToken != null) {
-          // Send token to backend to create session and store user in PostgreSQL
+      debugPrint('🔵 AuthController: Google Sign-In successful, getting ID token...');
+
+      // Get Firebase ID token
+      final idToken = await userCredential.user!.getIdToken();
+
+      if (idToken != null) {
+        debugPrint('🔵 AuthController: ID token obtained, sending to backend...');
+        
+        // Send token to backend to create session and store user in PostgreSQL
+        try {
           await _apiService.login(idToken);
+          debugPrint('✅ AuthController: Backend login successful');
+        } catch (e) {
+          debugPrint('❌ AuthController: Backend login failed: $e');
+          // Sign out from Firebase if backend login fails
+          await _authService.signOut();
+          setLoading(false);
+          throw 'Failed to authenticate with server. Please try again.';
         }
+      } else {
+        debugPrint('❌ AuthController: Failed to get ID token');
+        await _authService.signOut();
+        setLoading(false);
+        throw 'Failed to get authentication token. Please try again.';
       }
 
       setLoading(false);
       return userCredential;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('❌ AuthController: Login with Google failed: $e');
+      debugPrint('Stack trace: $stackTrace');
       setLoading(false);
       rethrow;
     }
@@ -87,14 +113,12 @@ class AuthController extends ChangeNotifier {
       );
 
       if (userCredential != null && userCredential.user != null) {
-        // Get Firebase ID token
-        final idToken = await userCredential.user!.getIdToken();
-
-        if (idToken != null) {
-          // Send token to backend to create session and store user in PostgreSQL
-          await _apiService.login(idToken);
-        }
-
+        debugPrint('✅ AuthController: User created successfully');
+        debugPrint('📧 AuthController: Email verification sent to ${userCredential.user!.email}');
+        
+        // DO NOT login to backend yet - user needs to verify email first
+        // DO NOT sign out here - let the UI handle it after showing the dialog
+        
         // Create user document in Firestore (for backward compatibility)
         final user = UserModel(
           id: userCredential.user!.uid,
@@ -102,7 +126,14 @@ class AuthController extends ChangeNotifier {
           email: email,
           createdAt: DateTime.now(),
         );
-        await _firestoreService.createUser(user);
+        
+        try {
+          await _firestoreService.createUser(user);
+          debugPrint('✅ AuthController: Firestore user document created');
+        } catch (e) {
+          debugPrint('⚠️ AuthController: Firestore creation failed (non-critical): $e');
+          // Don't fail signup if Firestore fails - it's optional
+        }
       }
 
       setLoading(false);

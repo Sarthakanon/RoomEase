@@ -214,7 +214,7 @@ class _ReportOptionsScreenState extends State<ReportOptionsScreen> {
           ),
           if (_isLoading)
             Container(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               child: const Center(child: CircularProgressIndicator()),
             ),
         ],
@@ -235,7 +235,7 @@ class _ReportOptionsScreenState extends State<ReportOptionsScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1A1A2E).withOpacity(0.2),
+            color: const Color(0xFF1A1A2E).withValues(alpha: 0.2),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),

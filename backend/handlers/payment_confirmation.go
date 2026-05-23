@@ -28,7 +28,7 @@ func NewPaymentConfirmationHandler(paymentService *services.PaymentConfirmationS
 // POST /api/roomspaces/:id/payments/confirm
 func (h *PaymentConfirmationHandler) CreatePaymentConfirmation(c *gin.Context) {
 	roomspaceID := c.Param("id")
-	
+
 	// Get authenticated user ID
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -48,13 +48,14 @@ func (h *PaymentConfirmationHandler) CreatePaymentConfirmation(c *gin.Context) {
 
 	// Create payment confirmation
 	payment := &models.PaymentConfirmation{
-		RoomspaceID: roomspaceID,
-		FromUserID:  userID.(string),
-		ToUserID:    req.ToUserID,
-		Amount:      req.Amount,
-		PaymentType: req.PaymentType,
-		Notes:       req.Notes,
-		PaymentDate: req.PaymentDate,
+		RoomspaceID:     roomspaceID,
+		FromUserID:      userID.(string),
+		ToUserID:        req.ToUserID,
+		Amount:          req.Amount,
+		PaymentType:     req.PaymentType,
+		Notes:           req.Notes,
+		PaymentProofURL: req.PaymentProofURL,
+		PaymentDate:     req.PaymentDate,
 	}
 
 	if err := h.paymentService.CreatePaymentConfirmation(payment); err != nil {
@@ -80,7 +81,7 @@ func (h *PaymentConfirmationHandler) CreatePaymentConfirmation(c *gin.Context) {
 func (h *PaymentConfirmationHandler) ConfirmPayment(c *gin.Context) {
 	roomspaceID := c.Param("id")
 	paymentIDStr := c.Param("paymentId")
-	
+
 	// Get authenticated user ID
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -104,7 +105,7 @@ func (h *PaymentConfirmationHandler) ConfirmPayment(c *gin.Context) {
 		} else if err == models.ErrAlreadyConfirmed || err == models.ErrAlreadyRejected {
 			statusCode = http.StatusBadRequest
 		}
-		
+
 		c.JSON(statusCode, gin.H{
 			"error":   "Failed to confirm payment",
 			"details": err.Error(),
@@ -133,7 +134,7 @@ func (h *PaymentConfirmationHandler) ConfirmPayment(c *gin.Context) {
 func (h *PaymentConfirmationHandler) RejectPayment(c *gin.Context) {
 	roomspaceID := c.Param("id")
 	paymentIDStr := c.Param("paymentId")
-	
+
 	// Get authenticated user ID
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -164,7 +165,7 @@ func (h *PaymentConfirmationHandler) RejectPayment(c *gin.Context) {
 		} else if err == models.ErrAlreadyConfirmed || err == models.ErrAlreadyRejected {
 			statusCode = http.StatusBadRequest
 		}
-		
+
 		c.JSON(statusCode, gin.H{
 			"error":   "Failed to reject payment",
 			"details": err.Error(),
@@ -192,7 +193,7 @@ func (h *PaymentConfirmationHandler) RejectPayment(c *gin.Context) {
 // GET /api/roomspaces/:id/payments/pending
 func (h *PaymentConfirmationHandler) GetPendingConfirmations(c *gin.Context) {
 	roomspaceID := c.Param("id")
-	
+
 	// Get authenticated user ID
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -226,7 +227,7 @@ func (h *PaymentConfirmationHandler) GetPendingConfirmations(c *gin.Context) {
 // GET /api/roomspaces/:id/payments/history
 func (h *PaymentConfirmationHandler) GetPaymentHistory(c *gin.Context) {
 	roomspaceID := c.Param("id")
-	
+
 	// Get authenticated user ID
 	_, exists := c.Get("user_id")
 	if !exists {
@@ -301,7 +302,7 @@ func (h *PaymentConfirmationHandler) GetPaymentHistory(c *gin.Context) {
 // GET /api/roomspaces/:id/payments/stats
 func (h *PaymentConfirmationHandler) GetPaymentStats(c *gin.Context) {
 	roomspaceID := c.Param("id")
-	
+
 	// Get authenticated user ID
 	_, exists := c.Get("user_id")
 	if !exists {
@@ -336,6 +337,7 @@ func (h *PaymentConfirmationHandler) buildPaymentResponse(payment *models.Paymen
 		PaymentType:     payment.PaymentType,
 		Status:          payment.Status,
 		Notes:           payment.Notes,
+		PaymentProofURL: payment.PaymentProofURL,
 		PaymentDate:     payment.PaymentDate,
 		ConfirmedAt:     payment.ConfirmedAt,
 		RejectionReason: payment.RejectionReason,
