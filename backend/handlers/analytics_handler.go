@@ -94,25 +94,32 @@ func (h *AnalyticsHandler) GetSummary(c *gin.Context) {
 		return
 	}
 
-	// Get predictions to populate predicted_next_month
+	// ML-only mode: predictions and recommendations must come from ML service.
 	predictions, err := h.analyticsService.GetSpendingPredictions(userID.(string), roomspaceIDPtr)
-	if err == nil && !predictions.InsufficientData {
-		totalPredicted := 0.0
-		for _, pred := range predictions.Predictions {
-			totalPredicted += pred.PredictedAmount
-		}
-		summary.PredictedNextMonth = totalPredicted
+	if err != nil || predictions == nil || predictions.InsufficientData {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "ML predictions are unavailable",
+		})
+		return
 	}
+	totalPredicted := 0.0
+	for _, pred := range predictions.Predictions {
+		totalPredicted += pred.PredictedAmount
+	}
+	summary.PredictedNextMonth = totalPredicted
 
-	// Get recommendations to populate savings_potential
 	recommendations, err := h.analyticsService.GetBudgetRecommendations(userID.(string), roomspaceIDPtr)
-	if err == nil {
-		totalSavings := 0.0
-		for _, rec := range recommendations {
-			totalSavings += rec.PotentialSavings
-		}
-		summary.SavingsPotential = totalSavings
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "ML recommendations are unavailable",
+		})
+		return
 	}
+	totalSavings := 0.0
+	for _, rec := range recommendations {
+		totalSavings += rec.PotentialSavings
+	}
+	summary.SavingsPotential = totalSavings
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

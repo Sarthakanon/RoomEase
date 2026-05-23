@@ -576,8 +576,8 @@ func (s *AnalyticsService) GetSpendingPredictions(userUID string, roomspaceID *s
 		}, nil
 	}
 
-	// Fallback to statistical predictions if ML fails
-	return s.getStatisticalPredictions(userUID, roomspaceID, expenses)
+	// ML-only mode: do not fallback to statistical predictions.
+	return nil, fmt.Errorf("ml predictions unavailable")
 }
 
 // getStatisticalPredictions provides fallback statistical predictions
@@ -698,8 +698,8 @@ func (s *AnalyticsService) GetBudgetRecommendations(userUID string, roomspaceID 
 		return recommendations, nil
 	}
 
-	// Fallback to rule-based recommendations if ML fails
-	return s.getRuleBasedRecommendations(userUID, roomspaceID, expenses)
+	// ML-only mode: do not fallback to rule-based recommendations.
+	return nil, fmt.Errorf("ml recommendations unavailable")
 }
 
 // getRuleBasedRecommendations provides fallback rule-based recommendations
@@ -881,8 +881,8 @@ func (s *AnalyticsService) DetectAnomalies(userUID string, roomspaceID *string) 
 		return anomalies, nil
 	}
 
-	// Fallback to statistical anomaly detection if ML fails
-	return s.getStatisticalAnomalies(expenses)
+	// ML-only mode: do not fallback to statistical anomaly detection.
+	return nil, fmt.Errorf("ml anomalies unavailable")
 }
 
 // getStatisticalAnomalies provides fallback statistical anomaly detection

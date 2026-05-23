@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: roomease-backend-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: ENVIRONMENT
+        value: production
+      - key: SESSION_TIMEOUT
+        value: 24h
+      - key: SESSION_SECRET
+        sync: false
+      - key: POSTGRES_DATABASE_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: FIREBASE_CREDENTIAL_PATH
+        value: serviceAccount.json
+      - key: ML_API_URL
+        fromService:
+          type: web
+          name: roomease-analytics-ml-bridge
+          property: url
+      - key: ML_API_PORT
+        value: "5001"
+
+  - type: web
+    name: roomease-analytics-ml-bridge
+    runtime: python
+    rootDir: dataset-sarthak-ai
+    plan: free
+    autoDeploy: true
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: python ml_bridge_v2_server.py
+    envVars:
+      - key: ML_API_HOST
+        value: 0.0.0.0
+      - key: ML_API_PORT
+        value: "5001"
+      - key: V2_MODELS_DIR
+        value: models_v2_nepal
