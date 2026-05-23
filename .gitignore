@@ -154,3 +154,18 @@ JIRA_TICKETS.md
 ROOMSPACE_FIX_SUMMARY.md
 SMS_IMPLEMENTATION_ATTEMPTS.md
 UI_CHANGES_DOCUMENTATION.txt
+
+# -------------------------
+# Large Generated Artifacts
+# -------------------------
+backend/roomease_backend
+go1.23.0.linux-amd64.tar.gz
+dataset-sarthak-ai/.venv/
+dataset-sarthak-ai/output/**/*.csv
+dataset-sarthak-ai/output_v2/**/*.csv
+dataset-sarthak-ai/output_v2_sample/**/*.csv
+dataset-sarthak-ai/features/**/*.parquet
+dataset-sarthak-ai/features_v2/**/*.parquet
+dataset-sarthak-ai/features_v2_nepal/**/*.parquet
+dataset-sarthak-ai/features_v2_nepal_sample/**/*.parquet
+backend/migrations/backups/
