@@ -1,12 +1,15 @@
 /// App-wide constants and configuration
 class AppConstants {
   // Backend Configuration
-  // Use actual local IP address for better connectivity
-  static const String backendIp = '192.168.1.89'; // Your local IP address
-  static const int backendPort = 8080; // HTTP port for local development
+  // Production backend URL (Render)
+  static const String backendBaseUrl = 'https://roomease-backend-80x8.onrender.com';
+
+  // Legacy IP/port values kept for compatibility with old settings screen
+  static const String backendIp = 'roomease-backend-80x8.onrender.com';
+  static const int backendPort = 443;
   
   // Default backend IP for fallback
-  static const String defaultBackendIp = '192.168.1.89';
+  static const String defaultBackendIp = 'roomease-backend-80x8.onrender.com';
   
   // Timeout settings
   static const Duration connectTimeout = Duration(seconds: 10);
