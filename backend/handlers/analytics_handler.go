@@ -94,37 +94,40 @@ func (h *AnalyticsHandler) GetSummary(c *gin.Context) {
 		return
 	}
 
-	// ML-only mode: predictions and recommendations must come from ML service.
+	// Graceful fallback mode: return base summary even when ML services are unavailable.
+	warnings := []string{}
+
 	predictions, err := h.analyticsService.GetSpendingPredictions(userID.(string), roomspaceIDPtr)
-	if err != nil || predictions == nil || predictions.InsufficientData {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "ML predictions are unavailable",
-		})
-		return
+	if err == nil && predictions != nil && !predictions.InsufficientData {
+		totalPredicted := 0.0
+		for _, pred := range predictions.Predictions {
+			totalPredicted += pred.PredictedAmount
+		}
+		summary.PredictedNextMonth = totalPredicted
+	} else {
+		warnings = append(warnings, "ML predictions unavailable; using fallback summary values")
 	}
-	totalPredicted := 0.0
-	for _, pred := range predictions.Predictions {
-		totalPredicted += pred.PredictedAmount
-	}
-	summary.PredictedNextMonth = totalPredicted
 
 	recommendations, err := h.analyticsService.GetBudgetRecommendations(userID.(string), roomspaceIDPtr)
-	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "ML recommendations are unavailable",
-		})
-		return
+	if err == nil {
+		totalSavings := 0.0
+		for _, rec := range recommendations {
+			totalSavings += rec.PotentialSavings
+		}
+		summary.SavingsPotential = totalSavings
+	} else {
+		warnings = append(warnings, "ML recommendations unavailable; using fallback summary values")
 	}
-	totalSavings := 0.0
-	for _, rec := range recommendations {
-		totalSavings += rec.PotentialSavings
-	}
-	summary.SavingsPotential = totalSavings
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"success": true,
 		"data":    summary,
-	})
+	}
+	if len(warnings) > 0 {
+		response["warnings"] = warnings
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // GetTrends handles GET /api/analytics/trends
