@@ -300,4 +300,16 @@ class OfflineExpenseService {
     final stats = await _localDb.getDatabaseStats();
     return (stats['unsynced_expenses'] ?? 0) + (stats['unsynced_personal_expenses'] ?? 0);
   }
+
+  /// Get unsynced shared expenses (optionally filtered by roomspace)
+  Future<List<ExpenseData>> getUnsyncedExpenses({String? roomspaceId}) async {
+    final unsynced = await _localDb.getUnsyncedExpenses();
+    if (roomspaceId == null) return unsynced;
+    return unsynced.where((e) => e.roomspaceId == roomspaceId).toList();
+  }
+
+  /// Get unsynced personal expenses
+  Future<List<PersonalExpenseData>> getUnsyncedPersonalExpenses() async {
+    return await _localDb.getUnsyncedPersonalExpenses();
+  }
 }

@@ -11,6 +11,7 @@ class AdvancedCacheService {
 
   // Memory cache for instant access
   final Map<String, _CacheEntry> _memoryCache = {};
+  static const int _maxMemoryEntries = 30;
   
   // Cache configuration
   static const Duration _shortCache = Duration(minutes: 2);   // Balances, notifications
@@ -31,6 +32,7 @@ class AdvancedCacheService {
     String key, {
     Duration? maxAge,
     bool forceRefresh = false,
+    bool allowExpired = false,
   }) async {
     if (forceRefresh) {
       await _invalidate(key);
@@ -45,10 +47,11 @@ class AdvancedCacheService {
     }
 
     // Check disk cache
-    final diskData = await _getDiskCache<T>(key, maxAge);
+    final diskData = await _getDiskCache<T>(key, maxAge, allowExpired: allowExpired);
     if (diskData != null) {
       // Store in memory for faster access
       _memoryCache[key] = _CacheEntry(diskData, DateTime.now());
+      _trimMemoryCache();
       debugPrint('💾 Disk cache hit: $key');
       return diskData;
     }
@@ -67,6 +70,7 @@ class AdvancedCacheService {
     
     // Store in memory
     _memoryCache[key] = _CacheEntry(data, now);
+    _trimMemoryCache();
     
     // Store on disk
     await _setDiskCache(key, data, ttl ?? _mediumCache);
@@ -74,8 +78,18 @@ class AdvancedCacheService {
     debugPrint('💾 Cached: $key (TTL: ${ttl ?? _mediumCache})');
   }
 
+  void _trimMemoryCache() {
+    if (_memoryCache.length <= _maxMemoryEntries) return;
+    final sorted = _memoryCache.entries.toList()
+      ..sort((a, b) => a.value.timestamp.compareTo(b.value.timestamp));
+    final removeCount = _memoryCache.length - _maxMemoryEntries;
+    for (int i = 0; i < removeCount; i++) {
+      _memoryCache.remove(sorted[i].key);
+    }
+  }
+
   /// Get data from disk cache
-  Future<T?> _getDiskCache<T>(String key, Duration? maxAge) async {
+  Future<T?> _getDiskCache<T>(String key, Duration? maxAge, {bool allowExpired = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheString = prefs.getString('cache_$key');
@@ -91,8 +105,10 @@ class AdvancedCacheService {
       final effectiveMaxAge = maxAge ?? ttl;
       
       if (age > effectiveMaxAge) {
-        await prefs.remove('cache_$key');
-        return null;
+        if (!allowExpired) {
+          await prefs.remove('cache_$key');
+          return null;
+        }
       }
       
       return cacheData['data'] as T?;

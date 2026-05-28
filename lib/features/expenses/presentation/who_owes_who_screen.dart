@@ -32,11 +32,14 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
   late PaymentConfirmationService _paymentService;
   
   BalanceSummary? _balanceSummary;
+  List<Map<String, dynamic>> _roommateBalances = [];
   List<Map<String, dynamic>> _settlementSuggestions = [];
   double _youOwe = 0.0;
   double _youAreOwed = 0.0;
+  bool _isGlobalNetMode = false;
   bool _isLoading = true;
   String? _currentUserId;
+  final Map<String, String> _reminderStatusByUserId = {};
   StreamSubscription<ExpenseUpdateEvent>? _expenseUpdateSubscription;
   StreamSubscription<BalanceUpdateEvent>? _balanceUpdateSubscription;
 
@@ -89,13 +92,23 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
       _currentUserId = user?.uid;
       _currentUserId ??= await AuthService().getStoredUserId();
       
-      final rawBalances = await _smartApi.getRoomspaceBalances(widget.roomspaceId);
+      final rawBalances = await _smartApi.getRoomspaceBalances(
+        widget.roomspaceId,
+        forceRefresh: true,
+      );
       final rawData = rawBalances['data'] as Map<String, dynamic>? ?? {};
+      _isGlobalNetMode = (rawData['balance_mode'] as String?) == 'global_net';
       _youOwe = (rawData['you_owe'] as num?)?.toDouble() ?? 0.0;
       _youAreOwed = (rawData['you_are_owed'] as num?)?.toDouble() ?? 0.0;
+      _roommateBalances = ((rawData['roommate_balances'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+          .toList();
 
       final balanceSummary = await _balanceService.getRoomspaceBalances(widget.roomspaceId);
-      final suggestions = await _balanceService.getSettlementSuggestions(widget.roomspaceId);
+      final suggestions = _isGlobalNetMode
+          ? <SettlementSuggestion>[]
+          : await _balanceService.getSettlementSuggestions(widget.roomspaceId);
       
       setState(() {
         _balanceSummary = balanceSummary;
@@ -109,7 +122,18 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      debugPrint('Error loading who-owes-who balances: $e');
+      if (!mounted) return;
+      // Clear previous state to avoid showing stale debts from another roomspace/session.
+      setState(() {
+        _balanceSummary = null;
+        _roommateBalances = [];
+        _settlementSuggestions = [];
+        _youOwe = 0.0;
+        _youAreOwed = 0.0;
+        _isGlobalNetMode = false;
+        _isLoading = false;
+      });
     }
   }
 
@@ -125,6 +149,7 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
         .map((m) => {
               'id': m['user_id'] as String,
               'name': m['name'] as String,
+              'qr_image_url': m['qr_image_url'] as String? ?? '',
             })
         .toList() ?? [];
 
@@ -168,10 +193,36 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
           'amount': amount,
         },
       );
-      if (mounted && response['success'] == true) {
+      final ok = response['success'] == true || (response['error'] == null && response['message'] != null);
+      if (mounted && ok) {
+        setState(() {
+          _reminderStatusByUserId[userId] = 'Reminder sent';
+        });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Reminder sent to $userName')));
+      } else if (mounted) {
+        setState(() {
+          _reminderStatusByUserId[userId] = 'Failed to send reminder';
+        });
       }
-    } catch (_) {}
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      final isLimitReached = msg.contains('429') ||
+          msg.contains('reminder limit reached') ||
+          msg.contains('2 reminders') ||
+          msg.contains('24 hours');
+      if (mounted) {
+        setState(() {
+          _reminderStatusByUserId[userId] = isLimitReached
+              ? 'Reminder limit reached for today'
+              : 'Failed to send reminder';
+        });
+        if (isLimitReached) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Reminder limit reached for today')),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -268,8 +319,16 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
   }
 
   Widget _buildBalanceSummaryCard(Color primaryColor) {
-    final youOweTotal = (_youOwe - _youAreOwed).clamp(0.0, double.infinity);
-    final owedToYouTotal = (_youAreOwed - _youOwe).clamp(0.0, double.infinity);
+    final peopleYouOwe = _getPeopleYouOwe();
+    final peopleWhoOweYou = _getPeopleWhoOweYou();
+    final youOweTotal = peopleYouOwe.fold<double>(
+      0.0,
+      (sum, p) => sum + ((p['balance'] as num?)?.toDouble() ?? 0.0),
+    );
+    final owedToYouTotal = peopleWhoOweYou.fold<double>(
+      0.0,
+      (sum, p) => sum + ((p['balance'] as num?)?.toDouble() ?? 0.0),
+    );
 
     return Container(
       width: double.infinity,
@@ -354,16 +413,17 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
 
   Widget _buildPersonCard(Map<String, dynamic> person, {required bool isYouOwe}) {
     final name = person['name'] as String;
+    final userId = person['user_id'] as String;
     final amount = (person['balance'] as num).toDouble().abs();
     final color = isYouOwe ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
     final cardTapHandler = isYouOwe
         ? () => _showQrAndMarkPaidDialog(
-              toUserId: person['user_id'] as String,
+              toUserId: userId,
               toUserName: name,
               amount: amount,
               qrImageUrl: person['qr_image_url'] as String?,
             )
-        : () => _sendReminder(person['user_id'], name, amount);
+        : () => _sendReminder(userId, name, amount);
 
     return InkWell(
       onTap: cardTapHandler,
@@ -421,6 +481,19 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
                     ),
                   ),
                 ),
+                if (!isYouOwe && (_reminderStatusByUserId[userId]?.isNotEmpty ?? false)) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _reminderStatusByUserId[userId]!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: _reminderStatusByUserId[userId] == 'Reminder sent'
+                          ? Colors.green.shade700
+                          : Colors.red.shade700,
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -555,6 +628,7 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
 
   List<Map<String, dynamic>> _getPeopleYouOwe() {
     if (_currentUserId == null) return [];
+    // Prefer optimized settlement suggestions so UI matches "best settlement" flow.
     if (_settlementSuggestions.isNotEmpty) {
       final grouped = <String, Map<String, dynamic>>{};
       for (final s in _settlementSuggestions.where((s) => s['from_user_id'] == _currentUserId)) {
@@ -572,6 +646,18 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
       }
       return grouped.values.where((v) => (v['balance'] as double) > 0.01).toList();
     }
+    if (_roommateBalances.isNotEmpty) {
+      return _roommateBalances
+          .where((r) => ((r['net_amount'] as num?)?.toDouble() ?? 0.0) < -0.01)
+          .map((r) => {
+                'user_id': r['user_id'] as String? ?? '',
+                'name': (r['user_name'] as String?) ?? 'Unknown',
+                'balance': (((r['net_amount'] as num?)?.toDouble() ?? 0.0).abs()),
+                'qr_image_url': r['qr_image_url'] as String?,
+              })
+          .where((r) => (r['user_id'] as String).isNotEmpty)
+          .toList();
+    }
     final fallback = _getPeopleYouOweFromSummary();
     if (fallback.isNotEmpty) return fallback;
     return _getSingleRoommateFallback(isYouOwe: true);
@@ -579,6 +665,7 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
 
   List<Map<String, dynamic>> _getPeopleWhoOweYou() {
     if (_currentUserId == null) return [];
+    // Prefer optimized settlement suggestions so UI matches "best settlement" flow.
     if (_settlementSuggestions.isNotEmpty) {
       final grouped = <String, Map<String, dynamic>>{};
       for (final s in _settlementSuggestions.where((s) => s['to_user_id'] == _currentUserId)) {
@@ -596,6 +683,18 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
       }
       return grouped.values.where((v) => (v['balance'] as double) > 0.01).toList();
     }
+    if (_roommateBalances.isNotEmpty) {
+      return _roommateBalances
+          .where((r) => ((r['net_amount'] as num?)?.toDouble() ?? 0.0) > 0.01)
+          .map((r) => {
+                'user_id': r['user_id'] as String? ?? '',
+                'name': (r['user_name'] as String?) ?? 'Unknown',
+                'balance': ((r['net_amount'] as num?)?.toDouble() ?? 0.0),
+                'qr_image_url': r['qr_image_url'] as String?,
+              })
+          .where((r) => (r['user_id'] as String).isNotEmpty)
+          .toList();
+    }
     final fallback = _getPeopleWhoOweYouFromSummary();
     if (fallback.isNotEmpty) return fallback;
     return _getSingleRoommateFallback(isYouOwe: false);
@@ -609,9 +708,7 @@ class _WhoOwesWhoScreenState extends State<WhoOwesWhoScreen> with WidgetsBinding
     if (others.length != 1) return [];
 
     final other = others.first;
-    final amount = isYouOwe
-        ? (_youOwe - _youAreOwed).clamp(0.0, double.infinity)
-        : (_youAreOwed - _youOwe).clamp(0.0, double.infinity);
+    final amount = isYouOwe ? _youOwe : _youAreOwed;
     if (amount <= 0.01) return [];
     return [
       {

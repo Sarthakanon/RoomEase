@@ -1,0 +1,38 @@
+Backend Testing
+===============
+
+The backend test setup has two levels.
+
+Fast unit tests
+---------------
+
+Run these when you want quick feedback without a database:
+
+    go test ./models ./services ./middleware ./handlers
+
+Or run every normal backend package:
+
+    go test ./...
+
+Postgres-backed tests
+---------------------
+
+Start the local Postgres container:
+
+    docker compose up -d postgres
+
+Run the database-backed handler, middleware, and service tests:
+
+    ROOM_EASE_TEST_DB=true go test ./models ./services ./middleware ./handlers
+
+By default, tests connect to local Docker Postgres using:
+
+    postgresql://postgres:roomease_dev_password@localhost:5432/roomease_test?sslmode=disable
+
+The harness creates an isolated per-process database derived from roomease_test,
+resets the public schema, runs GORM migrations, and seeds users, roomspaces,
+expenses, balances, notifications, join requests, and payment confirmations.
+
+To point tests at another database:
+
+    ROOM_EASE_TEST_DB=true ROOM_EASE_TEST_DATABASE_URL="postgresql://postgres:password@localhost:5432/roomease_test?sslmode=disable&search_path=public" go test ./models ./services ./middleware ./handlers

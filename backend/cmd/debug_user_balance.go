@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 import (
@@ -18,7 +20,7 @@ func main() {
 
 	// Load configuration
 	cfg := config.LoadConfig()
-	
+
 	// Initialize database connection
 	if err := config.InitPostgreSQL(cfg.PostgresDatabaseURL); err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -92,7 +94,7 @@ func main() {
 	fmt.Printf("Settlements To:       Rs. %.2f\n", settlementsToTotal)
 	fmt.Printf("-----------------------------------\n")
 	fmt.Printf("Balance:              Rs. %.2f\n", balance)
-	
+
 	if balance > 0 {
 		fmt.Printf("\n✅ User should GET BACK Rs. %.2f\n", balance)
 	} else if balance < 0 {

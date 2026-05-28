@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../services/api_service.dart';
+import '../../../services/cached_api_service.dart';
 import '../../../services/payment_notification_service.dart';
 import '../../../services/real_time_data_service.dart';
 import '../../../models/payment_notification.dart';
@@ -25,6 +26,7 @@ class NotificationScreen extends StatefulWidget {
 
 class _NotificationScreenState extends State<NotificationScreen> {
   final ApiService _apiService = ApiService();
+  final CachedApiService _cachedApiService = CachedApiService();
   final RealTimeDataService _realTimeService = RealTimeDataService();
   bool _isLoading = true;
   List<dynamic> _notifications = [];
@@ -55,17 +57,22 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    setState(() => _isLoading = _notifications.isEmpty && _joinRequests.isEmpty && _paymentNotifications.isEmpty);
     try {
-      final results = await Future.wait([
-        _apiService.getNotifications(),
-        _apiService.getJoinRequests(),
-        PaymentNotificationService.instance.getNotificationHistory(),
-      ]);
+      Map<String, dynamic> notificationsResult = {'data': _notifications};
+      Map<String, dynamic> joinRequestsResult = {'data': _joinRequests};
+      List<PaymentNotification> paymentNotificationsResult = _paymentNotifications;
 
-      final notificationsResult = results[0] as Map<String, dynamic>;
-      final joinRequestsResult = results[1] as Map<String, dynamic>;
-      final paymentNotificationsResult = results[2] as List<PaymentNotification>;
+      try {
+        notificationsResult = await _cachedApiService.getNotifications();
+      } catch (_) {}
+      try {
+        joinRequestsResult = await _cachedApiService.getJoinRequests();
+      } catch (_) {}
+      try {
+        paymentNotificationsResult =
+            await PaymentNotificationService.instance.getNotificationHistory();
+      } catch (_) {}
 
       setState(() {
         _notifications = notificationsResult['data'] ?? [];
@@ -73,6 +80,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
         _paymentNotifications = paymentNotificationsResult;
         _isLoading = false;
       });
+
+      // Silent background refresh
+      Future.wait([
+        _cachedApiService.getNotifications(forceRefresh: true),
+        _cachedApiService.getJoinRequests(forceRefresh: true),
+      ]).then((fresh) {
+        if (!mounted) return;
+        setState(() {
+          _notifications = (fresh[0]['data'] ?? []) as List<dynamic>;
+          _joinRequests = (fresh[1]['data'] ?? []) as List<dynamic>;
+        });
+      }).catchError((_) {});
     } catch (e) {
       setState(() => _isLoading = false);
     }
@@ -270,6 +289,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Widget _buildJoinRequestCard(dynamic request, Color primaryColor) {
     final requester = request['requester'];
     final name = requester?['name'] ?? requester?['email'] ?? 'Unknown';
+    final roomspace = request['roomspace'];
+    final roomspaceName =
+        roomspace?['name'] ??
+        request['roomspace_name'] ??
+        request['room_name'] ??
+        'this roomspace';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final requestId = request['id'].toString();
     final isProcessing = request['_isProcessing'] == true;
@@ -313,7 +338,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       ),
                     ),
                     Text(
-                      'Request to join roomspace',
+                      'Request to join $roomspaceName',
                       style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                     ),
                   ],
@@ -763,8 +788,33 @@ class _NotificationScreenState extends State<NotificationScreen> {
       paymentNotification: payment,
       onSubmit: (expense) async {
         try {
-          final request = ExpenseCreateRequest.fromExpenseData(expense, roomspaceId);
-          await _apiService.createExpense(request.toJson());
+          final requests = ExpenseCreateRequest.fromExpenseDataBatch(expense, roomspaceId);
+          for (final request in requests) {
+            await _apiService.createExpense(request.toJson());
+          }
+          final isRecurring = expense.recurringConfig?.isRecurring == true;
+          if (isRecurring && requests.length > 1) {
+            final payerAmounts = Map<String, double>.from(expense.payerAmounts)
+              ..removeWhere((_, v) => v <= 0);
+            final fallbackPayer = expense.paidBy ??
+                (expense.selectedRoommateIds.isNotEmpty ? expense.selectedRoommateIds.first : '');
+            if (fallbackPayer.isNotEmpty && payerAmounts.isEmpty) {
+              payerAmounts[fallbackPayer] = expense.amount;
+            }
+            await _apiService.createRecurringExpenseTemplate({
+              'roomspace_id': roomspaceId,
+              'title': expense.title,
+              'description': expense.description,
+              'amount': expense.amount,
+              'category': expense.category,
+              'paid_by': fallbackPayer,
+              'payer_amounts': payerAmounts,
+              'split_type': expense.splitType.apiValue,
+              'selected_roommates': expense.selectedRoommateIds,
+              'custom_splits': expense.customSplits,
+              'recurring_config': expense.recurringConfig!.toJson(),
+            });
+          }
           _dismissPaymentNotification(payment);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shared expense added')));

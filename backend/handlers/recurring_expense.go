@@ -26,6 +26,92 @@ func shiftBackOneInterval(nextDate time.Time, interval models.RecurringInterval)
 	}
 }
 
+func equalizeExactSplits(totalAmount float64, users []string) map[string]float64 {
+	out := map[string]float64{}
+	if len(users) == 0 {
+		return out
+	}
+	totalCents := int64(totalAmount * 100.0)
+	base := totalCents / int64(len(users))
+	rem := totalCents % int64(len(users))
+	for i, uid := range users {
+		cents := base
+		if int64(i) < rem {
+			cents++
+		}
+		out[uid] = float64(cents) / 100.0
+	}
+	return out
+}
+
+func proportionalSplitCents(base map[string]float64, totalCents int64) map[string]int64 {
+	result := map[string]int64{}
+	if totalCents <= 0 || len(base) == 0 {
+		return result
+	}
+	totalBase := 0.0
+	for _, v := range base {
+		if v > 0 {
+			totalBase += v
+		}
+	}
+	if totalBase <= 0 {
+		return result
+	}
+	assigned := int64(0)
+	for uid, v := range base {
+		if v <= 0 {
+			result[uid] = 0
+			continue
+		}
+		cents := int64((v / totalBase) * float64(totalCents))
+		result[uid] = cents
+		assigned += cents
+	}
+	remaining := totalCents - assigned
+	if remaining != 0 {
+		var bestUID string
+		best := -1.0
+		for uid, v := range base {
+			if v > best {
+				best = v
+				bestUID = uid
+			}
+		}
+		result[bestUID] += remaining
+	}
+	return result
+}
+
+func normalizePayerAmounts(paidBy string, createdBy string, amount float64, payerAmounts map[string]float64) models.JSONFloatMap {
+	out := models.JSONFloatMap{}
+	total := 0.0
+	for uid, a := range payerAmounts {
+		if uid == "" || a <= 0 {
+			continue
+		}
+		out[uid] = a
+		total += a
+	}
+	if len(out) == 0 {
+		fallback := paidBy
+		if fallback == "" {
+			fallback = createdBy
+		}
+		out[fallback] = amount
+		return out
+	}
+	if (total-amount) > 0.01 || (amount-total) > 0.01 {
+		// Keep API forgiving: normalize to template amount proportionally.
+		scaled := models.JSONFloatMap{}
+		for uid, a := range out {
+			scaled[uid] = (a / total) * amount
+		}
+		return scaled
+	}
+	return out
+}
+
 // RecurringExpenseHandler handles recurring expense-related requests
 type RecurringExpenseHandler struct {
 	dbService *services.PostgresService
@@ -90,6 +176,7 @@ func (h *RecurringExpenseHandler) CreateRecurringExpenseTemplate(c *gin.Context)
 		Category:          req.Category,
 		CreatedBy:         userID.(string),
 		PaidBy:            req.PaidBy,
+		PayerAmounts:      normalizePayerAmounts(req.PaidBy, userID.(string), req.Amount, req.PayerAmounts),
 		SelectedRoommates: models.StringArray(req.SelectedRoommates),
 		SplitType:         req.SplitType,
 		CustomSplits:      models.JSONFloatMap(req.CustomSplits),
@@ -230,6 +317,17 @@ func (h *RecurringExpenseHandler) UpdateRecurringExpenseTemplate(c *gin.Context)
 	}
 	if req.PaidBy != nil {
 		updates["paid_by"] = *req.PaidBy
+	}
+	if req.PayerAmounts != nil {
+		finalPaidBy := template.PaidBy
+		if req.PaidBy != nil && *req.PaidBy != "" {
+			finalPaidBy = *req.PaidBy
+		}
+		finalAmount := template.Amount
+		if req.Amount != nil && *req.Amount > 0 {
+			finalAmount = *req.Amount
+		}
+		updates["payer_amounts"] = normalizePayerAmounts(finalPaidBy, template.CreatedBy, finalAmount, req.PayerAmounts)
 	}
 	if req.SplitType != nil {
 		updates["split_type"] = *req.SplitType
@@ -426,7 +524,9 @@ func (h *RecurringExpenseHandler) GetRecurringExpenseNotifications(c *gin.Contex
 	var notifications []models.RecurringExpenseNotification
 	query := config.DB.
 		Joins("JOIN recurring_expense_templates ON recurring_expense_notifications.template_id = recurring_expense_templates.id").
-		Joins("JOIN roomspace_members ON recurring_expense_templates.roomspace_id = roomspace_members.roomspace_id").
+		// roomspace_members.roomspace_id is UUID in some DBs while template roomspace_id is text.
+		// Cast UUID -> text to avoid `operator does not exist: text = uuid`.
+		Joins("JOIN roomspace_members ON recurring_expense_templates.roomspace_id = roomspace_members.roomspace_id::text").
 		Where("roomspace_members.user_id = ? AND roomspace_members.is_active = ?", userID.(string), true).
 		Where("recurring_expense_notifications.is_processed = ?", false).
 		Order("recurring_expense_notifications.scheduled_date ASC").
@@ -577,70 +677,87 @@ func (h *RecurringExpenseHandler) ProcessRecurringExpenseNotification(c *gin.Con
 
 // createExpenseFromTemplate creates an expense from a recurring template
 func (h *RecurringExpenseHandler) createExpenseFromTemplate(template *models.RecurringExpenseTemplate, userID string) error {
-	// Create expense
-	expense := &models.Expense{
-		RoomspaceID: template.RoomspaceID,
-		Title:       template.Title,
-		Description: template.Description,
-		Amount:      template.Amount,
-		Category:    template.Category,
-		PaidBy:      template.PaidBy,
-		SplitType:   models.ExpenseSplitType(template.SplitType),
+	payerAmounts := map[string]float64(template.PayerAmounts)
+	for k, v := range payerAmounts {
+		if v <= 0 {
+			delete(payerAmounts, k)
+		}
 	}
-	if expense.PaidBy == "" {
-		expense.PaidBy = userID // fallback for legacy rows
-	}
-
-	// Save expense
-	if err := config.DB.Create(expense).Error; err != nil {
-		return err
+	if len(payerAmounts) == 0 {
+		fallback := template.PaidBy
+		if fallback == "" {
+			fallback = userID
+		}
+		payerAmounts[fallback] = template.Amount
 	}
 
-	// Create splits
-	var splits []models.ExpenseSplit
-	totalAmount := template.Amount
-	selectedRoommates := []string(template.SelectedRoommates)
-
+	baseExact := map[string]float64{}
+	roommates := []string(template.SelectedRoommates)
 	switch template.SplitType {
 	case "EQUAL":
-		amountPerPerson := totalAmount / float64(len(selectedRoommates))
-		for _, roommateID := range selectedRoommates {
+		baseExact = equalizeExactSplits(template.Amount, roommates)
+	case "PERCENTAGE":
+		for _, uid := range roommates {
+			p := template.CustomSplits[uid]
+			baseExact[uid] = template.Amount * (p / 100.0)
+		}
+	case "EXACT":
+		for _, uid := range roommates {
+			baseExact[uid] = template.CustomSplits[uid]
+		}
+	default:
+		baseExact = equalizeExactSplits(template.Amount, roommates)
+	}
+
+	totalCents := int64(template.Amount * 100.0)
+	assigned := int64(0)
+	index := 0
+	for uid, amt := range payerAmounts {
+		payerCents := int64(amt * 100.0)
+		if payerCents <= 0 {
+			continue
+		}
+		if index == len(payerAmounts)-1 {
+			payerCents = totalCents - assigned
+		}
+		assigned += payerCents
+		index++
+		if payerCents <= 0 {
+			continue
+		}
+
+		expense := &models.Expense{
+			RoomspaceID: template.RoomspaceID,
+			Title:       template.Title,
+			Description: template.Description,
+			Amount:      float64(payerCents) / 100.0,
+			Category:    template.Category,
+			PaidBy:      uid,
+			SplitType:   models.SplitTypeExact,
+		}
+		if expense.PaidBy == "" {
+			expense.PaidBy = userID
+		}
+		if err := config.DB.Create(expense).Error; err != nil {
+			return err
+		}
+
+		subSplitCents := proportionalSplitCents(baseExact, payerCents)
+		var splits []models.ExpenseSplit
+		for roommateID, cents := range subSplitCents {
+			if cents <= 0 {
+				continue
+			}
 			splits = append(splits, models.ExpenseSplit{
 				ExpenseID: expense.ID,
 				UserUID:   roommateID,
-				Amount:    amountPerPerson,
+				Amount:    float64(cents) / 100.0,
 			})
 		}
-
-	case "PERCENTAGE":
-		for _, roommateID := range selectedRoommates {
-			if percentage, exists := template.CustomSplits[roommateID]; exists {
-				amount := totalAmount * (percentage / 100.0)
-				splits = append(splits, models.ExpenseSplit{
-					ExpenseID:  expense.ID,
-					UserUID:    roommateID,
-					Amount:     amount,
-					Percentage: percentage,
-				})
+		if len(splits) > 0 {
+			if err := config.DB.Create(&splits).Error; err != nil {
+				return err
 			}
-		}
-
-	case "EXACT":
-		for _, roommateID := range selectedRoommates {
-			if amount, exists := template.CustomSplits[roommateID]; exists {
-				splits = append(splits, models.ExpenseSplit{
-					ExpenseID: expense.ID,
-					UserUID:   roommateID,
-					Amount:    amount,
-				})
-			}
-		}
-	}
-
-	// Save splits
-	if len(splits) > 0 {
-		if err := config.DB.Create(&splits).Error; err != nil {
-			return err
 		}
 	}
 

@@ -8,6 +8,7 @@ import '../../features/analytics/presentation/analytics_page.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../providers/roomspace_provider.dart';
 import '../../services/payment_dialog_service.dart';
+import '../../widgets/first_time_permissions_dialog.dart';
 
 /// Main navigation widget that maintains state across tab switches
 /// Uses IndexedStack to keep all screens alive and prevent reloading
@@ -49,6 +50,7 @@ class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObse
     // Set context for payment dialog service
     WidgetsBinding.instance.addPostFrameCallback((_) {
       PaymentDialogService.setContext(context);
+      FirstTimePermissionsDialog.show(context);
     });
   }
 

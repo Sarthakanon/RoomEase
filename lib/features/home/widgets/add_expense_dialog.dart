@@ -67,13 +67,16 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
 
   String _selectedCategory = 'General';
   final Set<String> _selectedRoommates = {};
-  String? _paidBy; // Who actually paid for this expense
+  final Set<String> _selectedPayers = {};
+  final Map<String, double> _payerAmounts = {};
   SplitType _splitType = SplitType.equal;
   final Map<String, double> _customSplits = {};
   RecurringExpenseConfig _recurringConfig = RecurringExpenseConfig();
 
   bool _isSubmitting = false;
   String? _errorMessage;
+  RoomspaceProvider? _roomspaceProvider;
+  ScaffoldMessengerState? _scaffoldMessenger;
 
   final List<ExpenseCategory> _categories = [
     ExpenseCategory('General', Icons.receipt_long_rounded),
@@ -93,6 +96,15 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     _autoFillFromPaymentNotification();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Cache references while the element tree is stable to avoid ancestor
+    // lookups from a deactivated context after route transitions.
+    _roomspaceProvider ??= Provider.of<RoomspaceProvider>(context, listen: false);
+    _scaffoldMessenger ??= ScaffoldMessenger.maybeOf(context);
+  }
+
   void _autoFillFromInitialData() {
     if (widget.initialData == null || !mounted) return;
     
@@ -110,7 +122,13 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
       _descriptionController.text = expense.description;
       _selectedCategory = expense.category;
       _splitType = expense.splitType;
-      _paidBy = expense.paidBy;
+      if (expense.payerAmounts.isNotEmpty) {
+        _selectedPayers.addAll(expense.payerAmounts.keys);
+        _payerAmounts.addAll(expense.payerAmounts);
+      } else if (expense.paidBy != null && expense.paidBy!.isNotEmpty) {
+        _selectedPayers.add(expense.paidBy!);
+        _payerAmounts[expense.paidBy!] = expense.amount;
+      }
       
       // Fill selected roommates
       if (expense.splits != null) {
@@ -199,9 +217,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     
     if (!_formKey.currentState!.validate()) return;
     
-    if (_paidBy == null) {
+    if (_selectedPayers.isEmpty) {
       if (mounted) {
-        setState(() => _errorMessage = 'Select who paid for this expense');
+        setState(() => _errorMessage = 'Select at least one payer');
       }
       return;
     }
@@ -220,6 +238,18 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     }
 
     final totalAmount = double.parse(_amountController.text);
+    final paidTotal = _selectedPayers.fold<double>(0.0, (sum, uid) {
+      return sum + (_payerAmounts[uid] ?? 0);
+    });
+    if ((paidTotal - totalAmount).abs() > 0.01) {
+      if (mounted) {
+        setState(
+          () => _errorMessage =
+              'Paid amounts must add up to Rs. ${totalAmount.toStringAsFixed(2)}',
+        );
+      }
+      return;
+    }
     final validation = ExpenseCalculationUtils.validateSplitData(
       _splitType, 
       totalAmount, 
@@ -250,7 +280,10 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         selectedRoommateIds: _selectedRoommates.toList(),
         splitType: _splitType,
         customSplits: Map.from(_customSplits),
-        paidBy: _paidBy, // Include who paid
+        paidBy: _selectedPayers.isNotEmpty ? _selectedPayers.first : null,
+        payerAmounts: {
+          for (final uid in _selectedPayers) uid: (_payerAmounts[uid] ?? 0),
+        },
         recurringConfig: _recurringConfig.isRecurring ? _recurringConfig : null,
       );
       
@@ -297,12 +330,20 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
           ),
           FilledButton(
             onPressed: () {
-              Navigator.pop(dialogContext); // Close dialog
-              // Check if the main dialog is still mounted before closing it
+              // Capture dependencies before closing routes so we don't
+              // read ancestors from a deactivated context.
+              final provider = _roomspaceProvider;
+              final messenger = _scaffoldMessenger;
+
+              Navigator.of(dialogContext).pop(); // Close info dialog
               if (mounted) {
-                Navigator.pop(context); // Close expense dialog
-                _switchToPersonalAndAddExpense();
+                Navigator.of(context).pop(); // Close add-expense sheet
               }
+
+              _switchToPersonalAndAddExpense(
+                roomspaceProvider: provider,
+                scaffoldMessenger: messenger,
+              );
             },
             child: const Text('Switch to Personal'),
           ),
@@ -311,36 +352,28 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     );
   }
   
-  void _switchToPersonalAndAddExpense() async {
-    // Check if widget is still mounted before proceeding
-    if (!mounted) return;
-    
+  void _switchToPersonalAndAddExpense({
+    RoomspaceProvider? roomspaceProvider,
+    ScaffoldMessengerState? scaffoldMessenger,
+  }) async {
     try {
-      // Import provider
-      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-      
       // Switch to personal space
-      await roomspaceProvider.switchToPersonalSpace();
+      await roomspaceProvider?.switchToPersonalSpace();
       
-      // Show snackbar only if widget is still mounted
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Switched to Personal Space. Add your expense now.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      scaffoldMessenger?.showSnackBar(
+        const SnackBar(
+          content: Text('Switched to Personal Space. Add your expense now.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     } catch (e) {
       // Handle any errors gracefully
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error switching to personal space: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      scaffoldMessenger?.showSnackBar(
+        SnackBar(
+          content: Text('Error switching to personal space: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -496,73 +529,239 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   }
 
   Widget _buildPaidBySelector(Color primary) {
-    // Only show roommates who are selected in the split
     final availablePayers = widget.roommates
         .where((r) => _selectedRoommates.contains(r.id))
         .toList();
-    
-    // Auto-select if only one roommate is selected
-    if (availablePayers.length == 1 && _paidBy != availablePayers.first.id) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(() {
-          _paidBy = availablePayers.first.id;
-        });
-      });
+
+    _selectedPayers.removeWhere((uid) => !_selectedRoommates.contains(uid));
+    _payerAmounts.removeWhere((uid, _) => !_selectedRoommates.contains(uid));
+
+    if (availablePayers.length == 1 && _selectedPayers.isEmpty) {
+      final onlyId = availablePayers.first.id;
+      _selectedPayers.add(onlyId);
+      _payerAmounts[onlyId] = double.tryParse(_amountController.text) ?? 0;
     }
-    
-    // Clear paidBy if the selected payer is no longer in the split
-    if (_paidBy != null && !_selectedRoommates.contains(_paidBy)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(() {
-          _paidBy = null;
-        });
-      });
-    }
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEEEEF2)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _paidBy,
-          hint: Text(
-            availablePayers.isEmpty 
-                ? 'Select roommates first' 
-                : 'Who paid?',
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+
+    final paidTotal = _selectedPayers.fold<double>(0.0, (sum, uid) => sum + (_payerAmounts[uid] ?? 0));
+    final targetTotal = double.tryParse(_amountController.text) ?? 0.0;
+    final diff = targetTotal - paidTotal;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: availablePayers.isEmpty ? null : () => _pickPayers(primary, availablePayers),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7F7FB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFEEEEF2)),
+            ),
+            child: _selectedPayers.isEmpty
+                ? Text(
+                    availablePayers.isEmpty ? 'Select roommates first' : 'Tap to select payer(s)',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                  )
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _selectedPayers.map((id) {
+                      final rm = widget.roommates.firstWhere((r) => r.id == id);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          rm.name,
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: primary),
+                        ),
+                      );
+                    }).toList(),
+                  ),
           ),
-          isExpanded: true,
-          icon: Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1A1A2E)),
-          items: availablePayers.map((roommate) {
-            return DropdownMenuItem<String>(
-              value: roommate.id,
+        ),
+        if (_selectedPayers.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          ..._selectedPayers.map((uid) {
+            final rm = widget.roommates.firstWhere((r) => r.id == uid);
+            final current = _payerAmounts[uid] ?? 0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: primary.withValues(alpha: 0.1),
+                  Expanded(
                     child: Text(
-                      roommate.name[0].toUpperCase(),
-                      style: TextStyle(fontSize: 10, color: primary, fontWeight: FontWeight.bold),
+                      rm.name,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Text(roommate.name),
+                  SizedBox(
+                    width: 120,
+                    child: TextFormField(
+                      initialValue: current > 0 ? current.toStringAsFixed(2) : '',
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                      ],
+                      decoration: InputDecoration(
+                        hintText: '0.00',
+                        prefixText: 'Rs. ',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      onChanged: (v) {
+                        _payerAmounts[uid] = double.tryParse(v) ?? 0;
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ),
                 ],
               ),
             );
-          }).toList(),
-          onChanged: availablePayers.isEmpty ? null : (value) {
-            setState(() {
-              _paidBy = value;
-            });
-          },
-        ),
+          }),
+          Text(
+            diff.abs() <= 0.01
+                ? 'Paid total matches expense'
+                : 'Remaining to allocate: Rs. ${diff.toStringAsFixed(2)}',
+            style: TextStyle(
+              fontSize: 11,
+              color: diff.abs() <= 0.01 ? Colors.green.shade700 : Colors.orange.shade700,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _pickPayers(Color primary, List<RoommateItem> availablePayers) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setAltState) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildHandle(),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Select Payer(s)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                      TextButton(
+                        onPressed: () {
+                          setAltState(() {
+                            if (_selectedPayers.length == availablePayers.length) {
+                              _selectedPayers.clear();
+                            } else {
+                              _selectedPayers
+                                ..clear()
+                                ..addAll(availablePayers.map((r) => r.id));
+                            }
+                          });
+                          setState(() {});
+                        },
+                        child: Text(
+                          _selectedPayers.length == availablePayers.length ? 'None' : 'All',
+                          style: TextStyle(color: primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: availablePayers.length,
+                    itemBuilder: (context, i) {
+                      final r = availablePayers[i];
+                      final active = _selectedPayers.contains(r.id);
+                      return ListTile(
+                        leading: CircleAvatar(
+                          radius: 14,
+                          backgroundColor: active ? primary : const Color(0xFFF0F0F3),
+                          child: Text(
+                            r.name[0].toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: active ? Colors.white : primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        title: Text(r.name),
+                        trailing: Checkbox(
+                          value: active,
+                          activeColor: primary,
+                          onChanged: (v) {
+                            setAltState(() {
+                              if (v == true) {
+                                _selectedPayers.add(r.id);
+                                _payerAmounts.putIfAbsent(r.id, () => 0);
+                              } else {
+                                _selectedPayers.remove(r.id);
+                                _payerAmounts.remove(r.id);
+                              }
+                            });
+                            setState(() {});
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        final totalAmount = double.tryParse(_amountController.text) ?? 0.0;
+                        if (_selectedPayers.length == 1) {
+                          final only = _selectedPayers.first;
+                          _payerAmounts[only] = totalAmount;
+                        } else if (_selectedPayers.isNotEmpty) {
+                          final already = _selectedPayers.fold<double>(0, (s, uid) => s + (_payerAmounts[uid] ?? 0));
+                          if ((already - 0).abs() < 0.01) {
+                            final even = _selectedPayers.isEmpty ? 0.0 : totalAmount / _selectedPayers.length;
+                            for (final uid in _selectedPayers) {
+                              _payerAmounts[uid] = even;
+                            }
+                          }
+                        }
+                        Navigator.pop(context);
+                        if (mounted) setState(() {});
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: const Text('Confirm'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

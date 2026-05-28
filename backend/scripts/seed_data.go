@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 import (
@@ -156,15 +158,15 @@ func createUsers(db *gorm.DB, count int) ([]*models.User, error) {
 	for i := 0; i < count; i++ {
 		firstName := firstNames[rand.Intn(len(firstNames))]
 		lastName := lastNames[rand.Intn(len(lastNames))]
-		
+
 		user := &models.User{
 			FirebaseUID: fmt.Sprintf("user_%d_%s", i+1, uuid.New().String()[:8]),
-			Email:       fmt.Sprintf("%s.%s%d@roomease.test", 
+			Email: fmt.Sprintf("%s.%s%d@roomease.test",
 				toLowerCase(firstName), toLowerCase(lastName), i+1),
-			Name:        fmt.Sprintf("%s %s", firstName, lastName),
-			Phone:       fmt.Sprintf("+1%010d", rand.Intn(10000000000)),
+			Name:             fmt.Sprintf("%s %s", firstName, lastName),
+			Phone:            fmt.Sprintf("+1%010d", rand.Intn(10000000000)),
 			SubscriptionPlan: getRandomSubscriptionPlan(),
-			CreatedAt:   time.Now().Add(-time.Duration(rand.Intn(365)) * 24 * time.Hour),
+			CreatedAt:        time.Now().Add(-time.Duration(rand.Intn(365)) * 24 * time.Hour),
 		}
 
 		// Set subscription expiry for pro users
@@ -187,7 +189,7 @@ func createRoomspaces(db *gorm.DB, users []*models.User) ([]*models.Roomspace, m
 	roomspaces := make([]*models.Roomspace, 0)
 	userRoomspaces := make(map[string][]string) // userUID -> []roomspaceID
 	usedUsers := make(map[string]bool)
-	
+
 	availableUsers := make([]*models.User, len(users))
 	copy(availableUsers, users)
 
@@ -284,7 +286,7 @@ func createExpenses(db *gorm.DB, roomspaces []*models.Roomspace, userRoomspaces 
 		for i := 0; i < numExpenses; i++ {
 			// Random category
 			category := expenseCategories[rand.Intn(len(expenseCategories))]
-			
+
 			// Random title from category
 			titles := expenseTitles[category]
 			title := titles[rand.Intn(len(titles))]
@@ -415,7 +417,7 @@ func createPersonalExpenses(db *gorm.DB, users []*models.User) (int, error) {
 // Helper functions
 
 func toLowerCase(s string) string {
-	return string([]rune(s)[0] + 32) + s[1:]
+	return string([]rune(s)[0]+32) + s[1:]
 }
 
 func generateInviteCode() string {

@@ -9,6 +9,64 @@ import (
 	"gorm.io/gorm"
 )
 
+func equalizeExactSplits(totalAmount float64, users []string) map[string]float64 {
+	out := map[string]float64{}
+	if len(users) == 0 {
+		return out
+	}
+	totalCents := int64(totalAmount * 100.0)
+	base := totalCents / int64(len(users))
+	rem := totalCents % int64(len(users))
+	for i, uid := range users {
+		cents := base
+		if int64(i) < rem {
+			cents++
+		}
+		out[uid] = float64(cents) / 100.0
+	}
+	return out
+}
+
+func proportionalSplitCents(base map[string]float64, totalCents int64) map[string]int64 {
+	result := map[string]int64{}
+	if totalCents <= 0 || len(base) == 0 {
+		return result
+	}
+	totalBase := 0.0
+	for _, v := range base {
+		if v > 0 {
+			totalBase += v
+		}
+	}
+	if totalBase <= 0 {
+		return result
+	}
+	assigned := int64(0)
+	for uid, v := range base {
+		if v <= 0 {
+			result[uid] = 0
+			continue
+		}
+		cents := int64((v / totalBase) * float64(totalCents))
+		result[uid] = cents
+		assigned += cents
+	}
+	remaining := totalCents - assigned
+	if remaining != 0 {
+		// Assign residual cents to the largest base split to keep totals exact.
+		var bestUID string
+		best := -1.0
+		for uid, v := range base {
+			if v > best {
+				best = v
+				bestUID = uid
+			}
+		}
+		result[bestUID] += remaining
+	}
+	return result
+}
+
 // RecurringExpenseService handles recurring expense processing
 type RecurringExpenseService struct {
 	db *gorm.DB
@@ -116,28 +174,101 @@ func (s *RecurringExpenseService) createNotificationIfNotExists(template *models
 
 // generateExpenseFromTemplate automatically generates an expense from a template
 func (s *RecurringExpenseService) generateExpenseFromTemplate(template *models.RecurringExpenseTemplate) error {
-	// Create expense
-	expense := &models.Expense{
-		RoomspaceID: template.RoomspaceID,
-		Title:       template.Title,
-		Description: template.Description,
-		Amount:      template.Amount,
-		Category:    template.Category,
-		PaidBy:      template.PaidBy,
-		SplitType:   models.ExpenseSplitType(template.SplitType),
+	payerAmounts := map[string]float64(template.PayerAmounts)
+	for k, v := range payerAmounts {
+		if v <= 0 {
+			delete(payerAmounts, k)
+		}
 	}
-	if expense.PaidBy == "" {
-		expense.PaidBy = template.CreatedBy
+	if len(payerAmounts) == 0 {
+		fallback := template.PaidBy
+		if fallback == "" {
+			fallback = template.CreatedBy
+		}
+		payerAmounts[fallback] = template.Amount
 	}
-	
-	// Save expense
-	if err := s.db.Create(expense).Error; err != nil {
-		return err
+
+	// Resolve full-template participant exact amounts first; sub-expenses reuse proportional exact splits.
+	baseExact := map[string]float64{}
+	roommates := []string(template.SelectedRoommates)
+	switch template.SplitType {
+	case "EQUAL":
+		baseExact = equalizeExactSplits(template.Amount, roommates)
+	case "PERCENTAGE":
+		for _, uid := range roommates {
+			p := template.CustomSplits[uid]
+			baseExact[uid] = template.Amount * (p / 100.0)
+		}
+	case "EXACT":
+		for _, uid := range roommates {
+			baseExact[uid] = template.CustomSplits[uid]
+		}
+	default:
+		baseExact = equalizeExactSplits(template.Amount, roommates)
 	}
-	
-	// Create splits
-	if err := s.createSplitsFromTemplate(expense, template); err != nil {
-		return err
+
+	payerEntries := make([]struct {
+		uid   string
+		cents int64
+	}, 0, len(payerAmounts))
+	totalCents := int64(template.Amount * 100.0)
+	assigned := int64(0)
+	i := 0
+	for uid, amt := range payerAmounts {
+		c := int64(amt * 100.0)
+		if c <= 0 {
+			continue
+		}
+		if i == len(payerAmounts)-1 {
+			c = totalCents - assigned
+		}
+		assigned += c
+		payerEntries = append(payerEntries, struct {
+			uid   string
+			cents int64
+		}{uid: uid, cents: c})
+		i++
+	}
+	if len(payerEntries) == 0 {
+		return fmt.Errorf("invalid payer distribution")
+	}
+
+	for _, p := range payerEntries {
+		if p.cents <= 0 {
+			continue
+		}
+		expense := &models.Expense{
+			RoomspaceID: template.RoomspaceID,
+			Title:       template.Title,
+			Description: template.Description,
+			Amount:      float64(p.cents) / 100.0,
+			Category:    template.Category,
+			PaidBy:      p.uid,
+			SplitType:   models.SplitTypeExact,
+		}
+		if expense.PaidBy == "" {
+			expense.PaidBy = template.CreatedBy
+		}
+		if err := s.db.Create(expense).Error; err != nil {
+			return err
+		}
+		subSplitCents := proportionalSplitCents(baseExact, p.cents)
+		splits := make([]models.ExpenseSplit, 0, len(subSplitCents))
+		for uid, cents := range subSplitCents {
+			if cents <= 0 {
+				continue
+			}
+			splits = append(splits, models.ExpenseSplit{
+				ExpenseID: expense.ID,
+				UserUID:   uid,
+				Amount:    float64(cents) / 100.0,
+			})
+		}
+		if len(splits) > 0 {
+			if err := s.db.Create(&splits).Error; err != nil {
+				return err
+			}
+		}
 	}
 	
 	// Update template
@@ -149,7 +280,7 @@ func (s *RecurringExpenseService) generateExpenseFromTemplate(template *models.R
 		return err
 	}
 	
-	log.Printf("Auto-generated expense %d from recurring template %d", expense.ID, template.ID)
+	log.Printf("Auto-generated recurring expenses from template %d", template.ID)
 	
 	return nil
 }

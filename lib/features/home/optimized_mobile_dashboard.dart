@@ -279,17 +279,17 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
       ),
       builder: (context, balanceData) {
         final balances = balanceData['data'] as Map<String, dynamic>? ?? {};
-        final youOwe = (balances['you_owe'] as num?)?.toDouble() ?? 0.0;
-        final youAreOwed = (balances['you_are_owed'] as num?)?.toDouble() ?? 0.0;
-        final netYouOwe = (youOwe - youAreOwed).clamp(0.0, double.infinity);
-        final netYouAreOwed = (youAreOwed - youOwe).clamp(0.0, double.infinity);
-
+        final yourBalance = (balances['your_balance'] as num?)?.toDouble() ??
+            (((balances['you_are_owed'] as num?)?.toDouble() ?? 0.0) -
+                ((balances['you_owe'] as num?)?.toDouble() ?? 0.0));
+        final youOwe = yourBalance < -0.01 ? -yourBalance : 0.0;
+        final youAreOwed = yourBalance > 0.01 ? yourBalance : 0.0;
         return Row(
           children: [
             Expanded(
               child: _buildBalanceCard(
                 'You Owe',
-                netYouOwe,
+                youOwe,
                 Colors.red,
                 Icons.arrow_upward,
               ),
@@ -298,7 +298,7 @@ class _OptimizedMobileDashboardState extends State<OptimizedMobileDashboard>
             Expanded(
               child: _buildBalanceCard(
                 'You Are Owed',
-                netYouAreOwed,
+                youAreOwed,
                 Colors.green,
                 Icons.arrow_downward,
               ),

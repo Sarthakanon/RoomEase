@@ -117,6 +117,7 @@ type RecurringExpenseTemplate struct {
 	Category          string                 `json:"category" gorm:"not null"`
 	CreatedBy         string                 `json:"created_by" gorm:"not null;index"`
 	PaidBy            string                 `json:"paid_by"`
+	PayerAmounts      JSONFloatMap           `json:"payer_amounts" gorm:"type:jsonb"`
 	SelectedRoommates StringArray            `json:"selected_roommates" gorm:"type:text"`
 	SplitType         string                 `json:"split_type" gorm:"not null"`
 	CustomSplits      JSONFloatMap           `json:"custom_splits" gorm:"type:jsonb"`
@@ -213,7 +214,10 @@ func (ret *RecurringExpenseTemplate) ShouldSendNotification(currentDate time.Tim
 	}
 
 	notificationDate := nextDate.AddDate(0, 0, -ret.RecurringConfig.NotificationDaysBefore)
-	return currentDate.After(notificationDate) && currentDate.Before(*nextDate)
+	// Notify exactly on the configured reminder day (date-based), not across a range.
+	cd := time.Date(currentDate.Year(), currentDate.Month(), currentDate.Day(), 0, 0, 0, 0, currentDate.Location())
+	nd := time.Date(notificationDate.Year(), notificationDate.Month(), notificationDate.Day(), 0, 0, 0, 0, notificationDate.Location())
+	return cd.Equal(nd)
 }
 
 // RecurringExpenseNotification represents a notification for a pending recurring expense
@@ -247,6 +251,7 @@ type CreateRecurringExpenseRequest struct {
 	Amount            float64                `json:"amount" binding:"required,gt=0"`
 	Category          string                 `json:"category" binding:"required"`
 	PaidBy            string                 `json:"paid_by"`
+	PayerAmounts      map[string]float64     `json:"payer_amounts"`
 	SplitType         string                 `json:"split_type" binding:"required"`
 	SelectedRoommates []string               `json:"selected_roommates" binding:"required"`
 	CustomSplits      map[string]float64     `json:"custom_splits"`
@@ -260,6 +265,7 @@ type UpdateRecurringExpenseRequest struct {
 	Amount            *float64               `json:"amount"`
 	Category          *string                `json:"category"`
 	PaidBy            *string                `json:"paid_by"`
+	PayerAmounts      map[string]float64     `json:"payer_amounts"`
 	SplitType         *string                `json:"split_type"`
 	SelectedRoommates []string               `json:"selected_roommates"`
 	CustomSplits      map[string]float64     `json:"custom_splits"`

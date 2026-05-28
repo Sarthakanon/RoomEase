@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../models/balance_models.dart';
 import '../../../models/payment_confirmation_models.dart';
 import '../../../services/payment_confirmation_service.dart';
 import '../../../services/api_service.dart';
@@ -24,6 +25,9 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen> w
   List<PaymentConfirmation> _pending = [];
   List<PaymentConfirmation> _confirmed = [];
   List<PaymentConfirmation> _rejected = [];
+  BalanceSummary? _cachedSummary;
+  List<SettlementSuggestion> _cachedSuggestions = [];
+  bool _isPrefetchingRecordData = false;
   bool _isLoading = true;
   String? _userId;
 
@@ -34,6 +38,7 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen> w
     _balanceService = BalanceService();
     _tabController = TabController(length: 3, vsync: this);
     _load();
+    _primeRecordPaymentData();
   }
 
   Future<void> _load() async {
@@ -49,6 +54,23 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen> w
       });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _primeRecordPaymentData() async {
+    if (_isPrefetchingRecordData) return;
+    _isPrefetchingRecordData = true;
+    try {
+      final results = await Future.wait([
+        _balanceService.getRoomspaceBalances(widget.roomspaceId),
+        _balanceService.getSettlementSuggestions(widget.roomspaceId),
+      ]);
+      _cachedSummary = results[0] as BalanceSummary?;
+      _cachedSuggestions = results[1] as List<SettlementSuggestion>;
+    } catch (_) {
+      // Keep old cache if prefetch fails.
+    } finally {
+      _isPrefetchingRecordData = false;
     }
   }
 
@@ -138,11 +160,65 @@ class _PaymentConfirmationScreenState extends State<PaymentConfirmationScreen> w
   }
 
   Future<void> _showRecordDialog() async {
-    final summary = await _balanceService.getRoomspaceBalances(widget.roomspaceId);
+    _userId ??= (AuthService().currentUser)?.uid;
+    _userId ??= await AuthService().getStoredUserId();
+
+    BalanceSummary? summary = _cachedSummary;
+    List<SettlementSuggestion> suggestions = _cachedSuggestions;
+
+    if (summary == null) {
+      final results = await Future.wait([
+        _balanceService.getRoomspaceBalances(widget.roomspaceId),
+        _balanceService.getSettlementSuggestions(widget.roomspaceId),
+      ]);
+      summary = results[0] as BalanceSummary?;
+      suggestions = results[1] as List<SettlementSuggestion>;
+      _cachedSummary = summary;
+      _cachedSuggestions = suggestions;
+    }
+
     if (summary == null || !mounted) return;
-    final roommates = summary.members.where((m) => m['user_id'] != _userId).map((m) => {'id': m['user_id'] as String, 'name': m['name'] as String}).toList();
-    final req = await showDialog<PaymentConfirmationRequest>(context: context, builder: (context) => RecordPaymentDialog(roommates: roommates));
-    if (req != null) { await _service.createPaymentConfirmation(roomspaceId: widget.roomspaceId, request: req); _load(); }
+
+    final roommates = summary.members
+        .where((m) => m['user_id'] != _userId)
+        .map((m) => {
+              'id': m['user_id'] as String,
+              'name': m['name'] as String,
+              'qr_image_url': m['qr_image_url'] as String? ?? '',
+            })
+        .toList();
+
+    final remainingByUserId = <String, double>{};
+    for (final suggestion in suggestions.where((s) => s.fromUserId == _userId)) {
+      remainingByUserId.update(
+        suggestion.toUserId,
+        (value) => value + suggestion.amount,
+        ifAbsent: () => suggestion.amount,
+      );
+    }
+
+    String? initialRoommateId;
+    if (remainingByUserId.isNotEmpty) {
+      final sorted = remainingByUserId.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      initialRoommateId = sorted.first.key;
+    }
+
+    final req = await showDialog<PaymentConfirmationRequest>(
+      context: context,
+      builder: (context) => RecordPaymentDialog(
+        roommates: roommates,
+        initialRoommateId: initialRoommateId,
+        remainingAmountsByUserId: remainingByUserId,
+      ),
+    );
+    if (req != null) {
+      await _service.createPaymentConfirmation(roomspaceId: widget.roomspaceId, request: req);
+      _cachedSummary = null;
+      _cachedSuggestions = [];
+      _load();
+      _primeRecordPaymentData();
+    }
   }
 
   Future<bool> _showConfirm(String title, String body) async {

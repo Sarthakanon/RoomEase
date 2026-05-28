@@ -1,0 +1,22 @@
+meta {
+  name: Check User Ban Status
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/admin/users/{{userId}}/ban-status
+  body: none
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:none {
+  token: {{authToken}}
+}
+

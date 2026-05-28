@@ -235,7 +235,8 @@ class EnhancedExpenseTile extends StatelessWidget {
   void _showExpenseOptions(BuildContext context) {
     // Get current user
     final currentUser = FirebaseAuth.instance.currentUser;
-    final isCreator = currentUser != null && expense.paidBy == currentUser.uid;
+    final isCreator = currentUser != null &&
+        (expense.paidBy == currentUser.uid || expense.createdBy == currentUser.uid);
     
     showModalBottomSheet(
       context: context,

@@ -1,0 +1,22 @@
+meta {
+  name: Reject Payment
+  type: http
+  seq: 1
+}
+
+put {
+  url: {{baseUrl}}/api/roomspaces/{{roomspaceId}}/payments/{{paymentId}}/reject
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+

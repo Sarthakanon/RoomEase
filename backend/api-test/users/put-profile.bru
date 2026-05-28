@@ -1,0 +1,22 @@
+meta {
+  name: Update Profile
+  type: http
+  seq: 1
+}
+
+put {
+  url: {{baseUrl}}/api/user/profile
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+

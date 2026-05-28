@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../services/api_service.dart';
+import '../../../services/cached_api_service.dart';
 import '../../../providers/roomspace_provider.dart';
 import 'roomspace_details_screen.dart';
 import 'roomspace_selection_screen.dart';
@@ -16,6 +17,7 @@ class RoomspaceRouter extends StatefulWidget {
 
 class _RoomspaceRouterState extends State<RoomspaceRouter> {
   final ApiService _apiService = ApiService();
+  final CachedApiService _cachedApi = CachedApiService();
   bool _isLoading = true;
   bool _hasRoomspace = false;
   Map<String, dynamic>? _pendingRequest;
@@ -28,21 +30,20 @@ class _RoomspaceRouterState extends State<RoomspaceRouter> {
 
   Future<void> _checkRoomspace() async {
     try {
-      // Check for existing roomspace first
-      final response = await _apiService.getRoomspaces();
-      if (response['success'] == true && response['data'] != null) {
-        final roomspaces = response['data'] as List<dynamic>;
-        if (roomspaces.isNotEmpty) {
-          setState(() {
-            _hasRoomspace = true;
-            _isLoading = false;
-          });
-          return;
-        }
+      final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+      await provider.loadRoomspaces();
+      if (provider.roomspaces.isNotEmpty) {
+        setState(() {
+          _hasRoomspace = true;
+          _isLoading = false;
+        });
+        return;
       }
 
       // No roomspace, check for pending join request
-      final pendingResponse = await _apiService.getPendingJoinRequest();
+      final pendingResponse = await _apiService
+          .getPendingJoinRequest()
+          .timeout(const Duration(seconds: 2), onTimeout: () => {'success': false});
       if (pendingResponse['success'] == true &&
           pendingResponse['data'] != null) {
         setState(() {
@@ -58,6 +59,18 @@ class _RoomspaceRouterState extends State<RoomspaceRouter> {
         _isLoading = false;
       });
     } catch (e) {
+      // Final fallback to cached roomspaces.
+      try {
+        final response = await _cachedApi.getRoomspaces(forceRefresh: false);
+        final roomspaces = response['data'] as List<dynamic>? ?? const [];
+        if (roomspaces.isNotEmpty) {
+          setState(() {
+            _hasRoomspace = true;
+            _isLoading = false;
+          });
+          return;
+        }
+      } catch (_) {}
       setState(() {
         _hasRoomspace = false;
         _isLoading = false;
@@ -77,9 +90,18 @@ class _RoomspaceRouterState extends State<RoomspaceRouter> {
       );
     }
 
-    // Personal Space must always win over "has roomspace" checks.
-    // When user intentionally switches to personal mode, never force roomspace details.
-    if (roomspaceProvider.isPersonalSpace) {
+    if (_hasRoomspace &&
+        roomspaceProvider.activeRoomspace == null &&
+        roomspaceProvider.roomspaces.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await roomspaceProvider.setActiveRoomspace(roomspaceProvider.roomspaces.first.id);
+        if (mounted) setState(() {});
+      });
+    }
+
+    // Personal Space view only when there truly is no roomspace context to show.
+    if (roomspaceProvider.isPersonalSpace && !_hasRoomspace) {
       return _buildPersonalSpaceScreen(primaryColor);
     }
 

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../services/firebase_auth_service.dart';
 import '../../../services/api_service.dart';
+import '../../../services/cached_api_service.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../../../models/roomspace_data.dart';
 import '../../subscription/providers/subscription_provider.dart';
@@ -25,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   final FirebaseAuthService _authService = FirebaseAuthService();
   final ApiService _apiService = ApiService();
+  final CachedApiService _cachedApiService = CachedApiService();
 
   @override
   void initState() {
@@ -40,6 +42,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _userName = user.displayName ?? "User";
           _userEmail = user.email ?? "No email";
         });
+
+        try {
+          final profile = await _cachedApiService.getUserProfile();
+          if (profile['success'] == true && profile['data'] != null) {
+            final data = profile['data'] as Map<String, dynamic>;
+            _userName = (data['name'] as String?)?.trim().isNotEmpty == true
+                ? data['name'] as String
+                : _userName;
+            _userEmail = (data['email'] as String?)?.trim().isNotEmpty == true
+                ? data['email'] as String
+                : _userEmail;
+          }
+        } catch (_) {}
 
         // Load roomspaces through provider
         final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);

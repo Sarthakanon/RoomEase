@@ -35,6 +35,14 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
   bool _isUploadingProof = false;
   String? _paymentProofUrl;
 
+  Map<String, String>? get _selectedRoommate {
+    if (_selectedRoommateId == null) return null;
+    for (final roommate in widget.roommates) {
+      if (roommate['id'] == _selectedRoommateId) return roommate;
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -126,6 +134,10 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                   });
                 },
               ),
+              if (_selectedRoommateId != null) ...[
+                const SizedBox(height: 10),
+                _buildSelectedRoommateQrSection(),
+              ],
               const SizedBox(height: 12),
               
               // Amount
@@ -313,6 +325,52 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
               ],
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedRoommateQrSection() {
+    final roommate = _selectedRoommate;
+    final roommateName = roommate?['name'] ?? 'Roommate';
+    final qrUrl = roommate?['qr_image_url'] ?? '';
+    final hasQr = qrUrl.isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$roommateName\'s QR',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          if (hasQr)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                qrUrl,
+                height: 160,
+                width: double.infinity,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Text(
+                  'Failed to load QR image',
+                  style: TextStyle(fontSize: 11, color: Colors.red),
+                ),
+              ),
+            )
+          else
+            const Text(
+              'This roommate has not uploaded a QR yet.',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
         ],
       ),
     );

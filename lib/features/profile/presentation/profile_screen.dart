@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../../services/firebase_auth_service.dart';
 import '../../../services/smart_api_service.dart';
+import '../../../services/connectivity_service.dart';
 import '../../../services/state_management_service.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/real_time_data_service.dart';
@@ -23,6 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     with AutomaticKeepAliveClientMixin {
   final FirebaseAuthService _authService = FirebaseAuthService();
   final SmartApiService _smartApi = SmartApiService();
+  final ConnectivityService _connectivityService = ConnectivityService();
   final StateManagementService _state = StateManagementService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final RealTimeDataService _realTimeService = RealTimeDataService();
@@ -75,9 +77,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       String userEmail = user.email ?? 'No email';
       String? userPhone;
 
+      await _connectivityService.initialize();
+      final isOnline = _connectivityService.isConnected;
+
       // Try to get backend profile data (name override, phone)
       try {
-        final response = await _smartApi.getUserProfile(forceRefresh: forceRefresh);
+        final response = await _smartApi
+            .getUserProfile(forceRefresh: forceRefresh && isOnline)
+            .timeout(const Duration(seconds: 4));
         if (response['success'] == true && response['data'] != null) {
           final data = response['data'] as Map<String, dynamic>;
           userName = data['name'] as String? ?? userName;
@@ -683,6 +690,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 height: 180,
                 width: 180,
                 fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox(
+                  height: 180,
+                  width: 180,
+                ),
               ),
             )
           else

@@ -426,6 +426,21 @@ class AnalyticsService {
     return '${_cacheKeyPrefix}summary_${roomspaceId ?? 'all'}_${startDate ?? ''}_${endDate ?? ''}';
   }
 
+  Future<AnalyticsSummary?> getCachedSummary({
+    String? roomspaceId,
+    String? startDate,
+    String? endDate,
+  }) async {
+    final key = getSummaryCacheKey(
+      roomspaceId: roomspaceId,
+      startDate: startDate,
+      endDate: endDate,
+    );
+    final cached = await _getCachedData(key);
+    if (cached == null) return null;
+    return AnalyticsSummary.fromJson(cached);
+  }
+
   /// Build cache key for trends endpoint
   String getTrendsCacheKey({
     String? roomspaceId,

@@ -7,7 +7,6 @@ import (
 	"roomease/backend/models"
 	"roomease/backend/services"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -94,6 +93,7 @@ func (h *ExpenseHandler) CreateExpense(c *gin.Context) {
 		Amount:      req.Amount,
 		Category:    req.Category,
 		PaidBy:      paidBy,
+		CreatedBy:   userID.(string),
 		SplitType:   req.SplitType,
 		Splits:      splits,
 		RecurringConfig: req.RecurringConfig,
@@ -429,10 +429,10 @@ func (h *ExpenseHandler) UpdateExpense(c *gin.Context) {
 		return
 	}
 
-	// Verify user is the one who paid for this expense (only they can edit)
-	if existingExpense.PaidBy != userID.(string) {
+	// Allow edit by payer OR creator (for multi-payer grouped entries).
+	if existingExpense.PaidBy != userID.(string) && existingExpense.CreatedBy != userID.(string) {
 		c.JSON(http.StatusForbidden, gin.H{
-			"error": "Only the person who paid can edit this expense",
+			"error": "Only the person who paid or created this expense can edit it",
 		})
 		return
 	}
@@ -535,10 +535,10 @@ func (h *ExpenseHandler) DeleteExpense(c *gin.Context) {
 		return
 	}
 
-	// Verify user is the one who paid for this expense (only they can delete)
-	if existingExpense.PaidBy != userID.(string) {
+	// Allow delete by payer OR creator (for multi-payer grouped entries).
+	if existingExpense.PaidBy != userID.(string) && existingExpense.CreatedBy != userID.(string) {
 		c.JSON(http.StatusForbidden, gin.H{
-			"error": "Only the person who paid can delete this expense",
+			"error": "Only the person who paid or created this expense can delete it",
 		})
 		return
 	}
@@ -766,6 +766,7 @@ func (h *ExpenseHandler) convertToExpenseResponse(expense *models.Expense) model
 		Amount:      expense.Amount,
 		Category:    expense.Category,
 		PaidBy:      expense.PaidBy,
+		CreatedBy:   expense.CreatedBy,
 		SplitType:   expense.SplitType,
 		CreatedAt:   expense.CreatedAt,
 	}
@@ -961,23 +962,21 @@ func (h *ExpenseHandler) DeletePersonalExpense(c *gin.Context) {
 }
 
 
-// parseDateFilters parses month and year query parameters
-// Returns year and month (defaults to current month if not provided)
+// parseDateFilters parses optional month and year query parameters.
+// Returns 0/0 when not provided so callers can fetch unfiltered data.
 func (h *ExpenseHandler) parseDateFilters(c *gin.Context) (int, int) {
-	now := time.Now()
-	
-	// Parse year parameter
+	// Parse year parameter (optional)
 	yearStr := c.Query("year")
-	year := now.Year()
+	year := 0
 	if yearStr != "" {
 		if y, err := strconv.Atoi(yearStr); err == nil && y > 0 {
 			year = y
 		}
 	}
-	
-	// Parse month parameter
+
+	// Parse month parameter (optional)
 	monthStr := c.Query("month")
-	month := int(now.Month())
+	month := 0
 	if monthStr != "" {
 		if m, err := strconv.Atoi(monthStr); err == nil && m >= 1 && m <= 12 {
 			month = m
@@ -996,11 +995,16 @@ func (h *ExpenseHandler) createRecurringExpenseTemplate(req *models.CreateExpens
 		Amount:            req.Amount,
 		Category:          req.Category,
 		CreatedBy:         userID,
+		PaidBy:            req.PaidBy,
+		PayerAmounts:      normalizePayerAmounts(req.PaidBy, userID, req.Amount, req.PayerAmounts),
 		SelectedRoommates: models.StringArray(req.SelectedRoommates),
 		SplitType:         string(req.SplitType),
 		CustomSplits:      req.CustomSplits,
 		RecurringConfig:   *req.RecurringConfig,
 		IsActive:          true,
+	}
+	if template.PaidBy == "" {
+		template.PaidBy = userID
 	}
 
 	// Save to database

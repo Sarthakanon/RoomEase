@@ -16,6 +16,8 @@ class CacheService {
   static const String balancesPrefix = 'cached_balances_';
   static const String expensesPrefix = 'cached_expenses_';
   static const String membersPrefix = 'cached_members_';
+  static const String notificationsKey = 'cached_notifications';
+  static const String joinRequestsKey = 'cached_join_requests';
 
   Future<void> cacheData(String key, Map<String, dynamic> data, {Duration? duration}) async {
     try {
@@ -31,7 +33,7 @@ class CacheService {
     }
   }
 
-  Future<Map<String, dynamic>?> getCachedData(String key) async {
+  Future<Map<String, dynamic>?> getCachedData(String key, {bool allowExpired = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cachedString = prefs.getString(key);
@@ -45,9 +47,11 @@ class CacheService {
       // Check if cache is still valid
       final now = DateTime.now().millisecondsSinceEpoch;
       if (now - timestamp > duration) {
-        // Cache expired, remove it
-        await prefs.remove(key);
-        return null;
+        if (!allowExpired) {
+          // Cache expired, remove it
+          await prefs.remove(key);
+          return null;
+        }
       }
       
       return cacheData['data'] as Map<String, dynamic>;
@@ -79,48 +83,64 @@ class CacheService {
     await cacheData(roomspacesKey, data, duration: _longCacheDuration);
   }
 
-  Future<Map<String, dynamic>?> getCachedRoomspaces() async {
-    return await getCachedData(roomspacesKey);
+  Future<Map<String, dynamic>?> getCachedRoomspaces({bool allowExpired = false}) async {
+    return await getCachedData(roomspacesKey, allowExpired: allowExpired);
   }
 
   Future<void> cacheUserProfile(Map<String, dynamic> data) async {
     await cacheData(userProfileKey, data, duration: _longCacheDuration);
   }
 
-  Future<Map<String, dynamic>?> getCachedUserProfile() async {
-    return await getCachedData(userProfileKey);
+  Future<Map<String, dynamic>?> getCachedUserProfile({bool allowExpired = false}) async {
+    return await getCachedData(userProfileKey, allowExpired: allowExpired);
   }
 
   Future<void> cacheRoomspace(String roomspaceId, Map<String, dynamic> data) async {
     await cacheData('$roomspacePrefix$roomspaceId', data, duration: _longCacheDuration);
   }
 
-  Future<Map<String, dynamic>?> getCachedRoomspace(String roomspaceId) async {
-    return await getCachedData('$roomspacePrefix$roomspaceId');
+  Future<Map<String, dynamic>?> getCachedRoomspace(String roomspaceId, {bool allowExpired = false}) async {
+    return await getCachedData('$roomspacePrefix$roomspaceId', allowExpired: allowExpired);
   }
 
   Future<void> cacheBalances(String roomspaceId, Map<String, dynamic> data) async {
     await cacheData('$balancesPrefix$roomspaceId', data, duration: const Duration(minutes: 2));
   }
 
-  Future<Map<String, dynamic>?> getCachedBalances(String roomspaceId) async {
-    return await getCachedData('$balancesPrefix$roomspaceId');
+  Future<Map<String, dynamic>?> getCachedBalances(String roomspaceId, {bool allowExpired = false}) async {
+    return await getCachedData('$balancesPrefix$roomspaceId', allowExpired: allowExpired);
   }
 
   Future<void> cacheExpenses(String key, Map<String, dynamic> data) async {
     await cacheData('$expensesPrefix$key', data, duration: const Duration(minutes: 3));
   }
 
-  Future<Map<String, dynamic>?> getCachedExpenses(String key) async {
-    return await getCachedData('$expensesPrefix$key');
+  Future<Map<String, dynamic>?> getCachedExpenses(String key, {bool allowExpired = false}) async {
+    return await getCachedData('$expensesPrefix$key', allowExpired: allowExpired);
   }
 
   Future<void> cacheMembers(String roomspaceId, Map<String, dynamic> data) async {
     await cacheData('$membersPrefix$roomspaceId', data, duration: _longCacheDuration);
   }
 
-  Future<Map<String, dynamic>?> getCachedMembers(String roomspaceId) async {
-    return await getCachedData('$membersPrefix$roomspaceId');
+  Future<Map<String, dynamic>?> getCachedMembers(String roomspaceId, {bool allowExpired = false}) async {
+    return await getCachedData('$membersPrefix$roomspaceId', allowExpired: allowExpired);
+  }
+
+  Future<void> cacheNotifications(Map<String, dynamic> data) async {
+    await cacheData(notificationsKey, data, duration: const Duration(minutes: 2));
+  }
+
+  Future<Map<String, dynamic>?> getCachedNotifications({bool allowExpired = false}) async {
+    return await getCachedData(notificationsKey, allowExpired: allowExpired);
+  }
+
+  Future<void> cacheJoinRequests(Map<String, dynamic> data) async {
+    await cacheData(joinRequestsKey, data, duration: const Duration(minutes: 2));
+  }
+
+  Future<Map<String, dynamic>?> getCachedJoinRequests({bool allowExpired = false}) async {
+    return await getCachedData(joinRequestsKey, allowExpired: allowExpired);
   }
 
   // Invalidate related caches when data changes

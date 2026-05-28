@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/roomspace_data.dart';
+import '../services/connectivity_service.dart';
 import '../services/smart_api_service.dart';
 
 /// Error types for roomspace operations
@@ -30,6 +32,7 @@ class RoomspaceException implements Exception {
 /// Handles multiple roomspace support with active roomspace context
 class RoomspaceProvider extends ChangeNotifier {
   final SmartApiService _smartApi = SmartApiService();
+  final ConnectivityService _connectivityService = ConnectivityService();
   
   List<RoomspaceData> _roomspaces = [];
   RoomspaceData? _activeRoomspace;
@@ -43,6 +46,12 @@ class RoomspaceProvider extends ChangeNotifier {
   static const int _maxRetries = 3;
   static const Duration _retryDelay = Duration(seconds: 2);
   static const Duration _cacheExpiration = Duration(hours: 24);
+
+  String _activeRoomspaceStorageKey() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) return _activeRoomspaceKey;
+    return '${_activeRoomspaceKey}_$uid';
+  }
   
   // Getters
   List<RoomspaceData> get roomspaces => List.unmodifiable(_roomspaces);
@@ -80,6 +89,14 @@ class RoomspaceProvider extends ChangeNotifier {
     }
     
     try {
+      await _connectivityService.initialize();
+      final isOnline = _connectivityService.isConnected;
+      if (!isOnline && _roomspaces.isNotEmpty && !forceRefresh) {
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
       print('📡 Fetching roomspaces from API...');
       final response = await _smartApi.getRoomspaces(forceRefresh: forceRefresh);
       print('✅ API Response: $response');
@@ -135,7 +152,7 @@ class RoomspaceProvider extends ChangeNotifier {
       // Check if it's a network error
       final isNetworkError = _isNetworkError(e);
       
-      if (isNetworkError && retryCount < _maxRetries) {
+      if (isNetworkError && retryCount < _maxRetries && _connectivityService.isConnected) {
         // Retry with exponential backoff
         print('🔄 Network error loading roomspaces. Retrying in ${_retryDelay.inSeconds}s... (Attempt ${retryCount + 1}/$_maxRetries)');
         await Future.delayed(_retryDelay * (retryCount + 1));
@@ -196,7 +213,7 @@ class RoomspaceProvider extends ChangeNotifier {
       
       // Persist to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_activeRoomspaceKey, roomspaceId);
+      await prefs.setString(_activeRoomspaceStorageKey(), roomspaceId);
       
       print('✅ Active roomspace set to: ${roomspace.name} (${roomspace.id})');
       notifyListeners();
@@ -205,7 +222,7 @@ class RoomspaceProvider extends ChangeNotifier {
       if (e.type == RoomspaceErrorType.invalidRoomspace && _roomspaces.isNotEmpty) {
         _activeRoomspace = _roomspaces.first;
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_activeRoomspaceKey, _roomspaces.first.id);
+        await prefs.setString(_activeRoomspaceStorageKey(), _roomspaces.first.id);
         _error = e.message;
         _errorType = e.type;
         print('✅ Fallback: Active roomspace set to: ${_roomspaces.first.name} (${_roomspaces.first.id})');
@@ -246,7 +263,7 @@ class RoomspaceProvider extends ChangeNotifier {
       
       // Clear from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_activeRoomspaceKey);
+      await prefs.remove(_activeRoomspaceStorageKey());
       
       print('✅ Switched to personal space');
       notifyListeners();
@@ -303,7 +320,7 @@ class RoomspaceProvider extends ChangeNotifier {
           // No roomspaces left - switch to Personal Space
           _activeRoomspace = null;
           final prefs = await SharedPreferences.getInstance();
-          await prefs.remove(_activeRoomspaceKey);
+          await prefs.remove(_activeRoomspaceStorageKey());
           print('✅ Switched to Personal Space (no roomspaces left)');
         }
       }
@@ -451,7 +468,17 @@ class RoomspaceProvider extends ChangeNotifier {
   Future<void> _restoreActiveRoomspace() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedRoomspaceId = prefs.getString(_activeRoomspaceKey);
+      final scopedKey = _activeRoomspaceStorageKey();
+      String? savedRoomspaceId = prefs.getString(scopedKey);
+      // One-time legacy fallback migration.
+      if (savedRoomspaceId == null) {
+        final legacy = prefs.getString(_activeRoomspaceKey);
+        if (legacy != null) {
+          savedRoomspaceId = legacy;
+          await prefs.setString(scopedKey, legacy);
+          await prefs.remove(_activeRoomspaceKey);
+        }
+      }
       
       if (savedRoomspaceId != null) {
         // Check if the saved roomspace still exists in the list
@@ -461,7 +488,7 @@ class RoomspaceProvider extends ChangeNotifier {
             // If saved roomspace no longer exists, clear it from preferences
             // Stay in personal space mode instead of forcing a roomspace
             print('Saved roomspace $savedRoomspaceId no longer available. Staying in personal space.');
-            prefs.remove(_activeRoomspaceKey);
+            prefs.remove(scopedKey);
             
             throw RoomspaceException(
               'Previously active roomspace is no longer available.',
@@ -532,7 +559,7 @@ class RoomspaceProvider extends ChangeNotifier {
     _error = null;
     
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_activeRoomspaceKey);
+    await prefs.remove(_activeRoomspaceStorageKey());
     await _clearCache();
     
     notifyListeners();

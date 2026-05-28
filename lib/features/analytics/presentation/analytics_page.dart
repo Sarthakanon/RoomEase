@@ -36,6 +36,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   @override
   void initState() {
     super.initState();
+    _primeCachedAnalytics();
     
     // Listen for roomspace changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -43,6 +44,26 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           Provider.of<RoomspaceProvider>(context, listen: false);
       roomspaceProvider.addListener(_onRoomspaceChanged);
     });
+  }
+
+  Future<void> _primeCachedAnalytics() async {
+    final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    final cachedSummary = await _analyticsService.getCachedSummary(roomspaceId: activeRoomspaceId);
+    if (cachedSummary != null && mounted) {
+      _cachedAnalyticsData = {
+        'summary': cachedSummary,
+        'roomspaceId': activeRoomspaceId,
+        'lastUpdated': DateTime.now(),
+        'isUsingCache': true,
+      };
+      _lastDataLoad = DateTime.now();
+      setState(() {});
+      // Refresh in background with latest data
+      _loadAnalyticsData(forceRefresh: true).then((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   @override

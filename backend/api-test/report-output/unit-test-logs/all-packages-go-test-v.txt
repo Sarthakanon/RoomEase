@@ -1,0 +1,941 @@
+?   	roomease/backend	[no test files]
+?   	roomease/backend/config	[no test files]
+?   	roomease/backend/internal/auth	[no test files]
+?   	roomease/backend/internal/config	[no test files]
+?   	roomease/backend/internal/models	[no test files]
+2026/05/25 19:49:02 ✅ Stripe initialized
+=== RUN   TestAnalyticsHandler_GetSummary_Unauthorized
+--- PASS: TestAnalyticsHandler_GetSummary_Unauthorized (0.00s)
+=== RUN   TestAnalyticsHandler_GetTrends_InvalidGroupBy
+--- PASS: TestAnalyticsHandler_GetTrends_InvalidGroupBy (0.00s)
+=== RUN   TestAnalyticsHandler_GetPredictions_Unauthorized
+--- PASS: TestAnalyticsHandler_GetPredictions_Unauthorized (0.00s)
+=== RUN   TestAnalyticsHandler_SubmitFeedback_InvalidFeedbackType
+--- PASS: TestAnalyticsHandler_SubmitFeedback_InvalidFeedbackType (0.00s)
+=== RUN   TestAuthHandler_Login_MissingToken
+--- PASS: TestAuthHandler_Login_MissingToken (0.00s)
+=== RUN   TestAuthHandler_Login_EmptyToken
+--- PASS: TestAuthHandler_Login_EmptyToken (0.00s)
+=== RUN   TestAuthHandler_Logout_NoSession
+--- PASS: TestAuthHandler_Logout_NoSession (0.00s)
+=== RUN   TestAuthHandler_Verify_NoSession
+--- PASS: TestAuthHandler_Verify_NoSession (0.00s)
+=== RUN   TestAuthHandler_Refresh_NoSession
+--- PASS: TestAuthHandler_Refresh_NoSession (0.00s)
+=== RUN   TestSessionStore_Integration
+--- PASS: TestSessionStore_Integration (0.00s)
+=== RUN   TestGenerateSessionID
+--- PASS: TestGenerateSessionID (0.00s)
+=== RUN   TestLoginRequest_Validation
+=== RUN   TestLoginRequest_Validation/Missing_firebase_token_field
+=== RUN   TestLoginRequest_Validation/Empty_firebase_token
+=== RUN   TestLoginRequest_Validation/Invalid_JSON
+--- PASS: TestLoginRequest_Validation (0.00s)
+    --- PASS: TestLoginRequest_Validation/Missing_firebase_token_field (0.00s)
+    --- PASS: TestLoginRequest_Validation/Empty_firebase_token (0.00s)
+    --- PASS: TestLoginRequest_Validation/Invalid_JSON (0.00s)
+=== RUN   TestResponseStructures
+=== RUN   TestResponseStructures/LoginResponse
+=== RUN   TestResponseStructures/VerifyResponse
+--- PASS: TestResponseStructures (0.00s)
+    --- PASS: TestResponseStructures/LoginResponse (0.00s)
+    --- PASS: TestResponseStructures/VerifyResponse (0.00s)
+=== RUN   TestExpenseHandler_DBCreateDeleteAndIsolation
+    backend_db_test.go:22: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestExpenseHandler_DBCreateDeleteAndIsolation (0.00s)
+=== RUN   TestExpenseHandler_DBRejectsUnauthorizedRoomspace
+    backend_db_test.go:73: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestExpenseHandler_DBRejectsUnauthorizedRoomspace (0.00s)
+=== RUN   TestNotificationHandler_DBListReadAndProcessJoinRequest
+    backend_db_test.go:96: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestNotificationHandler_DBListReadAndProcessJoinRequest (0.00s)
+=== RUN   TestPaymentConfirmationHandler_DBCreateConfirmAndReject
+    backend_db_test.go:134: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestPaymentConfirmationHandler_DBCreateConfirmAndReject (0.00s)
+=== RUN   TestExpenseRoomspaceContextFiltering
+=== RUN   TestExpenseRoomspaceContextFiltering/GetExpenses_with_roomspace_id_filters_correctly
+=== RUN   TestExpenseRoomspaceContextFiltering/GetExpenses_without_roomspace_id_returns_expenses_from_all_user_roomspaces
+=== RUN   TestExpenseRoomspaceContextFiltering/GetExpenseByID_validates_roomspace_membership
+=== RUN   TestExpenseRoomspaceContextFiltering/CreateExpense_validates_roomspace_membership
+=== RUN   TestExpenseRoomspaceContextFiltering/UpdateExpense_validates_roomspace_membership
+=== RUN   TestExpenseRoomspaceContextFiltering/DeleteExpense_validates_roomspace_membership
+=== RUN   TestExpenseRoomspaceContextFiltering/Cross-roomspace_data_access_is_prevented
+--- PASS: TestExpenseRoomspaceContextFiltering (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/GetExpenses_with_roomspace_id_filters_correctly (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/GetExpenses_without_roomspace_id_returns_expenses_from_all_user_roomspaces (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/GetExpenseByID_validates_roomspace_membership (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/CreateExpense_validates_roomspace_membership (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/UpdateExpense_validates_roomspace_membership (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/DeleteExpense_validates_roomspace_membership (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/Cross-roomspace_data_access_is_prevented (0.00s)
+=== RUN   TestExpenseRepositoryRoomspaceFiltering
+=== RUN   TestExpenseRepositoryRoomspaceFiltering/GetUserExpenses_with_roomspace_id_validates_membership
+=== RUN   TestExpenseRepositoryRoomspaceFiltering/GetUserExpenses_without_roomspace_id_only_returns_user's_roomspace_expenses
+=== RUN   TestExpenseRepositoryRoomspaceFiltering/GetRoomspaceExpenses_returns_only_expenses_for_specified_roomspace
+--- PASS: TestExpenseRepositoryRoomspaceFiltering (0.00s)
+    --- PASS: TestExpenseRepositoryRoomspaceFiltering/GetUserExpenses_with_roomspace_id_validates_membership (0.00s)
+    --- PASS: TestExpenseRepositoryRoomspaceFiltering/GetUserExpenses_without_roomspace_id_only_returns_user's_roomspace_expenses (0.00s)
+    --- PASS: TestExpenseRepositoryRoomspaceFiltering/GetRoomspaceExpenses_returns_only_expenses_for_specified_roomspace (0.00s)
+=== RUN   TestExpenseDataIsolation
+=== RUN   TestExpenseDataIsolation/Expenses_from_different_roomspaces_are_isolated
+=== RUN   TestExpenseDataIsolation/User_can_only_see_expenses_from_their_roomspaces
+=== RUN   TestExpenseDataIsolation/Expense_splits_are_scoped_to_roomspace_members
+--- PASS: TestExpenseDataIsolation (0.00s)
+    --- PASS: TestExpenseDataIsolation/Expenses_from_different_roomspaces_are_isolated (0.00s)
+    --- PASS: TestExpenseDataIsolation/User_can_only_see_expenses_from_their_roomspaces (0.00s)
+    --- PASS: TestExpenseDataIsolation/Expense_splits_are_scoped_to_roomspace_members (0.00s)
+=== RUN   TestExpenseHandler_validateExpenseRequest
+=== RUN   TestExpenseHandler_validateExpenseRequest/valid_equal_split
+=== RUN   TestExpenseHandler_validateExpenseRequest/valid_percentage_split
+=== RUN   TestExpenseHandler_validateExpenseRequest/valid_exact_split
+=== RUN   TestExpenseHandler_validateExpenseRequest/invalid_percentage_split_-_doesn't_sum_to_100
+=== RUN   TestExpenseHandler_validateExpenseRequest/invalid_exact_split_-_doesn't_sum_to_total
+=== RUN   TestExpenseHandler_validateExpenseRequest/no_selected_roommates
+--- PASS: TestExpenseHandler_validateExpenseRequest (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/valid_equal_split (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/valid_percentage_split (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/valid_exact_split (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/invalid_percentage_split_-_doesn't_sum_to_100 (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/invalid_exact_split_-_doesn't_sum_to_total (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/no_selected_roommates (0.00s)
+=== RUN   TestExpenseHandler_calculateSplits
+=== RUN   TestExpenseHandler_calculateSplits/equal_split_calculation
+=== RUN   TestExpenseHandler_calculateSplits/percentage_split_calculation
+=== RUN   TestExpenseHandler_calculateSplits/exact_split_calculation
+--- PASS: TestExpenseHandler_calculateSplits (0.00s)
+    --- PASS: TestExpenseHandler_calculateSplits/equal_split_calculation (0.00s)
+    --- PASS: TestExpenseHandler_calculateSplits/percentage_split_calculation (0.00s)
+    --- PASS: TestExpenseHandler_calculateSplits/exact_split_calculation (0.00s)
+=== RUN   TestExpenseHandler_CreateExpense_ValidationErrors
+=== RUN   TestExpenseHandler_CreateExpense_ValidationErrors/invalid_JSON
+=== RUN   TestExpenseHandler_CreateExpense_ValidationErrors/missing_required_fields
+=== RUN   TestExpenseHandler_CreateExpense_ValidationErrors/invalid_split_type
+DEBUG: Received expense request - PaidBy: '', AuthUser: 'test-user-uid', Title: 'Test Expense'
+--- PASS: TestExpenseHandler_CreateExpense_ValidationErrors (0.00s)
+    --- PASS: TestExpenseHandler_CreateExpense_ValidationErrors/invalid_JSON (0.00s)
+    --- PASS: TestExpenseHandler_CreateExpense_ValidationErrors/missing_required_fields (0.00s)
+    --- PASS: TestExpenseHandler_CreateExpense_ValidationErrors/invalid_split_type (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_JoinLimit
+=== RUN   TestMultiRoomspaceIntegration_JoinLimit/user_can_join_up_to_5_roomspaces
+=== RUN   TestMultiRoomspaceIntegration_JoinLimit/user_cannot_join_6th_roomspace
+=== RUN   TestMultiRoomspaceIntegration_JoinLimit/leaving_roomspace_allows_joining_new_one
+--- PASS: TestMultiRoomspaceIntegration_JoinLimit (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_JoinLimit/user_can_join_up_to_5_roomspaces (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_JoinLimit/user_cannot_join_6th_roomspace (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_JoinLimit/leaving_roomspace_allows_joining_new_one (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_DataIsolation
+=== RUN   TestMultiRoomspaceIntegration_DataIsolation/expenses_are_isolated_by_roomspace
+=== RUN   TestMultiRoomspaceIntegration_DataIsolation/analytics_are_calculated_per_roomspace
+=== RUN   TestMultiRoomspaceIntegration_DataIsolation/members_are_filtered_by_roomspace
+--- PASS: TestMultiRoomspaceIntegration_DataIsolation (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_DataIsolation/expenses_are_isolated_by_roomspace (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_DataIsolation/analytics_are_calculated_per_roomspace (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_DataIsolation/members_are_filtered_by_roomspace (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceSwitching
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceSwitching/switching_roomspace_updates_context
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceSwitching/API_endpoints_accept_roomspace_id_parameter
+--- PASS: TestMultiRoomspaceIntegration_RoomspaceSwitching (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_RoomspaceSwitching/switching_roomspace_updates_context (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_RoomspaceSwitching/API_endpoints_accept_roomspace_id_parameter (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces
+=== RUN   TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/analytics_summary_is_roomspace-specific
+=== RUN   TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/spending_predictions_use_roomspace_data
+=== RUN   TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/anomaly_detection_is_roomspace-scoped
+--- PASS: TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/analytics_summary_is_roomspace-specific (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/spending_predictions_use_roomspace_data (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/anomaly_detection_is_roomspace-scoped (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_SettingsScreen
+=== RUN   TestMultiRoomspaceIntegration_SettingsScreen/all_roomspaces_are_returned_by_API
+=== RUN   TestMultiRoomspaceIntegration_SettingsScreen/roomspace_details_include_invite_codes
+=== RUN   TestMultiRoomspaceIntegration_SettingsScreen/leave_roomspace_removes_user_from_members
+--- PASS: TestMultiRoomspaceIntegration_SettingsScreen (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_SettingsScreen/all_roomspaces_are_returned_by_API (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_SettingsScreen/roomspace_details_include_invite_codes (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_SettingsScreen/leave_roomspace_removes_user_from_members (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_LeavingAndRejoining
+=== RUN   TestMultiRoomspaceIntegration_LeavingAndRejoining/leaving_roomspace_decrements_count
+=== RUN   TestMultiRoomspaceIntegration_LeavingAndRejoining/can_rejoin_after_leaving
+=== RUN   TestMultiRoomspaceIntegration_LeavingAndRejoining/leaving_active_roomspace_switches_to_another
+--- PASS: TestMultiRoomspaceIntegration_LeavingAndRejoining (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_LeavingAndRejoining/leaving_roomspace_decrements_count (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_LeavingAndRejoining/can_rejoin_after_leaving (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_LeavingAndRejoining/leaving_active_roomspace_switches_to_another (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_CompleteWorkflow
+=== RUN   TestMultiRoomspaceIntegration_CompleteWorkflow/complete_workflow_executes_successfully
+--- PASS: TestMultiRoomspaceIntegration_CompleteWorkflow (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_CompleteWorkflow/complete_workflow_executes_successfully (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceCountEndpoint
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceCountEndpoint/roomspace_count_endpoint_exists
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceCountEndpoint/count_reflects_active_memberships
+--- PASS: TestMultiRoomspaceIntegration_RoomspaceCountEndpoint (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_RoomspaceCountEndpoint/roomspace_count_endpoint_exists (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_RoomspaceCountEndpoint/count_reflects_active_memberships (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_MembershipValidation
+=== RUN   TestMultiRoomspaceIntegration_MembershipValidation/non-members_cannot_access_roomspace_data
+=== RUN   TestMultiRoomspaceIntegration_MembershipValidation/membership_validation_applies_to_all_endpoints
+--- PASS: TestMultiRoomspaceIntegration_MembershipValidation (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_MembershipValidation/non-members_cannot_access_roomspace_data (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_MembershipValidation/membership_validation_applies_to_all_endpoints (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_VisualDistinction
+=== RUN   TestMultiRoomspaceIntegration_VisualDistinction/roomspace_data_includes_visual_identifiers
+--- PASS: TestMultiRoomspaceIntegration_VisualDistinction (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_VisualDistinction/roomspace_data_includes_visual_identifiers (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_ErrorHandling
+=== RUN   TestMultiRoomspaceIntegration_ErrorHandling/invalid_roomspace_id_returns_appropriate_error
+=== RUN   TestMultiRoomspaceIntegration_ErrorHandling/non-existent_roomspace_returns_404
+--- PASS: TestMultiRoomspaceIntegration_ErrorHandling (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_ErrorHandling/invalid_roomspace_id_returns_appropriate_error (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_ErrorHandling/non-existent_roomspace_returns_404 (0.00s)
+=== RUN   TestGetRoomspaceCount_Unauthorized
+--- PASS: TestGetRoomspaceCount_Unauthorized (0.00s)
+=== RUN   TestGetRoomspaceCount_ResponseStructure
+--- PASS: TestGetRoomspaceCount_ResponseStructure (0.00s)
+=== RUN   TestGetExpenses_RoomspaceFiltering
+=== RUN   TestGetExpenses_RoomspaceFiltering/without_roomspace_id_parameter
+=== RUN   TestGetExpenses_RoomspaceFiltering/with_roomspace_id_parameter
+--- PASS: TestGetExpenses_RoomspaceFiltering (0.00s)
+    --- PASS: TestGetExpenses_RoomspaceFiltering/without_roomspace_id_parameter (0.00s)
+    --- PASS: TestGetExpenses_RoomspaceFiltering/with_roomspace_id_parameter (0.00s)
+=== RUN   TestAnalytics_RoomspaceFiltering
+=== RUN   TestAnalytics_RoomspaceFiltering/summary_without_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/summary_with_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/trends_without_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/trends_with_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/predictions_without_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/predictions_with_roomspace_id
+--- PASS: TestAnalytics_RoomspaceFiltering (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/summary_without_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/summary_with_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/trends_without_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/trends_with_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/predictions_without_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/predictions_with_roomspace_id (0.00s)
+PASS
+ok  	roomease/backend/handlers	0.021s
+?   	roomease/backend/testutils	[no test files]
+?   	roomease/backend/utils	[no test files]
+=== RUN   TestAuthMiddleware_NoSessionCookie
+🔐 AuthMiddleware called for: GET /protected
+❌ No session cookie found
+--- PASS: TestAuthMiddleware_NoSessionCookie (0.00s)
+=== RUN   TestAuthMiddleware_InvalidSession
+🔐 AuthMiddleware called for: GET /protected
+🍪 Session ID: invalid-session-123
+❌ Invalid session: session not found
+--- PASS: TestAuthMiddleware_InvalidSession (0.00s)
+=== RUN   TestAuthMiddleware_ValidSession
+🔐 AuthMiddleware called for: GET /protected
+🍪 Session ID: valid-session-123
+✅ Valid session for user: user-123
+✅ User is not banned, proceeding with request
+--- PASS: TestAuthMiddleware_ValidSession (0.00s)
+=== RUN   TestAuthMiddleware_ExpiredSession
+🔐 AuthMiddleware called for: GET /protected
+🍪 Session ID: expired-session-456
+❌ Invalid session: session expired
+--- PASS: TestAuthMiddleware_ExpiredSession (0.00s)
+=== RUN   TestAuthMiddleware_EmptySessionCookie
+🔐 AuthMiddleware called for: GET /protected
+🍪 Session ID: 
+❌ Invalid session: session not found
+--- PASS: TestAuthMiddleware_EmptySessionCookie (0.00s)
+=== RUN   TestAuthMiddleware_BannedUser
+    auth_test.go:218: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestAuthMiddleware_BannedUser (0.00s)
+=== RUN   TestCORSMiddleware_AllowsLocalhostOrigin
+--- PASS: TestCORSMiddleware_AllowsLocalhostOrigin (0.00s)
+=== RUN   TestLoggerMiddleware_DoesNotBlockRequest
+2026/05/25 19:49:02 → GET /ping | User: anonymous
+2026/05/25 19:49:02 ← GET /ping | Status: 200 | Duration: 74.568µs | User: anonymous
+--- PASS: TestLoggerMiddleware_DoesNotBlockRequest (0.00s)
+=== RUN   TestValidateRoomspaceMembership
+    roomspace_test.go:17: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestValidateRoomspaceMembership (0.00s)
+=== RUN   TestValidateRoomspaceMembership_Unauthenticated
+--- PASS: TestValidateRoomspaceMembership_Unauthenticated (0.00s)
+PASS
+ok  	roomease/backend/middleware	0.019s
+=== RUN   TestAnalyticsCacheTableName
+--- PASS: TestAnalyticsCacheTableName (0.00s)
+=== RUN   TestRecommendationFeedbackTableName
+--- PASS: TestRecommendationFeedbackTableName (0.00s)
+=== RUN   TestAnomalyAcknowledgmentTableName
+--- PASS: TestAnomalyAcknowledgmentTableName (0.00s)
+=== RUN   TestMLModelTableName
+--- PASS: TestMLModelTableName (0.00s)
+=== RUN   TestAnalyticsCacheCreation
+--- PASS: TestAnalyticsCacheCreation (0.00s)
+=== RUN   TestRecommendationFeedbackCreation
+--- PASS: TestRecommendationFeedbackCreation (0.00s)
+=== RUN   TestAnomalyAcknowledgmentCreation
+--- PASS: TestAnomalyAcknowledgmentCreation (0.00s)
+=== RUN   TestMLModelCreation
+--- PASS: TestMLModelCreation (0.00s)
+=== RUN   TestUserBalance_IsOwed
+=== RUN   TestUserBalance_IsOwed/Positive_balance
+=== RUN   TestUserBalance_IsOwed/Small_positive_balance
+=== RUN   TestUserBalance_IsOwed/Zero_balance
+=== RUN   TestUserBalance_IsOwed/Negative_balance
+=== RUN   TestUserBalance_IsOwed/Very_small_positive_(threshold)
+--- PASS: TestUserBalance_IsOwed (0.00s)
+    --- PASS: TestUserBalance_IsOwed/Positive_balance (0.00s)
+    --- PASS: TestUserBalance_IsOwed/Small_positive_balance (0.00s)
+    --- PASS: TestUserBalance_IsOwed/Zero_balance (0.00s)
+    --- PASS: TestUserBalance_IsOwed/Negative_balance (0.00s)
+    --- PASS: TestUserBalance_IsOwed/Very_small_positive_(threshold) (0.00s)
+=== RUN   TestUserBalance_Owes
+=== RUN   TestUserBalance_Owes/Negative_balance
+=== RUN   TestUserBalance_Owes/Small_negative_balance
+=== RUN   TestUserBalance_Owes/Zero_balance
+=== RUN   TestUserBalance_Owes/Positive_balance
+=== RUN   TestUserBalance_Owes/Very_small_negative_(threshold)
+--- PASS: TestUserBalance_Owes (0.00s)
+    --- PASS: TestUserBalance_Owes/Negative_balance (0.00s)
+    --- PASS: TestUserBalance_Owes/Small_negative_balance (0.00s)
+    --- PASS: TestUserBalance_Owes/Zero_balance (0.00s)
+    --- PASS: TestUserBalance_Owes/Positive_balance (0.00s)
+    --- PASS: TestUserBalance_Owes/Very_small_negative_(threshold) (0.00s)
+=== RUN   TestUserBalance_IsSettled
+=== RUN   TestUserBalance_IsSettled/Zero_balance
+=== RUN   TestUserBalance_IsSettled/Very_small_positive
+=== RUN   TestUserBalance_IsSettled/Very_small_negative
+=== RUN   TestUserBalance_IsSettled/At_positive_threshold
+=== RUN   TestUserBalance_IsSettled/At_negative_threshold
+=== RUN   TestUserBalance_IsSettled/Above_threshold
+=== RUN   TestUserBalance_IsSettled/Below_threshold
+=== RUN   TestUserBalance_IsSettled/Large_positive
+=== RUN   TestUserBalance_IsSettled/Large_negative
+--- PASS: TestUserBalance_IsSettled (0.00s)
+    --- PASS: TestUserBalance_IsSettled/Zero_balance (0.00s)
+    --- PASS: TestUserBalance_IsSettled/Very_small_positive (0.00s)
+    --- PASS: TestUserBalance_IsSettled/Very_small_negative (0.00s)
+    --- PASS: TestUserBalance_IsSettled/At_positive_threshold (0.00s)
+    --- PASS: TestUserBalance_IsSettled/At_negative_threshold (0.00s)
+    --- PASS: TestUserBalance_IsSettled/Above_threshold (0.00s)
+    --- PASS: TestUserBalance_IsSettled/Below_threshold (0.00s)
+    --- PASS: TestUserBalance_IsSettled/Large_positive (0.00s)
+    --- PASS: TestUserBalance_IsSettled/Large_negative (0.00s)
+=== RUN   TestUserBalance_NetContribution
+=== RUN   TestUserBalance_NetContribution/Paid_more_than_owed
+=== RUN   TestUserBalance_NetContribution/Paid_less_than_owed
+=== RUN   TestUserBalance_NetContribution/Paid_equals_owed
+=== RUN   TestUserBalance_NetContribution/No_payments
+=== RUN   TestUserBalance_NetContribution/Only_paid
+=== RUN   TestUserBalance_NetContribution/Only_owed
+--- PASS: TestUserBalance_NetContribution (0.00s)
+    --- PASS: TestUserBalance_NetContribution/Paid_more_than_owed (0.00s)
+    --- PASS: TestUserBalance_NetContribution/Paid_less_than_owed (0.00s)
+    --- PASS: TestUserBalance_NetContribution/Paid_equals_owed (0.00s)
+    --- PASS: TestUserBalance_NetContribution/No_payments (0.00s)
+    --- PASS: TestUserBalance_NetContribution/Only_paid (0.00s)
+    --- PASS: TestUserBalance_NetContribution/Only_owed (0.00s)
+=== RUN   TestBalanceSummary_Creditors
+--- PASS: TestBalanceSummary_Creditors (0.00s)
+=== RUN   TestBalanceSummary_Debtors
+--- PASS: TestBalanceSummary_Debtors (0.00s)
+=== RUN   TestBalanceSummary_Balanced
+--- PASS: TestBalanceSummary_Balanced (0.00s)
+=== RUN   TestBalanceSummary_TotalOwed
+--- PASS: TestBalanceSummary_TotalOwed (0.00s)
+=== RUN   TestBalanceSummary_AverageExpense
+=== RUN   TestBalanceSummary_AverageExpense/Normal_case
+=== RUN   TestBalanceSummary_AverageExpense/Single_expense
+=== RUN   TestBalanceSummary_AverageExpense/No_expenses
+=== RUN   TestBalanceSummary_AverageExpense/Decimal_result
+--- PASS: TestBalanceSummary_AverageExpense (0.00s)
+    --- PASS: TestBalanceSummary_AverageExpense/Normal_case (0.00s)
+    --- PASS: TestBalanceSummary_AverageExpense/Single_expense (0.00s)
+    --- PASS: TestBalanceSummary_AverageExpense/No_expenses (0.00s)
+    --- PASS: TestBalanceSummary_AverageExpense/Decimal_result (0.00s)
+=== RUN   TestUserBalance_TableName
+--- PASS: TestUserBalance_TableName (0.00s)
+=== RUN   TestSettlement_TableName
+--- PASS: TestSettlement_TableName (0.00s)
+=== RUN   TestUserBalance_Relationships
+--- PASS: TestUserBalance_Relationships (0.00s)
+=== RUN   TestSettlement_Relationships
+--- PASS: TestSettlement_Relationships (0.00s)
+=== RUN   TestJoinRequestStatus_IsValid
+=== RUN   TestJoinRequestStatus_IsValid/pending_status
+=== RUN   TestJoinRequestStatus_IsValid/approved_status
+=== RUN   TestJoinRequestStatus_IsValid/rejected_status
+=== RUN   TestJoinRequestStatus_IsValid/expired_status
+=== RUN   TestJoinRequestStatus_IsValid/cancelled_status
+=== RUN   TestJoinRequestStatus_IsValid/invalid_status
+=== RUN   TestJoinRequestStatus_IsValid/empty_status
+--- PASS: TestJoinRequestStatus_IsValid (0.00s)
+    --- PASS: TestJoinRequestStatus_IsValid/pending_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsValid/approved_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsValid/rejected_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsValid/expired_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsValid/cancelled_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsValid/invalid_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsValid/empty_status (0.00s)
+=== RUN   TestJoinRequestStatus_IsFinal
+=== RUN   TestJoinRequestStatus_IsFinal/pending_status
+=== RUN   TestJoinRequestStatus_IsFinal/approved_status
+=== RUN   TestJoinRequestStatus_IsFinal/rejected_status
+=== RUN   TestJoinRequestStatus_IsFinal/expired_status
+=== RUN   TestJoinRequestStatus_IsFinal/cancelled_status
+--- PASS: TestJoinRequestStatus_IsFinal (0.00s)
+    --- PASS: TestJoinRequestStatus_IsFinal/pending_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsFinal/approved_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsFinal/rejected_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsFinal/expired_status (0.00s)
+    --- PASS: TestJoinRequestStatus_IsFinal/cancelled_status (0.00s)
+=== RUN   TestJoinRequestStatus_String
+--- PASS: TestJoinRequestStatus_String (0.00s)
+=== RUN   TestJoinRequest_IsExpired
+=== RUN   TestJoinRequest_IsExpired/not_expired
+=== RUN   TestJoinRequest_IsExpired/expired
+=== RUN   TestJoinRequest_IsExpired/just_expired
+--- PASS: TestJoinRequest_IsExpired (0.00s)
+    --- PASS: TestJoinRequest_IsExpired/not_expired (0.00s)
+    --- PASS: TestJoinRequest_IsExpired/expired (0.00s)
+    --- PASS: TestJoinRequest_IsExpired/just_expired (0.00s)
+=== RUN   TestJoinRequest_IsPending
+=== RUN   TestJoinRequest_IsPending/pending_and_not_expired
+=== RUN   TestJoinRequest_IsPending/pending_but_expired
+=== RUN   TestJoinRequest_IsPending/approved_and_not_expired
+=== RUN   TestJoinRequest_IsPending/rejected_and_not_expired
+--- PASS: TestJoinRequest_IsPending (0.00s)
+    --- PASS: TestJoinRequest_IsPending/pending_and_not_expired (0.00s)
+    --- PASS: TestJoinRequest_IsPending/pending_but_expired (0.00s)
+    --- PASS: TestJoinRequest_IsPending/approved_and_not_expired (0.00s)
+    --- PASS: TestJoinRequest_IsPending/rejected_and_not_expired (0.00s)
+=== RUN   TestJoinRequest_CanBeProcessed
+=== RUN   TestJoinRequest_CanBeProcessed/pending_and_not_expired
+=== RUN   TestJoinRequest_CanBeProcessed/pending_but_expired
+=== RUN   TestJoinRequest_CanBeProcessed/approved
+=== RUN   TestJoinRequest_CanBeProcessed/rejected
+--- PASS: TestJoinRequest_CanBeProcessed (0.00s)
+    --- PASS: TestJoinRequest_CanBeProcessed/pending_and_not_expired (0.00s)
+    --- PASS: TestJoinRequest_CanBeProcessed/pending_but_expired (0.00s)
+    --- PASS: TestJoinRequest_CanBeProcessed/approved (0.00s)
+    --- PASS: TestJoinRequest_CanBeProcessed/rejected (0.00s)
+=== RUN   TestJoinRequest_GetTimeUntilExpiry
+=== RUN   TestJoinRequest_GetTimeUntilExpiry/1_hour_until_expiry
+=== RUN   TestJoinRequest_GetTimeUntilExpiry/already_expired
+--- PASS: TestJoinRequest_GetTimeUntilExpiry (0.00s)
+    --- PASS: TestJoinRequest_GetTimeUntilExpiry/1_hour_until_expiry (0.00s)
+    --- PASS: TestJoinRequest_GetTimeUntilExpiry/already_expired (0.00s)
+=== RUN   TestJoinRequest_GetDaysUntilExpiry
+=== RUN   TestJoinRequest_GetDaysUntilExpiry/7_days_until_expiry
+=== RUN   TestJoinRequest_GetDaysUntilExpiry/1_day_until_expiry
+=== RUN   TestJoinRequest_GetDaysUntilExpiry/already_expired
+=== RUN   TestJoinRequest_GetDaysUntilExpiry/less_than_1_day
+--- PASS: TestJoinRequest_GetDaysUntilExpiry (0.00s)
+    --- PASS: TestJoinRequest_GetDaysUntilExpiry/7_days_until_expiry (0.00s)
+    --- PASS: TestJoinRequest_GetDaysUntilExpiry/1_day_until_expiry (0.00s)
+    --- PASS: TestJoinRequest_GetDaysUntilExpiry/already_expired (0.00s)
+    --- PASS: TestJoinRequest_GetDaysUntilExpiry/less_than_1_day (0.00s)
+=== RUN   TestJoinRequest_Approve
+=== RUN   TestJoinRequest_Approve/can_approve_pending
+=== RUN   TestJoinRequest_Approve/cannot_approve_expired
+=== RUN   TestJoinRequest_Approve/cannot_approve_already_approved
+=== RUN   TestJoinRequest_Approve/cannot_approve_rejected
+--- PASS: TestJoinRequest_Approve (0.00s)
+    --- PASS: TestJoinRequest_Approve/can_approve_pending (0.00s)
+    --- PASS: TestJoinRequest_Approve/cannot_approve_expired (0.00s)
+    --- PASS: TestJoinRequest_Approve/cannot_approve_already_approved (0.00s)
+    --- PASS: TestJoinRequest_Approve/cannot_approve_rejected (0.00s)
+=== RUN   TestJoinRequest_Reject
+=== RUN   TestJoinRequest_Reject/can_reject_pending
+=== RUN   TestJoinRequest_Reject/cannot_reject_expired
+=== RUN   TestJoinRequest_Reject/cannot_reject_already_approved
+--- PASS: TestJoinRequest_Reject (0.00s)
+    --- PASS: TestJoinRequest_Reject/can_reject_pending (0.00s)
+    --- PASS: TestJoinRequest_Reject/cannot_reject_expired (0.00s)
+    --- PASS: TestJoinRequest_Reject/cannot_reject_already_approved (0.00s)
+=== RUN   TestJoinRequest_Expire
+=== RUN   TestJoinRequest_Expire/can_expire_pending
+=== RUN   TestJoinRequest_Expire/cannot_expire_approved
+=== RUN   TestJoinRequest_Expire/cannot_expire_rejected
+--- PASS: TestJoinRequest_Expire (0.00s)
+    --- PASS: TestJoinRequest_Expire/can_expire_pending (0.00s)
+    --- PASS: TestJoinRequest_Expire/cannot_expire_approved (0.00s)
+    --- PASS: TestJoinRequest_Expire/cannot_expire_rejected (0.00s)
+=== RUN   TestJoinRequest_Cancel
+=== RUN   TestJoinRequest_Cancel/can_cancel_pending
+=== RUN   TestJoinRequest_Cancel/cannot_cancel_approved
+=== RUN   TestJoinRequest_Cancel/cannot_cancel_rejected
+--- PASS: TestJoinRequest_Cancel (0.00s)
+    --- PASS: TestJoinRequest_Cancel/can_cancel_pending (0.00s)
+    --- PASS: TestJoinRequest_Cancel/cannot_cancel_approved (0.00s)
+    --- PASS: TestJoinRequest_Cancel/cannot_cancel_rejected (0.00s)
+=== RUN   TestJoinRequest_GetDisplayStatus
+=== RUN   TestJoinRequest_GetDisplayStatus/pending_not_expired
+=== RUN   TestJoinRequest_GetDisplayStatus/pending_expired
+=== RUN   TestJoinRequest_GetDisplayStatus/approved
+=== RUN   TestJoinRequest_GetDisplayStatus/rejected
+=== RUN   TestJoinRequest_GetDisplayStatus/expired
+=== RUN   TestJoinRequest_GetDisplayStatus/cancelled
+--- PASS: TestJoinRequest_GetDisplayStatus (0.00s)
+    --- PASS: TestJoinRequest_GetDisplayStatus/pending_not_expired (0.00s)
+    --- PASS: TestJoinRequest_GetDisplayStatus/pending_expired (0.00s)
+    --- PASS: TestJoinRequest_GetDisplayStatus/approved (0.00s)
+    --- PASS: TestJoinRequest_GetDisplayStatus/rejected (0.00s)
+    --- PASS: TestJoinRequest_GetDisplayStatus/expired (0.00s)
+    --- PASS: TestJoinRequest_GetDisplayStatus/cancelled (0.00s)
+=== RUN   TestJoinRequest_GetStatusColor
+=== RUN   TestJoinRequest_GetStatusColor/pending_not_expired
+=== RUN   TestJoinRequest_GetStatusColor/pending_expired
+=== RUN   TestJoinRequest_GetStatusColor/approved
+=== RUN   TestJoinRequest_GetStatusColor/rejected
+=== RUN   TestJoinRequest_GetStatusColor/expired
+=== RUN   TestJoinRequest_GetStatusColor/cancelled
+--- PASS: TestJoinRequest_GetStatusColor (0.00s)
+    --- PASS: TestJoinRequest_GetStatusColor/pending_not_expired (0.00s)
+    --- PASS: TestJoinRequest_GetStatusColor/pending_expired (0.00s)
+    --- PASS: TestJoinRequest_GetStatusColor/approved (0.00s)
+    --- PASS: TestJoinRequest_GetStatusColor/rejected (0.00s)
+    --- PASS: TestJoinRequest_GetStatusColor/expired (0.00s)
+    --- PASS: TestJoinRequest_GetStatusColor/cancelled (0.00s)
+=== RUN   TestJoinRequest_CanBeCancelledBy
+=== RUN   TestJoinRequest_CanBeCancelledBy/requester_can_cancel_pending
+=== RUN   TestJoinRequest_CanBeCancelledBy/other_user_cannot_cancel
+=== RUN   TestJoinRequest_CanBeCancelledBy/requester_cannot_cancel_approved
+=== RUN   TestJoinRequest_CanBeCancelledBy/requester_cannot_cancel_rejected
+--- PASS: TestJoinRequest_CanBeCancelledBy (0.00s)
+    --- PASS: TestJoinRequest_CanBeCancelledBy/requester_can_cancel_pending (0.00s)
+    --- PASS: TestJoinRequest_CanBeCancelledBy/other_user_cannot_cancel (0.00s)
+    --- PASS: TestJoinRequest_CanBeCancelledBy/requester_cannot_cancel_approved (0.00s)
+    --- PASS: TestJoinRequest_CanBeCancelledBy/requester_cannot_cancel_rejected (0.00s)
+=== RUN   TestJoinRequest_GetProcessingInfo
+--- PASS: TestJoinRequest_GetProcessingInfo (0.00s)
+=== RUN   TestJoinRequest_BeforeCreate
+--- PASS: TestJoinRequest_BeforeCreate (0.00s)
+=== RUN   TestJoinRequest_BeforeUpdate
+=== RUN   TestJoinRequest_BeforeUpdate/valid_status
+=== RUN   TestJoinRequest_BeforeUpdate/invalid_status
+=== RUN   TestJoinRequest_BeforeUpdate/pending_with_processed_at
+=== RUN   TestJoinRequest_BeforeUpdate/approved_without_processed_at
+--- PASS: TestJoinRequest_BeforeUpdate (0.00s)
+    --- PASS: TestJoinRequest_BeforeUpdate/valid_status (0.00s)
+    --- PASS: TestJoinRequest_BeforeUpdate/invalid_status (0.00s)
+    --- PASS: TestJoinRequest_BeforeUpdate/pending_with_processed_at (0.00s)
+    --- PASS: TestJoinRequest_BeforeUpdate/approved_without_processed_at (0.00s)
+=== RUN   TestJoinRequest_TableName
+--- PASS: TestJoinRequest_TableName (0.00s)
+=== RUN   TestMemberRole_IsValid
+=== RUN   TestMemberRole_IsValid/creator_role
+=== RUN   TestMemberRole_IsValid/admin_role
+=== RUN   TestMemberRole_IsValid/member_role
+=== RUN   TestMemberRole_IsValid/pending_role
+=== RUN   TestMemberRole_IsValid/invalid_role
+=== RUN   TestMemberRole_IsValid/empty_role
+--- PASS: TestMemberRole_IsValid (0.00s)
+    --- PASS: TestMemberRole_IsValid/creator_role (0.00s)
+    --- PASS: TestMemberRole_IsValid/admin_role (0.00s)
+    --- PASS: TestMemberRole_IsValid/member_role (0.00s)
+    --- PASS: TestMemberRole_IsValid/pending_role (0.00s)
+    --- PASS: TestMemberRole_IsValid/invalid_role (0.00s)
+    --- PASS: TestMemberRole_IsValid/empty_role (0.00s)
+=== RUN   TestMemberRole_String
+--- PASS: TestMemberRole_String (0.00s)
+=== RUN   TestRoomspaceMember_IsCreator
+=== RUN   TestRoomspaceMember_IsCreator/creator_role
+=== RUN   TestRoomspaceMember_IsCreator/admin_role
+=== RUN   TestRoomspaceMember_IsCreator/member_role
+=== RUN   TestRoomspaceMember_IsCreator/pending_role
+--- PASS: TestRoomspaceMember_IsCreator (0.00s)
+    --- PASS: TestRoomspaceMember_IsCreator/creator_role (0.00s)
+    --- PASS: TestRoomspaceMember_IsCreator/admin_role (0.00s)
+    --- PASS: TestRoomspaceMember_IsCreator/member_role (0.00s)
+    --- PASS: TestRoomspaceMember_IsCreator/pending_role (0.00s)
+=== RUN   TestRoomspaceMember_IsAdmin
+=== RUN   TestRoomspaceMember_IsAdmin/creator_role
+=== RUN   TestRoomspaceMember_IsAdmin/admin_role
+=== RUN   TestRoomspaceMember_IsAdmin/member_role
+=== RUN   TestRoomspaceMember_IsAdmin/pending_role
+--- PASS: TestRoomspaceMember_IsAdmin (0.00s)
+    --- PASS: TestRoomspaceMember_IsAdmin/creator_role (0.00s)
+    --- PASS: TestRoomspaceMember_IsAdmin/admin_role (0.00s)
+    --- PASS: TestRoomspaceMember_IsAdmin/member_role (0.00s)
+    --- PASS: TestRoomspaceMember_IsAdmin/pending_role (0.00s)
+=== RUN   TestRoomspaceMember_CanManageMembers
+=== RUN   TestRoomspaceMember_CanManageMembers/active_creator
+=== RUN   TestRoomspaceMember_CanManageMembers/active_admin
+=== RUN   TestRoomspaceMember_CanManageMembers/active_member
+=== RUN   TestRoomspaceMember_CanManageMembers/inactive_creator
+=== RUN   TestRoomspaceMember_CanManageMembers/inactive_admin
+--- PASS: TestRoomspaceMember_CanManageMembers (0.00s)
+    --- PASS: TestRoomspaceMember_CanManageMembers/active_creator (0.00s)
+    --- PASS: TestRoomspaceMember_CanManageMembers/active_admin (0.00s)
+    --- PASS: TestRoomspaceMember_CanManageMembers/active_member (0.00s)
+    --- PASS: TestRoomspaceMember_CanManageMembers/inactive_creator (0.00s)
+    --- PASS: TestRoomspaceMember_CanManageMembers/inactive_admin (0.00s)
+=== RUN   TestRoomspaceMember_CanProcessJoinRequests
+=== RUN   TestRoomspaceMember_CanProcessJoinRequests/active_creator
+=== RUN   TestRoomspaceMember_CanProcessJoinRequests/active_admin
+=== RUN   TestRoomspaceMember_CanProcessJoinRequests/active_member
+=== RUN   TestRoomspaceMember_CanProcessJoinRequests/inactive_creator
+--- PASS: TestRoomspaceMember_CanProcessJoinRequests (0.00s)
+    --- PASS: TestRoomspaceMember_CanProcessJoinRequests/active_creator (0.00s)
+    --- PASS: TestRoomspaceMember_CanProcessJoinRequests/active_admin (0.00s)
+    --- PASS: TestRoomspaceMember_CanProcessJoinRequests/active_member (0.00s)
+    --- PASS: TestRoomspaceMember_CanProcessJoinRequests/inactive_creator (0.00s)
+=== RUN   TestRoomspaceMember_CanRemoveMember
+=== RUN   TestRoomspaceMember_CanRemoveMember/creator_removes_admin
+=== RUN   TestRoomspaceMember_CanRemoveMember/creator_removes_member
+=== RUN   TestRoomspaceMember_CanRemoveMember/creator_removes_self
+=== RUN   TestRoomspaceMember_CanRemoveMember/admin_removes_member
+=== RUN   TestRoomspaceMember_CanRemoveMember/admin_removes_creator
+=== RUN   TestRoomspaceMember_CanRemoveMember/admin_removes_self
+=== RUN   TestRoomspaceMember_CanRemoveMember/member_removes_self
+=== RUN   TestRoomspaceMember_CanRemoveMember/member_removes_other
+=== RUN   TestRoomspaceMember_CanRemoveMember/inactive_member_removes_self
+=== RUN   TestRoomspaceMember_CanRemoveMember/creator_removes_inactive
+--- PASS: TestRoomspaceMember_CanRemoveMember (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/creator_removes_admin (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/creator_removes_member (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/creator_removes_self (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/admin_removes_member (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/admin_removes_creator (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/admin_removes_self (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/member_removes_self (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/member_removes_other (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/inactive_member_removes_self (0.00s)
+    --- PASS: TestRoomspaceMember_CanRemoveMember/creator_removes_inactive (0.00s)
+=== RUN   TestRoomspaceMember_CanPromoteMember
+=== RUN   TestRoomspaceMember_CanPromoteMember/creator_promotes_to_admin
+=== RUN   TestRoomspaceMember_CanPromoteMember/creator_promotes_to_creator
+=== RUN   TestRoomspaceMember_CanPromoteMember/creator_promotes_to_member
+=== RUN   TestRoomspaceMember_CanPromoteMember/admin_promotes_to_admin
+=== RUN   TestRoomspaceMember_CanPromoteMember/admin_promotes_to_member
+=== RUN   TestRoomspaceMember_CanPromoteMember/member_promotes
+--- PASS: TestRoomspaceMember_CanPromoteMember (0.00s)
+    --- PASS: TestRoomspaceMember_CanPromoteMember/creator_promotes_to_admin (0.00s)
+    --- PASS: TestRoomspaceMember_CanPromoteMember/creator_promotes_to_creator (0.00s)
+    --- PASS: TestRoomspaceMember_CanPromoteMember/creator_promotes_to_member (0.00s)
+    --- PASS: TestRoomspaceMember_CanPromoteMember/admin_promotes_to_admin (0.00s)
+    --- PASS: TestRoomspaceMember_CanPromoteMember/admin_promotes_to_member (0.00s)
+    --- PASS: TestRoomspaceMember_CanPromoteMember/member_promotes (0.00s)
+=== RUN   TestRoomspaceMember_GetDisplayRole
+=== RUN   TestRoomspaceMember_GetDisplayRole/creator_role
+=== RUN   TestRoomspaceMember_GetDisplayRole/admin_role
+=== RUN   TestRoomspaceMember_GetDisplayRole/member_role
+=== RUN   TestRoomspaceMember_GetDisplayRole/pending_role
+=== RUN   TestRoomspaceMember_GetDisplayRole/unknown_role
+--- PASS: TestRoomspaceMember_GetDisplayRole (0.00s)
+    --- PASS: TestRoomspaceMember_GetDisplayRole/creator_role (0.00s)
+    --- PASS: TestRoomspaceMember_GetDisplayRole/admin_role (0.00s)
+    --- PASS: TestRoomspaceMember_GetDisplayRole/member_role (0.00s)
+    --- PASS: TestRoomspaceMember_GetDisplayRole/pending_role (0.00s)
+    --- PASS: TestRoomspaceMember_GetDisplayRole/unknown_role (0.00s)
+=== RUN   TestRoomspaceMember_GetPermissions
+=== RUN   TestRoomspaceMember_GetPermissions/inactive_member
+=== RUN   TestRoomspaceMember_GetPermissions/active_member
+=== RUN   TestRoomspaceMember_GetPermissions/active_admin
+=== RUN   TestRoomspaceMember_GetPermissions/active_creator
+--- PASS: TestRoomspaceMember_GetPermissions (0.00s)
+    --- PASS: TestRoomspaceMember_GetPermissions/inactive_member (0.00s)
+    --- PASS: TestRoomspaceMember_GetPermissions/active_member (0.00s)
+    --- PASS: TestRoomspaceMember_GetPermissions/active_admin (0.00s)
+    --- PASS: TestRoomspaceMember_GetPermissions/active_creator (0.00s)
+=== RUN   TestRoomspaceMember_BeforeCreate
+--- PASS: TestRoomspaceMember_BeforeCreate (0.00s)
+=== RUN   TestRoomspaceMember_BeforeUpdate
+=== RUN   TestRoomspaceMember_BeforeUpdate/valid_role
+=== RUN   TestRoomspaceMember_BeforeUpdate/invalid_role
+--- PASS: TestRoomspaceMember_BeforeUpdate (0.00s)
+    --- PASS: TestRoomspaceMember_BeforeUpdate/valid_role (0.00s)
+    --- PASS: TestRoomspaceMember_BeforeUpdate/invalid_role (0.00s)
+=== RUN   TestRoomspaceMember_TableName
+--- PASS: TestRoomspaceMember_TableName (0.00s)
+=== RUN   TestRoomspace_Validate
+=== RUN   TestRoomspace_Validate/valid_roomspace
+=== RUN   TestRoomspace_Validate/empty_name
+=== RUN   TestRoomspace_Validate/name_too_long
+=== RUN   TestRoomspace_Validate/description_too_long
+=== RUN   TestRoomspace_Validate/max_members_too_low
+=== RUN   TestRoomspace_Validate/max_members_too_high
+=== RUN   TestRoomspace_Validate/empty_creator_ID
+=== RUN   TestRoomspace_Validate/invalid_invite_code_length
+=== RUN   TestRoomspace_Validate/invalid_invite_code_format
+--- PASS: TestRoomspace_Validate (0.00s)
+    --- PASS: TestRoomspace_Validate/valid_roomspace (0.00s)
+    --- PASS: TestRoomspace_Validate/empty_name (0.00s)
+    --- PASS: TestRoomspace_Validate/name_too_long (0.00s)
+    --- PASS: TestRoomspace_Validate/description_too_long (0.00s)
+    --- PASS: TestRoomspace_Validate/max_members_too_low (0.00s)
+    --- PASS: TestRoomspace_Validate/max_members_too_high (0.00s)
+    --- PASS: TestRoomspace_Validate/empty_creator_ID (0.00s)
+    --- PASS: TestRoomspace_Validate/invalid_invite_code_length (0.00s)
+    --- PASS: TestRoomspace_Validate/invalid_invite_code_format (0.00s)
+=== RUN   TestRoomspace_IsCreator
+--- PASS: TestRoomspace_IsCreator (0.00s)
+=== RUN   TestRoomspace_IsActive
+=== RUN   TestRoomspace_IsActive/active_roomspace
+=== RUN   TestRoomspace_IsActive/archived_roomspace
+--- PASS: TestRoomspace_IsActive (0.00s)
+    --- PASS: TestRoomspace_IsActive/active_roomspace (0.00s)
+    --- PASS: TestRoomspace_IsActive/archived_roomspace (0.00s)
+=== RUN   TestRoomspace_CanAcceptNewMembers
+=== RUN   TestRoomspace_CanAcceptNewMembers/can_accept_-_under_limit
+=== RUN   TestRoomspace_CanAcceptNewMembers/can_accept_-_at_limit_minus_one
+=== RUN   TestRoomspace_CanAcceptNewMembers/cannot_accept_-_at_limit
+=== RUN   TestRoomspace_CanAcceptNewMembers/cannot_accept_-_over_limit
+=== RUN   TestRoomspace_CanAcceptNewMembers/cannot_accept_-_archived
+--- PASS: TestRoomspace_CanAcceptNewMembers (0.00s)
+    --- PASS: TestRoomspace_CanAcceptNewMembers/can_accept_-_under_limit (0.00s)
+    --- PASS: TestRoomspace_CanAcceptNewMembers/can_accept_-_at_limit_minus_one (0.00s)
+    --- PASS: TestRoomspace_CanAcceptNewMembers/cannot_accept_-_at_limit (0.00s)
+    --- PASS: TestRoomspace_CanAcceptNewMembers/cannot_accept_-_over_limit (0.00s)
+    --- PASS: TestRoomspace_CanAcceptNewMembers/cannot_accept_-_archived (0.00s)
+=== RUN   TestRoomspace_GetActiveMemberCount
+--- PASS: TestRoomspace_GetActiveMemberCount (0.00s)
+=== RUN   TestRoomspace_GetPendingRequestCount
+--- PASS: TestRoomspace_GetPendingRequestCount (0.00s)
+=== RUN   TestRoomspace_GetMemberByUserID
+--- PASS: TestRoomspace_GetMemberByUserID (0.00s)
+=== RUN   TestRoomspace_HasMember
+--- PASS: TestRoomspace_HasMember (0.00s)
+=== RUN   TestRoomspace_GetCreators
+--- PASS: TestRoomspace_GetCreators (0.00s)
+=== RUN   TestRoomspace_ToResponse
+--- PASS: TestRoomspace_ToResponse (0.00s)
+=== RUN   TestRoomspace_BeforeCreate
+--- PASS: TestRoomspace_BeforeCreate (0.00s)
+=== RUN   TestRoomspace_ValidateInviteCode
+=== RUN   TestRoomspace_ValidateInviteCode/valid_code
+=== RUN   TestRoomspace_ValidateInviteCode/too_short
+=== RUN   TestRoomspace_ValidateInviteCode/too_long
+=== RUN   TestRoomspace_ValidateInviteCode/lowercase_letters
+=== RUN   TestRoomspace_ValidateInviteCode/special_characters
+=== RUN   TestRoomspace_ValidateInviteCode/spaces
+--- PASS: TestRoomspace_ValidateInviteCode (0.00s)
+    --- PASS: TestRoomspace_ValidateInviteCode/valid_code (0.00s)
+    --- PASS: TestRoomspace_ValidateInviteCode/too_short (0.00s)
+    --- PASS: TestRoomspace_ValidateInviteCode/too_long (0.00s)
+    --- PASS: TestRoomspace_ValidateInviteCode/lowercase_letters (0.00s)
+    --- PASS: TestRoomspace_ValidateInviteCode/special_characters (0.00s)
+    --- PASS: TestRoomspace_ValidateInviteCode/spaces (0.00s)
+PASS
+ok  	roomease/backend/models	0.012s
+=== RUN   TestGetRoomspaceAnalytics_CalculatesTotalSharedExpenses
+--- PASS: TestGetRoomspaceAnalytics_CalculatesTotalSharedExpenses (0.00s)
+=== RUN   TestGetRoomspaceAnalytics_CalculatesPerMemberContributions
+--- PASS: TestGetRoomspaceAnalytics_CalculatesPerMemberContributions (0.00s)
+=== RUN   TestGetRoomspaceAnalytics_ExcludesPersonalExpenses
+--- PASS: TestGetRoomspaceAnalytics_ExcludesPersonalExpenses (0.00s)
+=== RUN   TestMemberContribution_PercentageCalculation
+--- PASS: TestMemberContribution_PercentageCalculation (0.00s)
+=== RUN   TestMemberContribution_RoundingAccuracy
+--- PASS: TestMemberContribution_RoundingAccuracy (0.00s)
+=== RUN   TestCategoryBreakdown_PercentageSum
+--- PASS: TestCategoryBreakdown_PercentageSum (0.00s)
+=== RUN   TestTimeRange_Formatting
+--- PASS: TestTimeRange_Formatting (0.00s)
+=== RUN   TestBalanceCalculation_SimpleScenario
+=== RUN   TestBalanceCalculation_SimpleScenario/User_A_pays_Rs.266_split_equally_with_User_B
+After payment: User A = 266.00, User B = 0.00
+After splits: User A = 133.00, User B = -133.00
+    balance_calculation_debug_test.go:79: ✓ User A balance: +Rs.133.00 (is owed)
+    balance_calculation_debug_test.go:80: ✓ User B balance: Rs.-133.00 (owes)
+    balance_calculation_debug_test.go:81: ✓ Sum of balances: 0.00 (correct!)
+=== RUN   TestBalanceCalculation_SimpleScenario/User_A_pays_Rs.266_split_with_B,_but_B_is_NOT_in_splits
+    balance_calculation_debug_test.go:130: ✓ User A balance: +Rs.266.00
+    balance_calculation_debug_test.go:131: ✓ User B balance: Rs.-266.00
+--- PASS: TestBalanceCalculation_SimpleScenario (0.00s)
+    --- PASS: TestBalanceCalculation_SimpleScenario/User_A_pays_Rs.266_split_equally_with_User_B (0.00s)
+    --- PASS: TestBalanceCalculation_SimpleScenario/User_A_pays_Rs.266_split_with_B,_but_B_is_NOT_in_splits (0.00s)
+=== RUN   TestNewBalanceService
+--- PASS: TestNewBalanceService (0.00s)
+=== RUN   TestBalanceService_upsertBalanceRecord
+    balance_service_test.go:18: Requires database setup
+--- SKIP: TestBalanceService_upsertBalanceRecord (0.00s)
+=== RUN   TestBalanceService_GenerateSettlementSuggestions_Logic
+=== RUN   TestBalanceService_GenerateSettlementSuggestions_Logic/Simple_two-person_settlement
+=== RUN   TestBalanceService_GenerateSettlementSuggestions_Logic/Three-person_settlement
+=== RUN   TestBalanceService_GenerateSettlementSuggestions_Logic/Multiple_creditors_and_debtors
+--- PASS: TestBalanceService_GenerateSettlementSuggestions_Logic (0.00s)
+    --- PASS: TestBalanceService_GenerateSettlementSuggestions_Logic/Simple_two-person_settlement (0.00s)
+    --- PASS: TestBalanceService_GenerateSettlementSuggestions_Logic/Three-person_settlement (0.00s)
+    --- PASS: TestBalanceService_GenerateSettlementSuggestions_Logic/Multiple_creditors_and_debtors (0.00s)
+=== RUN   TestBalanceCalculation_Scenarios
+=== RUN   TestBalanceCalculation_Scenarios/Single_expense_equal_split
+=== RUN   TestBalanceCalculation_Scenarios/Multiple_expenses
+=== RUN   TestBalanceCalculation_Scenarios/Unequal_splits
+--- PASS: TestBalanceCalculation_Scenarios (0.00s)
+    --- PASS: TestBalanceCalculation_Scenarios/Single_expense_equal_split (0.00s)
+    --- PASS: TestBalanceCalculation_Scenarios/Multiple_expenses (0.00s)
+    --- PASS: TestBalanceCalculation_Scenarios/Unequal_splits (0.00s)
+=== RUN   TestBalanceService_ValidateSettlement
+=== RUN   TestBalanceService_ValidateSettlement/Valid_settlement
+=== RUN   TestBalanceService_ValidateSettlement/Self_settlement
+=== RUN   TestBalanceService_ValidateSettlement/Zero_amount
+=== RUN   TestBalanceService_ValidateSettlement/Negative_amount
+--- PASS: TestBalanceService_ValidateSettlement (0.00s)
+    --- PASS: TestBalanceService_ValidateSettlement/Valid_settlement (0.00s)
+    --- PASS: TestBalanceService_ValidateSettlement/Self_settlement (0.00s)
+    --- PASS: TestBalanceService_ValidateSettlement/Zero_amount (0.00s)
+    --- PASS: TestBalanceService_ValidateSettlement/Negative_amount (0.00s)
+=== RUN   TestBalanceService_CacheLogic
+=== RUN   TestBalanceService_CacheLogic/Fresh_cache
+=== RUN   TestBalanceService_CacheLogic/30_minutes_old
+=== RUN   TestBalanceService_CacheLogic/59_minutes_old
+=== RUN   TestBalanceService_CacheLogic/1_hour_old
+=== RUN   TestBalanceService_CacheLogic/2_hours_old
+=== RUN   TestBalanceService_CacheLogic/24_hours_old
+--- PASS: TestBalanceService_CacheLogic (0.00s)
+    --- PASS: TestBalanceService_CacheLogic/Fresh_cache (0.00s)
+    --- PASS: TestBalanceService_CacheLogic/30_minutes_old (0.00s)
+    --- PASS: TestBalanceService_CacheLogic/59_minutes_old (0.00s)
+    --- PASS: TestBalanceService_CacheLogic/1_hour_old (0.00s)
+    --- PASS: TestBalanceService_CacheLogic/2_hours_old (0.00s)
+    --- PASS: TestBalanceService_CacheLogic/24_hours_old (0.00s)
+=== RUN   TestPostgresService_DBExpenseIsolationAndSoftDelete
+    postgres_db_test.go:13: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestPostgresService_DBExpenseIsolationAndSoftDelete (0.00s)
+=== RUN   TestBalanceService_DBCalculatesCacheAndSettlement
+    postgres_db_test.go:43: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestBalanceService_DBCalculatesCacheAndSettlement (0.00s)
+=== RUN   TestPaymentConfirmationService_DBWorkflow
+=== RUN   TestPaymentConfirmationService_DBWorkflow/confirm_creates_settlement_and_settles_balances
+    postgres_db_test.go:82: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+=== RUN   TestPaymentConfirmationService_DBWorkflow/reject_and_unauthorized_confirm_are_enforced
+    postgres_db_test.go:104: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- PASS: TestPaymentConfirmationService_DBWorkflow (0.00s)
+    --- SKIP: TestPaymentConfirmationService_DBWorkflow/confirm_creates_settlement_and_settles_balances (0.00s)
+    --- SKIP: TestPaymentConfirmationService_DBWorkflow/reject_and_unauthorized_confirm_are_enforced (0.00s)
+=== RUN   TestGetUserExpensesRoomspaceFiltering
+=== RUN   TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_with_roomspace_id_validates_membership
+=== RUN   TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_with_roomspace_id_filters_by_roomspace
+=== RUN   TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_without_roomspace_id_gets_all_user_roomspaces
+=== RUN   TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_returns_empty_list_when_user_has_no_roomspaces
+=== RUN   TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_only_returns_expenses_where_user_is_involved
+--- PASS: TestGetUserExpensesRoomspaceFiltering (0.00s)
+    --- PASS: TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_with_roomspace_id_validates_membership (0.00s)
+    --- PASS: TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_with_roomspace_id_filters_by_roomspace (0.00s)
+    --- PASS: TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_without_roomspace_id_gets_all_user_roomspaces (0.00s)
+    --- PASS: TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_returns_empty_list_when_user_has_no_roomspaces (0.00s)
+    --- PASS: TestGetUserExpensesRoomspaceFiltering/GetUserExpenses_only_returns_expenses_where_user_is_involved (0.00s)
+=== RUN   TestValidateRoomspaceMembership
+=== RUN   TestValidateRoomspaceMembership/ValidateRoomspaceMembership_returns_nil_for_valid_member
+=== RUN   TestValidateRoomspaceMembership/ValidateRoomspaceMembership_returns_error_for_non-member
+=== RUN   TestValidateRoomspaceMembership/ValidateRoomspaceMembership_returns_error_for_inactive_member
+--- PASS: TestValidateRoomspaceMembership (0.00s)
+    --- PASS: TestValidateRoomspaceMembership/ValidateRoomspaceMembership_returns_nil_for_valid_member (0.00s)
+    --- PASS: TestValidateRoomspaceMembership/ValidateRoomspaceMembership_returns_error_for_non-member (0.00s)
+    --- PASS: TestValidateRoomspaceMembership/ValidateRoomspaceMembership_returns_error_for_inactive_member (0.00s)
+=== RUN   TestExpenseRoomspaceDataIsolation
+=== RUN   TestExpenseRoomspaceDataIsolation/GetRoomspaceExpenses_only_returns_expenses_for_specified_roomspace
+=== RUN   TestExpenseRoomspaceDataIsolation/GetRecentExpenses_only_returns_expenses_for_specified_roomspace
+=== RUN   TestExpenseRoomspaceDataIsolation/GetExpensesByRoomspaceWithValidation_validates_and_filters
+--- PASS: TestExpenseRoomspaceDataIsolation (0.00s)
+    --- PASS: TestExpenseRoomspaceDataIsolation/GetRoomspaceExpenses_only_returns_expenses_for_specified_roomspace (0.00s)
+    --- PASS: TestExpenseRoomspaceDataIsolation/GetRecentExpenses_only_returns_expenses_for_specified_roomspace (0.00s)
+    --- PASS: TestExpenseRoomspaceDataIsolation/GetExpensesByRoomspaceWithValidation_validates_and_filters (0.00s)
+=== RUN   TestExpenseQueryPerformance
+=== RUN   TestExpenseQueryPerformance/GetUserExpenses_uses_proper_indexes
+=== RUN   TestExpenseQueryPerformance/Membership_validation_is_efficient
+--- PASS: TestExpenseQueryPerformance (0.00s)
+    --- PASS: TestExpenseQueryPerformance/GetUserExpenses_uses_proper_indexes (0.00s)
+    --- PASS: TestExpenseQueryPerformance/Membership_validation_is_efficient (0.00s)
+=== RUN   TestCheckRoomspaceLimit_FunctionExists
+--- PASS: TestCheckRoomspaceLimit_FunctionExists (0.00s)
+=== RUN   TestValidateRoomspaceMembership_FunctionExists
+--- PASS: TestValidateRoomspaceMembership_FunctionExists (0.00s)
+=== RUN   TestGetUserRoomspaceCount_FunctionExists
+--- PASS: TestGetUserRoomspaceCount_FunctionExists (0.00s)
+=== RUN   TestPostgresService_CreateRoomspace
+=== RUN   TestPostgresService_CreateRoomspace/valid_roomspace_creation
+=== RUN   TestPostgresService_CreateRoomspace/roomspace_with_minimal_data
+--- PASS: TestPostgresService_CreateRoomspace (0.00s)
+    --- PASS: TestPostgresService_CreateRoomspace/valid_roomspace_creation (0.00s)
+    --- PASS: TestPostgresService_CreateRoomspace/roomspace_with_minimal_data (0.00s)
+=== RUN   TestPostgresService_ValidateRoomspaceData
+=== RUN   TestPostgresService_ValidateRoomspaceData/valid_roomspace
+=== RUN   TestPostgresService_ValidateRoomspaceData/empty_name
+=== RUN   TestPostgresService_ValidateRoomspaceData/invalid_max_members
+--- PASS: TestPostgresService_ValidateRoomspaceData (0.00s)
+    --- PASS: TestPostgresService_ValidateRoomspaceData/valid_roomspace (0.00s)
+    --- PASS: TestPostgresService_ValidateRoomspaceData/empty_name (0.00s)
+    --- PASS: TestPostgresService_ValidateRoomspaceData/invalid_max_members (0.00s)
+=== RUN   TestGenerateInviteCode
+--- PASS: TestGenerateInviteCode (0.00s)
+=== RUN   TestPostgresService_JoinRequestWorkflow
+=== RUN   TestPostgresService_JoinRequestWorkflow/create_join_request_validation
+=== RUN   TestPostgresService_JoinRequestWorkflow/process_join_request_validation
+--- PASS: TestPostgresService_JoinRequestWorkflow (0.00s)
+    --- PASS: TestPostgresService_JoinRequestWorkflow/create_join_request_validation (0.00s)
+    --- PASS: TestPostgresService_JoinRequestWorkflow/process_join_request_validation (0.00s)
+=== RUN   TestPostgresService_MemberManagement
+=== RUN   TestPostgresService_MemberManagement/add_member_validation
+=== RUN   TestPostgresService_MemberManagement/remove_member_validation
+--- PASS: TestPostgresService_MemberManagement (0.00s)
+    --- PASS: TestPostgresService_MemberManagement/add_member_validation (0.00s)
+    --- PASS: TestPostgresService_MemberManagement/remove_member_validation (0.00s)
+=== RUN   TestPostgresService_PermissionValidation
+=== RUN   TestPostgresService_PermissionValidation/creator_can_manage_members
+=== RUN   TestPostgresService_PermissionValidation/admin_can_manage_members
+=== RUN   TestPostgresService_PermissionValidation/member_cannot_manage_members
+=== RUN   TestPostgresService_PermissionValidation/creator_can_process_requests
+=== RUN   TestPostgresService_PermissionValidation/admin_can_process_requests
+=== RUN   TestPostgresService_PermissionValidation/member_cannot_process_requests
+--- PASS: TestPostgresService_PermissionValidation (0.00s)
+    --- PASS: TestPostgresService_PermissionValidation/creator_can_manage_members (0.00s)
+    --- PASS: TestPostgresService_PermissionValidation/admin_can_manage_members (0.00s)
+    --- PASS: TestPostgresService_PermissionValidation/member_cannot_manage_members (0.00s)
+    --- PASS: TestPostgresService_PermissionValidation/creator_can_process_requests (0.00s)
+    --- PASS: TestPostgresService_PermissionValidation/admin_can_process_requests (0.00s)
+    --- PASS: TestPostgresService_PermissionValidation/member_cannot_process_requests (0.00s)
+=== RUN   TestPostgresService_InviteCodeValidation
+=== RUN   TestPostgresService_InviteCodeValidation/valid_code
+=== RUN   TestPostgresService_InviteCodeValidation/too_short
+=== RUN   TestPostgresService_InviteCodeValidation/too_long
+=== RUN   TestPostgresService_InviteCodeValidation/lowercase
+=== RUN   TestPostgresService_InviteCodeValidation/special_chars
+=== RUN   TestPostgresService_InviteCodeValidation/with_spaces
+--- PASS: TestPostgresService_InviteCodeValidation (0.00s)
+    --- PASS: TestPostgresService_InviteCodeValidation/valid_code (0.00s)
+    --- PASS: TestPostgresService_InviteCodeValidation/too_short (0.00s)
+    --- PASS: TestPostgresService_InviteCodeValidation/too_long (0.00s)
+    --- PASS: TestPostgresService_InviteCodeValidation/lowercase (0.00s)
+    --- PASS: TestPostgresService_InviteCodeValidation/special_chars (0.00s)
+    --- PASS: TestPostgresService_InviteCodeValidation/with_spaces (0.00s)
+=== RUN   TestPostgresService_RoomspaceQueries
+=== RUN   TestPostgresService_RoomspaceQueries/get_roomspace_by_ID_structure
+=== RUN   TestPostgresService_RoomspaceQueries/get_roomspace_by_invite_code_structure
+=== RUN   TestPostgresService_RoomspaceQueries/get_user_roomspaces_structure
+--- PASS: TestPostgresService_RoomspaceQueries (0.00s)
+    --- PASS: TestPostgresService_RoomspaceQueries/get_roomspace_by_ID_structure (0.00s)
+    --- PASS: TestPostgresService_RoomspaceQueries/get_roomspace_by_invite_code_structure (0.00s)
+    --- PASS: TestPostgresService_RoomspaceQueries/get_user_roomspaces_structure (0.00s)
+=== RUN   TestPostgresService_DataConsistency
+=== RUN   TestPostgresService_DataConsistency/roomspace_member_consistency
+=== RUN   TestPostgresService_DataConsistency/join_request_expiry_consistency
+--- PASS: TestPostgresService_DataConsistency (0.00s)
+    --- PASS: TestPostgresService_DataConsistency/roomspace_member_consistency (0.00s)
+    --- PASS: TestPostgresService_DataConsistency/join_request_expiry_consistency (0.00s)
+=== RUN   TestPostgresService_ErrorHandling
+=== RUN   TestPostgresService_ErrorHandling/invalid_roomspace_data
+=== RUN   TestPostgresService_ErrorHandling/invalid_member_role
+=== RUN   TestPostgresService_ErrorHandling/invalid_join_request_status
+--- PASS: TestPostgresService_ErrorHandling (0.00s)
+    --- PASS: TestPostgresService_ErrorHandling/invalid_roomspace_data (0.00s)
+    --- PASS: TestPostgresService_ErrorHandling/invalid_member_role (0.00s)
+    --- PASS: TestPostgresService_ErrorHandling/invalid_join_request_status (0.00s)
+=== RUN   TestInMemorySessionStore_Create
+--- PASS: TestInMemorySessionStore_Create (0.00s)
+=== RUN   TestInMemorySessionStore_Get_NotFound
+--- PASS: TestInMemorySessionStore_Get_NotFound (0.00s)
+=== RUN   TestInMemorySessionStore_Get_Expired
+--- PASS: TestInMemorySessionStore_Get_Expired (0.00s)
+=== RUN   TestInMemorySessionStore_Delete
+--- PASS: TestInMemorySessionStore_Delete (0.00s)
+=== RUN   TestInMemorySessionStore_DeleteExpired
+2026/05/25 19:49:02 Cleaned up 1 expired sessions
+--- PASS: TestInMemorySessionStore_DeleteExpired (0.00s)
+=== RUN   TestGenerateSessionID_Uniqueness
+--- PASS: TestGenerateSessionID_Uniqueness (0.00s)
+=== RUN   TestGenerateSessionID_Format
+--- PASS: TestGenerateSessionID_Format (0.00s)
+=== RUN   TestSession_IsExpired
+--- PASS: TestSession_IsExpired (0.00s)
+=== RUN   TestInMemorySessionStore_ConcurrentAccess
+--- PASS: TestInMemorySessionStore_ConcurrentAccess (0.00s)
+PASS
+ok  	roomease/backend/services	0.019s

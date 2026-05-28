@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 import (
@@ -9,7 +11,7 @@ import (
 func main() {
 	// Load configuration
 	cfg := config.LoadConfig()
-	
+
 	// Initialize database connection
 	if err := config.InitPostgreSQL(cfg.PostgresDatabaseURL); err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -26,7 +28,7 @@ func main() {
 
 	// Find and display solo expenses
 	log.Println("\n=== Finding Solo Expenses ===")
-	
+
 	query := `
 		SELECT 
 			e.id,
@@ -73,7 +75,7 @@ func main() {
 	}
 
 	log.Printf("Found %d solo expenses (expenses with only 1 person in split)\n", len(soloExpenses))
-	
+
 	// Display them
 	for i, exp := range soloExpenses {
 		log.Printf("%d. ID: %d | %s | Rs. %.2f | Roomspace: %s | Paid by: %s",
@@ -108,12 +110,12 @@ func main() {
 			HAVING COUNT(es.id) = 1
 		)
 	`
-	
+
 	result, err := tx.Exec(deleteSplitsQuery)
 	if err != nil {
 		log.Fatalf("Failed to delete splits: %v", err)
 	}
-	
+
 	splitsDeleted, _ := result.RowsAffected()
 	log.Printf("✅ Deleted %d expense splits", splitsDeleted)
 
@@ -128,12 +130,12 @@ func main() {
 			HAVING COUNT(es.id) = 0
 		)
 	`
-	
+
 	result, err = tx.Exec(deleteExpensesQuery)
 	if err != nil {
 		log.Fatalf("Failed to delete expenses: %v", err)
 	}
-	
+
 	expensesDeleted, _ := result.RowsAffected()
 	log.Printf("✅ Deleted %d solo expenses", expensesDeleted)
 

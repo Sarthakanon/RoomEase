@@ -23,6 +23,14 @@ class _RecommendationsCardState extends State<RecommendationsCard> {
     _loadRecommendations();
   }
 
+  @override
+  void didUpdateWidget(covariant RecommendationsCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.roomspaceId != widget.roomspaceId) {
+      _loadRecommendations();
+    }
+  }
+
   Future<void> _loadRecommendations() async {
     if (!mounted) return;
     setState(() => _isLoading = true);

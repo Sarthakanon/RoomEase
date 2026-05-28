@@ -7,6 +7,15 @@ import 'package:flutter/material.dart';
 /// 2. Override `refreshData()` method to implement your refresh logic
 /// 3. Call `autoRefreshAfterOperation()` after any database operation
 mixin AutoRefreshMixin<T extends StatefulWidget> on State<T> {
+  ScaffoldMessengerState? _scaffoldMessenger;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Cache messenger reference while tree is stable to avoid
+    // ancestor lookups from a deactivated context after async ops.
+    _scaffoldMessenger = ScaffoldMessenger.maybeOf(context);
+  }
   
   /// Override this method to implement your screen's refresh logic
   Future<void> refreshData();
@@ -28,7 +37,7 @@ mixin AutoRefreshMixin<T extends StatefulWidget> on State<T> {
       
       // Show success message if provided
       if (successMessage != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _scaffoldMessenger?.showSnackBar(
           SnackBar(content: Text(successMessage)),
         );
       }
@@ -36,7 +45,7 @@ mixin AutoRefreshMixin<T extends StatefulWidget> on State<T> {
       // Show error message
       if (mounted) {
         final message = errorMessage ?? 'Failed to refresh data: $e';
-        ScaffoldMessenger.of(context).showSnackBar(
+        _scaffoldMessenger?.showSnackBar(
           SnackBar(content: Text(message)),
         );
       }
@@ -67,7 +76,7 @@ mixin AutoRefreshMixin<T extends StatefulWidget> on State<T> {
     } catch (e) {
       if (mounted) {
         final message = errorMessage ?? 'Operation failed: $e';
-        ScaffoldMessenger.of(context).showSnackBar(
+        _scaffoldMessenger?.showSnackBar(
           SnackBar(content: Text(message)),
         );
         setState(() {}); // Reset loading state

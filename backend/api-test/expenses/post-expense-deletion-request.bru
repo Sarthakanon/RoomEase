@@ -1,0 +1,22 @@
+meta {
+  name: Request Expense Deletion
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/expenses/{{expenseId}}/deletion-request
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+

@@ -23,6 +23,7 @@ import 'core/widgets/main_navigation.dart';
 import 'services/api_service.dart';
 import 'services/performance_service.dart';
 import 'services/loading_service.dart';
+import 'services/offline_expense_service.dart';
 import 'providers/roomspace_provider.dart';
 import 'widgets/ban_listener_widget.dart';
 import 'widgets/auth_state_listener.dart';
@@ -64,10 +65,15 @@ void main() async {
     // Initialize performance optimizations
     await PerformanceService().initialize();
 
+    // Initialize offline-first expense and sync services (bounded to avoid startup stalls)
+    await OfflineExpenseService()
+        .initialize()
+        .timeout(const Duration(seconds: 2), onTimeout: () {});
+
     // Configure system UI overlay style for status bar
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
+        statusBarColor: Colors.white,
         statusBarIconBrightness: Brightness.dark,
         statusBarBrightness: Brightness.light,
         systemNavigationBarColor: Colors.white,
@@ -135,6 +141,17 @@ class RoomEaseApp extends StatelessWidget {
                 ),
                 bodyMedium: GoogleFonts.poppins(fontSize: 14),
               ),
+            ),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black87,
+              systemOverlayStyle: SystemUiOverlayStyle(
+                statusBarColor: Colors.white,
+                statusBarIconBrightness: Brightness.dark,
+                statusBarBrightness: Brightness.light,
+              ),
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(
               style: ElevatedButton.styleFrom(

@@ -43,9 +43,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final subscriptionProvider = Provider.of<SubscriptionProvider>(context, listen: false);
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     
-    // Clear old user's data
+    // Clear transient old user's data (do not clear saved active roomspace key).
     subscriptionProvider.reset();
-    await roomspaceProvider.clear();
+    roomspaceProvider.clearError();
     
     // Load new user's data
     await subscriptionProvider.initialize();

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_state_service.dart';
 import '../../../services/ban_monitoring_service.dart';
+import '../../../services/connectivity_service.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../../../widgets/ban_countdown_dialog.dart';
 import '../../../widgets/first_time_permissions_dialog.dart';
@@ -18,6 +19,7 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   final _authController = AuthController();
+  final _connectivityService = ConnectivityService();
   late StreamSubscription<String>? _banSubscription;
 
   @override
@@ -51,7 +53,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _checkAuthState() async {
     // Add a small delay for splash screen effect
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(milliseconds: 600));
 
     if (!mounted) return;
 
@@ -63,36 +65,65 @@ class _SplashScreenState extends State<SplashScreen> {
         final currentUser = FirebaseAuth.instance.currentUser;
         if (currentUser != null) {
           try {
-            // Get fresh Firebase token and authenticate with backend
-            final idToken = await currentUser.getIdToken(true); // Force refresh
-            if (idToken != null) {
-              // Authenticate with backend using Firebase token
-              await _authController.authenticateWithBackend(idToken);
-              
-              // Load roomspaces into the provider after authentication
+            await _connectivityService.initialize();
+            final isOnline = _connectivityService.isConnected;
+
+            if (isOnline) {
+              // Get fresh Firebase token and authenticate with backend when online.
+              final idToken = await currentUser.getIdToken();
+              if (idToken != null) {
+                await _authController.authenticateWithBackend(idToken);
+              }
+            } else {
+              debugPrint('📴 Offline at startup: skipping backend auth refresh');
+            }
+
+            // Load roomspaces (provider can fallback to cached data on network error).
+            if (mounted) {
+              final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+              await roomspaceProvider.loadRoomspaces().timeout(const Duration(seconds: 6), onTimeout: () {});
+
+              final hasRoomspaces = roomspaceProvider.roomspaceCount > 0;
+
               if (mounted) {
-                final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-                await roomspaceProvider.loadRoomspaces();
-                
-                // Check if user has roomspaces
-                final hasRoomspaces = roomspaceProvider.roomspaceCount > 0;
-                
+                await FirstTimePermissionsDialog.show(context);
+
                 if (mounted) {
-                  // Show permissions dialog on first launch
-                  await FirstTimePermissionsDialog.show(context);
-                  
-                  if (mounted) {
-                    Navigator.pushReplacementNamed(
-                      context,
-                      hasRoomspaces ? '/home' : '/roomspace-selection',
-                    );
-                  }
+                  Navigator.pushReplacementNamed(
+                    context,
+                    hasRoomspaces ? '/home' : '/roomspace-selection',
+                  );
                 }
               }
-              return;
             }
+            return;
           } catch (e) {
-            // If backend authentication fails, clear login state and go to login
+            // Keep user logged in on transient/network failures.
+            final error = e.toString().toLowerCase();
+            final isNetworkLike = error.contains('network') ||
+                error.contains('connection') ||
+                error.contains('timeout') ||
+                error.contains('socket') ||
+                error.contains('failed host lookup');
+
+            if (isNetworkLike && mounted) {
+              debugPrint('📴 Startup auth refresh failed due to network. Preserving session.');
+              final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+              await roomspaceProvider.loadRoomspaces().timeout(const Duration(seconds: 6), onTimeout: () {});
+              final hasRoomspaces = roomspaceProvider.roomspaceCount > 0;
+              if (mounted) {
+                await FirstTimePermissionsDialog.show(context);
+              }
+              if (mounted) {
+                Navigator.pushReplacementNamed(
+                  context,
+                  hasRoomspaces ? '/home' : '/roomspace-selection',
+                );
+                return;
+              }
+            }
+
+            // Only clear persisted login state for non-network auth/session failures.
             await AuthStateService.clearLoginState();
           }
         }

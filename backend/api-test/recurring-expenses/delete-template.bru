@@ -1,0 +1,22 @@
+meta {
+  name: Delete Recurring Template
+  type: http
+  seq: 1
+}
+
+delete {
+  url: {{baseUrl}}/api/recurring-expenses/{{templateId}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+

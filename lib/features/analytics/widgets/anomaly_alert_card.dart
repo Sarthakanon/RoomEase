@@ -24,6 +24,14 @@ class _AnomalyAlertCardState extends State<AnomalyAlertCard> {
     _loadAnomalies();
   }
 
+  @override
+  void didUpdateWidget(covariant AnomalyAlertCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.roomspaceId != widget.roomspaceId) {
+      _loadAnomalies();
+    }
+  }
+
   Future<void> _loadAnomalies() async {
     if (!mounted) return;
     setState(() => _isLoading = true);

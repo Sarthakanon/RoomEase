@@ -31,6 +31,7 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
   double _youOwe = 0.0;
   double _youAreOwed = 0.0;
   double _yourBalance = 0.0;
+  List<Map<String, dynamic>> _roommateBalances = [];
   double _totalPaid = 0.0;
   double _settlementsReceived = 0.0;
   double _settlementsPaid = 0.0;
@@ -50,11 +51,20 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
 
     try {
       // Load balances from the same endpoint used by dashboard
-      final balanceResponse = await _smartApi.getRoomspaceBalances(widget.roomspaceId);
+      final balanceResponse = await _smartApi.getRoomspaceBalances(
+        widget.roomspaceId,
+        forceRefresh: true,
+      );
       final balanceData = balanceResponse['data'] as Map<String, dynamic>? ?? {};
-      _youOwe = (balanceData['you_owe'] as num?)?.toDouble() ?? 0.0;
-      _youAreOwed = (balanceData['you_are_owed'] as num?)?.toDouble() ?? 0.0;
-      _yourBalance = (balanceData['your_balance'] as num?)?.toDouble() ?? (_youAreOwed - _youOwe);
+      _yourBalance = (balanceData['your_balance'] as num?)?.toDouble() ??
+          (((balanceData['you_are_owed'] as num?)?.toDouble() ?? 0.0) -
+              ((balanceData['you_owe'] as num?)?.toDouble() ?? 0.0));
+      _youOwe = _yourBalance < -0.01 ? -_yourBalance : 0.0;
+      _youAreOwed = _yourBalance > 0.01 ? _yourBalance : 0.0;
+      _roommateBalances = ((balanceData['roommate_balances'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+          .toList();
 
       // Load expenses for display
       final expensesResponse = await _apiService.getRecentExpenses(
@@ -156,11 +166,13 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildFinalBalanceCard(),
+          _buildFinalBalanceCards(),
           const SizedBox(height: 24),
           _buildNetAdjustmentCard(),
           const SizedBox(height: 24),
           _buildCalculationSteps(),
+          const SizedBox(height: 24),
+          _buildRoommateWiseBreakdown(),
           const SizedBox(height: 24),
           _buildExpensesList(),
           if (_settlements.isNotEmpty) ...[
@@ -173,9 +185,6 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
   }
 
   Widget _buildNetAdjustmentCard() {
-    final netPayable = (_youOwe - _youAreOwed).clamp(0.0, double.infinity);
-    final netReceivable = (_youAreOwed - _youOwe).clamp(0.0, double.infinity);
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -187,7 +196,7 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Mutual Adjustment (Overall)',
+            'Roommate-wise Adjusted Totals',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
@@ -196,30 +205,25 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
           ),
           const SizedBox(height: 14),
           _buildCalculationStep(
-            'You Owe (raw total)',
+            'You Owe (net)',
             _youOwe,
             Colors.red.shade700,
             Icons.remove_circle_outline,
             isPositive: false,
           ),
           _buildCalculationStep(
-            'You Are Owed (raw total)',
+            'You Are Owed (net)',
             _youAreOwed,
             Colors.green.shade700,
             Icons.add_circle_outline,
             isPositive: true,
           ),
           const SizedBox(height: 10),
-          Divider(color: Colors.grey.shade300),
-          const SizedBox(height: 10),
           Text(
-            netPayable > 0
-                ? 'Final payable after adjustment: Rs. ${netPayable.toStringAsFixed(0)}'
-                : 'Final receivable after adjustment: Rs. ${netReceivable.toStringAsFixed(0)}',
+            'Displayed using your net roomspace balance. Only one side should be non-zero.',
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: netPayable > 0 ? const Color(0xFFC62828) : const Color(0xFF2E7D32),
+              fontSize: 12,
+              color: Colors.grey.shade600,
             ),
           ),
         ],
@@ -227,53 +231,59 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
     );
   }
 
-  Widget _buildFinalBalanceCard() {
-    final amountToPay = (_youOwe - _youAreOwed).clamp(0.0, double.infinity);
-    final color = const Color(0xFFC62828);
+  Widget _buildFinalBalanceCards() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildSummaryCard(
+            title: 'You\'ll Get Back',
+            amount: _youAreOwed,
+            isPositive: true,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildSummaryCard(
+            title: 'You Need to Pay',
+            amount: _youOwe,
+            isPositive: false,
+          ),
+        ),
+      ],
+    );
+  }
 
+  Widget _buildSummaryCard({
+    required String title,
+    required double amount,
+    required bool isPositive,
+  }) {
+    final color = isPositive ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    final colors = isPositive
+        ? [Colors.green.shade50, Colors.green.shade100]
+        : [Colors.red.shade50, Colors.red.shade100];
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.red.shade50, Colors.red.shade100],
+          colors: colors,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'You Need to Pay',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.currency_rupee, color: color, size: 32),
-              Text(
-                amountToPay.toStringAsFixed(2),
-                style: TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.w900,
-                  color: color,
-                ),
-              ),
-            ],
+            title,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
           ),
           const SizedBox(height: 8),
           Text(
-            'Net after mutual adjustment',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
+            'Rs. ${amount.toStringAsFixed(0)}',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: color),
           ),
         ],
       ),
@@ -426,6 +436,62 @@ class _BalanceBreakdownScreenState extends State<BalanceBreakdownScreen> {
             Colors.red.shade700,
             Icons.arrow_downward,
           ),
+      ],
+    );
+  }
+
+  Widget _buildRoommateWiseBreakdown() {
+    final oweList = _roommateBalances
+        .where((r) => ((r['net_amount'] as num?)?.toDouble() ?? 0.0) < -0.01)
+        .toList();
+    final owedList = _roommateBalances
+        .where((r) => ((r['net_amount'] as num?)?.toDouble() ?? 0.0) > 0.01)
+        .toList();
+
+    if (oweList.isEmpty && owedList.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    Widget buildRow(Map<String, dynamic> item, {required bool isYouOwe}) {
+      final net = (item['net_amount'] as num?)?.toDouble() ?? 0.0;
+      final amount = net.abs();
+      final name = (item['user_name'] as String?) ?? 'Unknown';
+      final color = isYouOwe ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFEEEEF2)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                isYouOwe ? 'You pay $name' : '$name pays you',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+            Text(
+              'Rs. ${amount.toStringAsFixed(0)}',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Roommate-wise Breakdown',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1A1A2E)),
+        ),
+        const SizedBox(height: 12),
+        ...oweList.map((r) => buildRow(r, isYouOwe: true)),
+        ...owedList.map((r) => buildRow(r, isYouOwe: false)),
       ],
     );
   }

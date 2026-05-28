@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 import (
@@ -6,7 +8,7 @@ import (
 	"os"
 	"roomease/backend/config"
 	"roomease/backend/models"
-	
+
 	"github.com/joho/godotenv"
 )
 
@@ -32,11 +34,11 @@ func main() {
 		user := os.Getenv("POSTGRES_USER")
 		password := os.Getenv("POSTGRES_PASSWORD")
 		dbname := os.Getenv("POSTGRES_DATABASE")
-		
+
 		if host == "" || port == "" || user == "" || password == "" || dbname == "" {
 			log.Fatal("DATABASE_URL or POSTGRES_* environment variables are required")
 		}
-		
+
 		databaseURL = fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", user, password, host, port, dbname)
 	}
 
@@ -59,19 +61,19 @@ func main() {
 	fmt.Println("========================")
 
 	userBalances := make(map[string]struct {
-		Name      string
-		Paid      float64
-		Owed      float64
-		Balance   float64
+		Name    string
+		Paid    float64
+		Owed    float64
+		Balance float64
 	})
 
 	// Initialize balances
 	for _, member := range members {
 		userBalances[member.UserID] = struct {
-			Name      string
-			Paid      float64
-			Owed      float64
-			Balance   float64
+			Name    string
+			Paid    float64
+			Owed    float64
+			Balance float64
 		}{
 			Name:    member.User.Name,
 			Paid:    0,

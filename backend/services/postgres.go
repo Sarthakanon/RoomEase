@@ -1,8 +1,8 @@
 package services
 
 import (
-	"encoding/json"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -806,6 +806,9 @@ func (s *PostgresService) CreateExpense(expense *models.Expense) error {
 		}
 	}()
 
+	splits := expense.Splits
+	expense.Splits = nil
+
 	// Create the expense record
 	if err := tx.Create(expense).Error; err != nil {
 		tx.Rollback()
@@ -813,24 +816,25 @@ func (s *PostgresService) CreateExpense(expense *models.Expense) error {
 		return fmt.Errorf("failed to create expense: %v", err)
 	}
 
-	fmt.Printf("✅ Expense created with ID: %s\n", expense.ID)
+	fmt.Printf("✅ Expense created with ID: %d\n", expense.ID)
 
 	// Create the expense splits
-	for i := range expense.Splits {
-		expense.Splits[i].ID = 0 // Ensure ID is 0 for auto-increment
-		expense.Splits[i].ExpenseID = expense.ID
+	for i := range splits {
+		splits[i].ID = 0 // Ensure ID is 0 for auto-increment
+		splits[i].ExpenseID = expense.ID
 
-		fmt.Printf("💰 Creating split %d: UserUID=%s, Amount=%.2f, ExpenseID=%s\n",
-			i+1, expense.Splits[i].UserUID, expense.Splits[i].Amount, expense.Splits[i].ExpenseID)
+		fmt.Printf("💰 Creating split %d: UserUID=%s, Amount=%.2f, ExpenseID=%d\n",
+			i+1, splits[i].UserUID, splits[i].Amount, splits[i].ExpenseID)
 
-		if err := tx.Create(&expense.Splits[i]).Error; err != nil {
+		if err := tx.Create(&splits[i]).Error; err != nil {
 			tx.Rollback()
 			fmt.Printf("❌ Failed to create expense split %d: %v\n", i+1, err)
 			return fmt.Errorf("failed to create expense split: %v", err)
 		}
 
-		fmt.Printf("✅ Split %d created with ID: %d\n", i+1, expense.Splits[i].ID)
+		fmt.Printf("✅ Split %d created with ID: %d\n", i+1, splits[i].ID)
 	}
+	expense.Splits = splits
 
 	if err := tx.Commit().Error; err != nil {
 		fmt.Printf("❌ Failed to commit transaction: %v\n", err)
@@ -1027,6 +1031,9 @@ func (s *PostgresService) UpdateExpense(expense *models.Expense) error {
 		}
 	}()
 
+	splits := expense.Splits
+	expense.Splits = nil
+
 	// Update the expense record
 	if err := tx.Save(expense).Error; err != nil {
 		tx.Rollback()
@@ -1040,15 +1047,16 @@ func (s *PostgresService) UpdateExpense(expense *models.Expense) error {
 	}
 
 	// Create new splits
-	for i := range expense.Splits {
-		expense.Splits[i].ID = 0 // Ensure ID is 0 for auto-increment
-		expense.Splits[i].ExpenseID = expense.ID
+	for i := range splits {
+		splits[i].ID = 0 // Ensure ID is 0 for auto-increment
+		splits[i].ExpenseID = expense.ID
 
-		if err := tx.Create(&expense.Splits[i]).Error; err != nil {
+		if err := tx.Create(&splits[i]).Error; err != nil {
 			tx.Rollback()
 			return fmt.Errorf("failed to create expense split: %v", err)
 		}
 	}
+	expense.Splits = splits
 
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("failed to commit transaction: %v", err)

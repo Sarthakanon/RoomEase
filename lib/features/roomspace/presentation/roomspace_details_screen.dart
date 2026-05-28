@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../../services/api_service.dart';
+import '../../../services/cached_api_service.dart';
 import '../../../services/real_time_data_service.dart';
 import '../../../core/widgets/mobile_scaffold.dart';
 import '../../../core/widgets/global_roomspace_selector.dart';
@@ -22,6 +23,7 @@ class RoomspaceDetailsScreen extends StatefulWidget {
 
 class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with AutoRefreshMixin {
   final ApiService _apiService = ApiService();
+  final CachedApiService _cachedApi = CachedApiService();
   final RealTimeDataService _realTimeService = RealTimeDataService();
   bool _isLoading = true;
   Map<String, dynamic>? _roomspace;
@@ -88,7 +90,7 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
     setState(() => _isLoading = true);
     try {
       final provider = Provider.of<RoomspaceProvider>(context, listen: false);
-      await provider.loadRoomspaces(forceRefresh: true);
+      await provider.loadRoomspaces();
 
       if (provider.roomspaces.isEmpty) {
         setState(() {
@@ -107,9 +109,15 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
         await provider.setActiveRoomspace(activeId);
       }
 
-      final detailsRes = await _apiService.get('/api/roomspaces/$activeId');
+      final detailsRes = await _cachedApi.getRoomspaceMembers(
+        activeId,
+        forceRefresh: true,
+      );
       if (detailsRes['success'] == true && detailsRes['data'] != null) {
-        final active = detailsRes['data'] as Map<String, dynamic>;
+        final roomspaceData = provider.getRoomspaceById(activeId);
+        final active = (roomspaceData?.toJson() ?? <String, dynamic>{});
+        active['members'] = detailsRes['data'];
+        active['creator_id'] = roomspaceData?.isCreator == true ? _currentUserUid : null;
         if (active.isNotEmpty) {
           // Load join requests for this roomspace
           List<dynamic> joinRequests = [];
@@ -123,9 +131,16 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
             // Continue even if join requests fail to load
           }
           
+          final rawMembers = (active['members'] as List?) ?? const [];
+          final normalizedMembers = rawMembers
+              .whereType<Map>()
+              .map((m) => m.map((k, v) => MapEntry(k.toString(), v)))
+              .where((m) => (m['is_active'] as bool?) ?? true)
+              .toList();
+
           setState(() {
             _roomspace = active;
-            _members = _roomspace?['members'] ?? [];
+            _members = normalizedMembers;
             _joinRequests = joinRequests;
             _isCreator = _roomspace?['creator_id'] == _currentUserUid;
             _isLoading = false;
@@ -914,6 +929,12 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
         itemBuilder: (context, index) {
           final request = _joinRequests[index];
           final requester = request['requester'];
+          final roomspace = request['roomspace'];
+          final roomspaceName =
+              roomspace?['name'] ??
+              request['roomspace_name'] ??
+              _roomspace?['name'] ??
+              'this roomspace';
           final name = requester?['name'] ?? requester?['email'] ?? 'Unknown';
           final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
           final requestId = request['id'].toString();
@@ -952,7 +973,7 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
                             ),
                           ),
                           Text(
-                            'Wants to join',
+                            'Wants to join $roomspaceName',
                             style: TextStyle(
                               color: Colors.grey.shade500,
                               fontSize: 12,

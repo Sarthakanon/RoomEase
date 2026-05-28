@@ -648,6 +648,22 @@ class ApiService {
   Future<Map<String, dynamic>> deleteExpense(int expenseId) async {
     try {
       final response = await delete('/api/expenses/$expenseId');
+
+      // Trigger immediate UI refresh across all screens that listen for
+      // real-time expense/balance updates (home recent activity, shared list, etc.).
+      try {
+        final data = response['data'];
+        final roomspaceId = data is Map<String, dynamic> ? data['roomspace_id']?.toString() : null;
+        if (roomspaceId != null && roomspaceId.isNotEmpty) {
+          RealTimeDataService().notifyExpenseDeleted(roomspaceId, expenseId.toString(), const []);
+        } else {
+          // Fallback when backend delete response doesn't include roomspace_id.
+          RealTimeDataService().clearAllData();
+        }
+      } catch (_) {
+        RealTimeDataService().clearAllData();
+      }
+
       return response;
     } on DioException catch (e) {
       // Extract error message from response

@@ -1,0 +1,17 @@
+meta {
+  name: Verify Token
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/auth/verify
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}

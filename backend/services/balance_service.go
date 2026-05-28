@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"math"
 	"roomease/backend/config"
 	"roomease/backend/models"
 	"time"
@@ -12,6 +13,29 @@ import (
 
 // BalanceService handles balance calculation and management operations
 type BalanceService struct{}
+
+func normalizedSharesByUser(expense models.Expense) map[string]float64 {
+	sharesByUser := make(map[string]float64)
+	for _, split := range expense.Splits {
+		sharesByUser[split.UserUID] += split.Amount
+	}
+
+	totalShares := 0.0
+	for _, share := range sharesByUser {
+		totalShares += share
+	}
+
+	// Keep the effective split sum aligned to the real expense amount.
+	// This prevents duplicate/corrupt split rows from inflating balances.
+	if totalShares > 0 && math.Abs(totalShares-expense.Amount) > 0.01 {
+		scale := expense.Amount / totalShares
+		for uid, share := range sharesByUser {
+			sharesByUser[uid] = share * scale
+		}
+	}
+
+	return sharesByUser
+}
 
 // NewBalanceService creates a new balance service
 func NewBalanceService() *BalanceService {
@@ -36,7 +60,7 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 
 	fmt.Printf("📋 Found %d expenses for roomspace %s\n", len(expenses), roomspaceID)
 	for i, expense := range expenses {
-		fmt.Printf("  Expense %d: ID=%s, Amount=%.2f, PaidBy=%s, Splits=%d\n",
+		fmt.Printf("  Expense %d: ID=%d, Amount=%.2f, PaidBy=%s, Splits=%d\n",
 			i+1, expense.ID, expense.Amount, expense.PaidBy, len(expense.Splits))
 	}
 
@@ -68,7 +92,7 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 	// Calculate balances from expenses
 	totalExpenses := 0.0
 	for i, expense := range expenses {
-		fmt.Printf("🧮 Processing expense %d: ID=%s, Amount=%.2f, PaidBy=%s\n",
+		fmt.Printf("🧮 Processing expense %d: ID=%d, Amount=%.2f, PaidBy=%s\n",
 			i+1, expense.ID, expense.Amount, expense.PaidBy)
 
 		totalExpenses += expense.Amount
@@ -83,17 +107,17 @@ func (s *BalanceService) CalculateRoomspaceBalances(roomspaceID string) (*models
 		}
 
 		// Each split member gets debited for their share
-		fmt.Printf("  📊 Processing %d splits:\n", len(expense.Splits))
-		for j, split := range expense.Splits {
-			fmt.Printf("    Split %d: UserUID=%s, Amount=%.2f\n",
-				j+1, split.UserUID, split.Amount)
+		sharesByUser := normalizedSharesByUser(expense)
+		fmt.Printf("  📊 Processing %d normalized participant shares:\n", len(sharesByUser))
+		for uid, share := range sharesByUser {
+			fmt.Printf("    Share: UserUID=%s, Amount=%.2f\n", uid, share)
 
-			if _, exists := userBalances[split.UserUID]; exists {
-				userBalances[split.UserUID] -= split.Amount
+			if _, exists := userBalances[uid]; exists {
+				userBalances[uid] -= share
 				fmt.Printf("    ✅ Subtracted %.2f from %s, new balance: %.2f\n",
-					split.Amount, split.UserUID, userBalances[split.UserUID])
+					share, uid, userBalances[uid])
 			} else {
-				fmt.Printf("    ⚠️  Split user %s not found in members list\n", split.UserUID)
+				fmt.Printf("    ⚠️  Split user %s not found in members list\n", uid)
 			}
 		}
 
@@ -181,7 +205,7 @@ func (s *BalanceService) GetUserBalance(roomspaceID, userID string) (*models.Use
 	var splits []models.ExpenseSplit
 	result = config.DB.
 		Joins("JOIN expenses ON expenses.id = expense_splits.expense_id").
-		Where("expenses.roomspace_id = ? AND expense_splits.user_uid = ?", roomspaceID, userID).
+		Where("expenses.roomspace_id = ? AND expenses.deleted_at IS NULL AND expense_splits.user_uid = ?", roomspaceID, userID).
 		Find(&splits)
 
 	if result.Error != nil {

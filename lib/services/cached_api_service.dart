@@ -20,9 +20,15 @@ class CachedApiService {
     }
 
     print('🌐 Fetching roomspaces from API');
-    final data = await _apiService.getRoomspaces();
-    await _cacheService.cacheRoomspaces(data);
-    return data;
+    try {
+      final data = await _apiService.getRoomspaces();
+      await _cacheService.cacheRoomspaces(data);
+      return data;
+    } catch (_) {
+      final stale = await _cacheService.getCachedRoomspaces(allowExpired: true);
+      if (stale != null) return stale;
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> getUserProfile({bool forceRefresh = false}) async {
@@ -35,9 +41,15 @@ class CachedApiService {
     }
 
     print('🌐 Fetching user profile from API');
-    final data = await _apiService.getUserProfile();
-    await _cacheService.cacheUserProfile(data);
-    return data;
+    try {
+      final data = await _apiService.getUserProfile();
+      await _cacheService.cacheUserProfile(data);
+      return data;
+    } catch (_) {
+      final stale = await _cacheService.getCachedUserProfile(allowExpired: true);
+      if (stale != null) return stale;
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> getRoomspace(int id, {bool forceRefresh = false}) async {
@@ -67,9 +79,15 @@ class CachedApiService {
     }
 
     print('🌐 Fetching balances for roomspace $roomspaceId from API');
-    final data = await _apiService.getRoomspaceBalances(roomspaceId);
-    await _cacheService.cacheBalances(roomspaceId, data);
-    return data;
+    try {
+      final data = await _apiService.getRoomspaceBalances(roomspaceId);
+      await _cacheService.cacheBalances(roomspaceId, data);
+      return data;
+    } catch (_) {
+      final stale = await _cacheService.getCachedBalances(roomspaceId, allowExpired: true);
+      if (stale != null) return stale;
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> getRoomspaceExpenses(
@@ -90,14 +108,20 @@ class CachedApiService {
     }
 
     print('🌐 Fetching expenses for roomspace $roomspaceId from API');
-    final data = await _apiService.getRoomspaceExpenses(
-      roomspaceId,
-      limit: limit,
-      offset: offset,
-      month: month,
-    );
-    await _cacheService.cacheExpenses(cacheKey, data);
-    return data;
+    try {
+      final data = await _apiService.getRoomspaceExpenses(
+        roomspaceId,
+        limit: limit,
+        offset: offset,
+        month: month,
+      );
+      await _cacheService.cacheExpenses(cacheKey, data);
+      return data;
+    } catch (_) {
+      final stale = await _cacheService.getCachedExpenses(cacheKey, allowExpired: true);
+      if (stale != null) return stale;
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> getPersonalExpenses({
@@ -118,14 +142,20 @@ class CachedApiService {
     }
 
     print('🌐 Fetching personal expenses from API');
-    final data = await _apiService.getPersonalExpenses(
-      roomspaceId: roomspaceId,
-      limit: limit,
-      offset: offset,
-      month: month,
-    );
-    await _cacheService.cacheExpenses(cacheKey, data);
-    return data;
+    try {
+      final data = await _apiService.getPersonalExpenses(
+        roomspaceId: roomspaceId,
+        limit: limit,
+        offset: offset,
+        month: month,
+      );
+      await _cacheService.cacheExpenses(cacheKey, data);
+      return data;
+    } catch (_) {
+      final stale = await _cacheService.getCachedExpenses(cacheKey, allowExpired: true);
+      if (stale != null) return stale;
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> getRoomspaceMembers(String roomspaceId, {bool forceRefresh = false}) async {
@@ -138,9 +168,15 @@ class CachedApiService {
     }
 
     print('🌐 Fetching members for roomspace $roomspaceId from API');
-    final data = await _apiService.getRoomspaceMembers(roomspaceId);
-    await _cacheService.cacheMembers(roomspaceId, data);
-    return data;
+    try {
+      final data = await _apiService.getRoomspaceMembers(roomspaceId);
+      await _cacheService.cacheMembers(roomspaceId, data);
+      return data;
+    } catch (_) {
+      final stale = await _cacheService.getCachedMembers(roomspaceId, allowExpired: true);
+      if (stale != null) return stale;
+      rethrow;
+    }
   }
 
   // Methods that modify data - these should invalidate cache
@@ -249,9 +285,37 @@ class CachedApiService {
   Future<Map<String, dynamic>> verifySession() => _apiService.verifySession();
   Future<Map<String, dynamic>> refreshSession() => _apiService.refreshSession();
   Future<Map<String, dynamic>> searchRoomspaceByCode(String code) => _apiService.searchRoomspaceByCode(code);
-  Future<Map<String, dynamic>> getNotifications() => _apiService.getNotifications();
+  Future<Map<String, dynamic>> getNotifications({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final cached = await _cacheService.getCachedNotifications();
+      if (cached != null) return cached;
+    }
+    try {
+      final data = await _apiService.getNotifications();
+      await _cacheService.cacheNotifications(data);
+      return data;
+    } catch (_) {
+      final stale = await _cacheService.getCachedNotifications(allowExpired: true);
+      if (stale != null) return stale;
+      rethrow;
+    }
+  }
   Future<Map<String, dynamic>> markNotificationAsRead(int id) => _apiService.markNotificationAsRead(id);
-  Future<Map<String, dynamic>> getJoinRequests() => _apiService.getJoinRequests();
+  Future<Map<String, dynamic>> getJoinRequests({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final cached = await _cacheService.getCachedJoinRequests();
+      if (cached != null) return cached;
+    }
+    try {
+      final data = await _apiService.getJoinRequests();
+      await _cacheService.cacheJoinRequests(data);
+      return data;
+    } catch (_) {
+      final stale = await _cacheService.getCachedJoinRequests(allowExpired: true);
+      if (stale != null) return stale;
+      rethrow;
+    }
+  }
   Future<Map<String, dynamic>> getPendingJoinRequest() => _apiService.getPendingJoinRequest();
   Future<Map<String, dynamic>> processJoinRequest(String requestId, bool accept) => _apiService.processJoinRequest(requestId, accept);
   Future<Map<String, dynamic>> getExpenses({String? roomspaceId, int? limit, int? offset}) => _apiService.getExpenses(roomspaceId: roomspaceId, limit: limit, offset: offset);

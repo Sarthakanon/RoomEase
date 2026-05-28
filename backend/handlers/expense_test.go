@@ -135,7 +135,7 @@ func TestExpenseHandler_calculateSplits(t *testing.T) {
 				SelectedRoommates: []string{"user1", "user2"},
 			},
 			payerUID: "payer",
-			want:     2,
+			want:     3,
 		},
 		{
 			name: "percentage split calculation",
@@ -178,7 +178,7 @@ func TestExpenseHandler_calculateSplits(t *testing.T) {
 
 func TestExpenseHandler_CreateExpense_ValidationErrors(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	// Create handler with real service (we'll test validation logic only)
 	handler := &ExpenseHandler{dbService: services.NewPostgresService()}
 
@@ -189,10 +189,10 @@ func TestExpenseHandler_CreateExpense_ValidationErrors(t *testing.T) {
 		expectedError  string
 	}{
 		{
-			name: "invalid JSON",
-			requestBody: `{"invalid": json}`,
+			name:           "invalid JSON",
+			requestBody:    `{"invalid": json}`,
 			expectedStatus: http.StatusBadRequest,
-			expectedError: "Invalid request body",
+			expectedError:  "Invalid request body",
 		},
 		{
 			name: "missing required fields",
@@ -201,7 +201,7 @@ func TestExpenseHandler_CreateExpense_ValidationErrors(t *testing.T) {
 				// Missing required fields
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError: "Invalid request body",
+			expectedError:  "Invalid request body",
 		},
 		{
 			name: "invalid split type",
@@ -211,10 +211,10 @@ func TestExpenseHandler_CreateExpense_ValidationErrors(t *testing.T) {
 				Amount:            100.0,
 				Category:          "Food",
 				SplitType:         "INVALID",
-				SelectedRoommates: []string{"user1"},
+				SelectedRoommates: []string{"user1", "user2"},
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError: "invalid split type",
+			expectedError:  "invalid split type",
 		},
 	}
 
@@ -244,10 +244,10 @@ func TestExpenseHandler_CreateExpense_ValidationErrors(t *testing.T) {
 
 			// Assert response
 			assert.Equal(t, tt.expectedStatus, w.Code)
-			
+
 			var response map[string]interface{}
 			json.Unmarshal(w.Body.Bytes(), &response)
-			
+
 			if tt.expectedError != "" {
 				assert.Contains(t, response["error"].(string), tt.expectedError)
 			}

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:room_ease/models/expense_models.dart';
 import 'package:room_ease/services/expense_service.dart';
 import 'package:room_ease/services/cached_api_service.dart';
+import 'package:room_ease/services/smart_api_service.dart';
+import 'package:room_ease/services/api_service.dart';
 import 'package:room_ease/services/real_time_data_service.dart';
 import 'package:room_ease/providers/roomspace_provider.dart';
 import 'package:room_ease/core/widgets/skeleton_loader.dart';
@@ -29,6 +31,8 @@ class ExpenseListScreen extends StatefulWidget {
 class _ExpenseListScreenState extends State<ExpenseListScreen> {
   final ExpenseService _expenseService = ExpenseService();
   final CachedApiService _cachedApiService = CachedApiService();
+  final SmartApiService _smartApiService = SmartApiService();
+  final ApiService _apiService = ApiService();
   final RealTimeDataService _realTimeService = RealTimeDataService();
   final ScrollController _scrollController = ScrollController();
   
@@ -116,10 +120,13 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       }
       
       if (widget.isPersonalExpenses) {
-        final personal = await _expenseService.getPersonalExpenses(
+        final response = await _smartApiService.getPersonalExpenses(
           limit: _pageSize,
           offset: _currentPage * _pageSize,
         );
+        final personal = (response['data'] as List<dynamic>? ?? const [])
+            .map((e) => PersonalExpenseData.fromJson(e as Map<String, dynamic>))
+            .toList();
         expenses = personal
             .map((p) => ExpenseData(
                   id: p.id,
@@ -134,12 +141,16 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                 ))
             .toList();
       } else if (effectiveId != null) {
-        final response = await _expenseService.getRoomspaceExpenses(
-          effectiveId,
+        // Use generic expenses endpoint with explicit roomspace filter.
+        // This avoids backend month-default filtering issues on roomspace-specific endpoint.
+        final response = await _smartApiService.getExpenses(
+          roomspaceId: effectiveId,
           limit: _pageSize,
           offset: _currentPage * _pageSize,
         );
-        expenses = response.expenses;
+        expenses = (response['data'] as List<dynamic>? ?? const [])
+            .map((e) => ExpenseData.fromJson(e as Map<String, dynamic>))
+            .toList();
       } else {
         expenses = await _expenseService.getUserExpenses(
           limit: _pageSize,
@@ -448,7 +459,33 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
       
       if (!mounted) return;
       AddExpenseDialog.show(context, roommates: roommates, roomspaceId: active.id, onSubmit: (ex) async {
-        await _cachedApiService.createExpense(ExpenseCreateRequest.fromExpenseData(ex, active.id).toJson());
+        final requests = ExpenseCreateRequest.fromExpenseDataBatch(ex, active.id);
+        for (final request in requests) {
+          await _smartApiService.createExpense(request.toJson());
+        }
+        final isRecurring = ex.recurringConfig?.isRecurring == true;
+        if (isRecurring && requests.length > 1) {
+          final payerAmounts = Map<String, double>.from(ex.payerAmounts)
+            ..removeWhere((_, v) => v <= 0);
+          final fallbackPayer = ex.paidBy ??
+              (ex.selectedRoommateIds.isNotEmpty ? ex.selectedRoommateIds.first : '');
+          if (fallbackPayer.isNotEmpty && payerAmounts.isEmpty) {
+            payerAmounts[fallbackPayer] = ex.amount;
+          }
+          await _apiService.createRecurringExpenseTemplate({
+            'roomspace_id': active.id,
+            'title': ex.title,
+            'description': ex.description,
+            'amount': ex.amount,
+            'category': ex.category,
+            'paid_by': fallbackPayer,
+            'payer_amounts': payerAmounts,
+            'split_type': ex.splitType.apiValue,
+            'selected_roommates': ex.selectedRoommateIds,
+            'custom_splits': ex.customSplits,
+            'recurring_config': ex.recurringConfig!.toJson(),
+          });
+        }
         // Real-time service will automatically notify listeners
         // No need to manually refresh here
       });
@@ -457,7 +494,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   void _showPersonalExpenseDialog() {
     PersonalExpenseDialog.show(context, onSubmit: (ex) async {
-      await _cachedApiService.createPersonalExpense(PersonalExpenseCreateRequest.fromExpenseData(ex).toJson());
+      await _smartApiService.createPersonalExpense(PersonalExpenseCreateRequest.fromExpenseData(ex).toJson());
       // Real-time service will automatically notify listeners
       // No need to manually refresh here
     });

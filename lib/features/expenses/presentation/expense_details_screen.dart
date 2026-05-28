@@ -60,7 +60,10 @@ class _ExpenseDetailsScreenState extends State<ExpenseDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final isMe = _expense.paidBy == FirebaseAuth.instance.currentUser?.uid;
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    final isPayer = _expense.paidBy == currentUid;
+    final isCreator = _expense.createdBy == currentUid;
+    final canManage = isPayer || isCreator;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -71,7 +74,7 @@ class _ExpenseDetailsScreenState extends State<ExpenseDetailsScreen> {
         title: const Text('Details', style: TextStyle(color: Color(0xFF1A1A2E), fontWeight: FontWeight.w700, fontSize: 17)),
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1A1A2E), size: 18), onPressed: () => Navigator.pop(context)),
         actions: [
-          if (isMe) ...[
+          if (canManage) ...[
             IconButton(icon: Icon(Icons.edit_outlined, color: Colors.grey.shade600, size: 20), onPressed: _editExpense),
             IconButton(icon: Icon(Icons.delete_outline_rounded, color: Colors.grey.shade600, size: 20), onPressed: _deleteExpense),
           ],
@@ -89,7 +92,7 @@ class _ExpenseDetailsScreenState extends State<ExpenseDetailsScreen> {
                 const SizedBox(height: 32),
                 _buildSectionTitle('INFORMATION'),
                 const SizedBox(height: 12),
-                _buildInfoGrid(isMe),
+                _buildInfoGrid(isPayer),
                 if (_expense.description.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   _buildSectionTitle('DESCRIPTION'),
@@ -125,11 +128,14 @@ class _ExpenseDetailsScreenState extends State<ExpenseDetailsScreen> {
   }
 
   Widget _buildInfoGrid(bool isMe) {
+    final payerLabel = _expense.payerName?.trim().isNotEmpty == true
+        ? _expense.payerName!
+        : (_expense.paidBy?.isNotEmpty == true ? _expense.paidBy! : 'Unknown');
     return Row(
       children: [
         Expanded(child: _buildInfoItem(Icons.category_outlined, _expense.category, Colors.orange)),
         const SizedBox(width: 12),
-        Expanded(child: _buildInfoItem(Icons.person_outline_rounded, isMe ? 'Paid by You' : 'Paid by ${_expense.payerName ?? 'Self'}', Colors.blue)),
+        Expanded(child: _buildInfoItem(Icons.person_outline_rounded, isMe ? 'Paid by You' : 'Paid by $payerLabel', Colors.blue)),
       ],
     );
   }

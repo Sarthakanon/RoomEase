@@ -1,0 +1,22 @@
+meta {
+  name: Create Settlement
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/roomspaces/{{roomspaceId}}/settlements
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+

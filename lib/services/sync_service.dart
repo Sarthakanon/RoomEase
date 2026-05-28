@@ -4,6 +4,7 @@ import 'connectivity_service.dart';
 import 'local_database_service.dart';
 import 'api_service.dart';
 import '../models/expense_models.dart';
+import 'real_time_data_service.dart';
 
 /// Service to handle automatic synchronization between local and remote data
 class SyncService {
@@ -14,8 +15,10 @@ class SyncService {
   final ConnectivityService _connectivityService = ConnectivityService();
   final LocalDatabaseService _localDb = LocalDatabaseService();
   final ApiService _apiService = ApiService();
+  final RealTimeDataService _realTimeService = RealTimeDataService();
 
   StreamSubscription<bool>? _connectivitySubscription;
+  Timer? _autoRetryTimer;
   bool _isSyncing = false;
   bool _isInitialized = false;
 
@@ -40,10 +43,20 @@ class SyncService {
       (isConnected) {
         if (isConnected) {
           print('🔄 Internet restored - triggering sync');
-          syncAll();
+          unawaited(syncAll());
         }
       },
     );
+
+    // Keep retrying pending queue while online.
+    _autoRetryTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+      if (_isSyncing || !_connectivityService.isConnected) return;
+      final pending = await _localDb.getPendingSyncOperations();
+      if (pending.isNotEmpty) {
+        print('🔄 Pending operations detected (${pending.length}) - auto retry sync');
+        await syncAll();
+      }
+    });
     
     _isInitialized = true;
     print('🔄 Sync service initialized');
@@ -74,6 +87,7 @@ class SyncService {
       await _fetchLatestData();
       
       _updateStatus(SyncStatus.completed);
+      _realTimeService.clearAllData(); // force UI to refresh from synced data
       print('✅ Sync completed successfully');
       
       return SyncResult(success: true, message: 'Sync completed');
@@ -134,13 +148,16 @@ class SyncService {
   Future<void> _syncExpenseOperation(String operationType, Map<String, dynamic> data) async {
     switch (operationType) {
       case 'CREATE':
-        final response = await _apiService.createExpense(data);
+        final payload = Map<String, dynamic>.from(data)..remove('local_id');
+        final response = await _apiService.createExpense(payload);
         if (response['success'] == true && response['data'] != null) {
           final serverExpense = ExpenseData.fromJson(response['data']);
           await _localDb.markExpenseAsSynced(
             data['local_id'] as String,
             serverExpense.id,
           );
+        } else {
+          throw Exception(response['error'] ?? 'Expense sync failed');
         }
         break;
       case 'UPDATE':
@@ -158,13 +175,16 @@ class SyncService {
   Future<void> _syncPersonalExpenseOperation(String operationType, Map<String, dynamic> data) async {
     switch (operationType) {
       case 'CREATE':
-        final response = await _apiService.createPersonalExpense(data);
+        final payload = Map<String, dynamic>.from(data)..remove('local_id');
+        final response = await _apiService.createPersonalExpense(payload);
         if (response['success'] == true && response['data'] != null) {
           final serverExpense = PersonalExpenseData.fromJson(response['data']);
           await _localDb.markPersonalExpenseAsSynced(
             data['local_id'] as String,
             serverExpense.id,
           );
+        } else {
+          throw Exception(response['error'] ?? 'Personal expense sync failed');
         }
         break;
       case 'DELETE':
@@ -269,6 +289,7 @@ class SyncService {
   /// Dispose resources
   void dispose() {
     _connectivitySubscription?.cancel();
+    _autoRetryTimer?.cancel();
     _syncStatusController.close();
     _isInitialized = false;
   }

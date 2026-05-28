@@ -1,0 +1,110 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Subsystem API Testing Tables</title>
+<style>body{font-family:Arial,sans-serif;margin:28px;line-height:1.35} h1,h2{margin-top:22px} table{border-collapse:collapse;width:100%;margin:8px 0 20px 0;font-size:12px} th,td{border:1px solid #ccc;padding:6px;vertical-align:top} th{background:#f5f5f5;text-align:left}</style></head><body>
+<h1>Subsystem-wise API Testing Tables</h1>
+<h2>Authentication Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>AUTH-01</td><td>`/api/auth/login`</td><td>POST</td><td>No</td><td>200, returns `user_id`, `email`, `session_id`, sets `session_id` cookie</td></tr>
+<tr><td>AUTH-02</td><td>`/api/auth/verify`</td><td>GET</td><td>Session Cookie</td><td>200, `valid: true` for active session</td></tr>
+<tr><td>AUTH-03</td><td>`/api/auth/refresh`</td><td>POST</td><td>Session Cookie</td><td>200, session extended</td></tr>
+<tr><td>AUTH-04</td><td>`/api/auth/logout`</td><td>POST</td><td>Session Cookie</td><td>200, session invalidated/cleared</td></tr>
+</table>
+<h2>Health Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>HLTH-01</td><td>`/health`</td><td>GET</td><td>No</td><td>200, `status: healthy`</td></tr>
+</table>
+<h2>User Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>USER-01</td><td>`/api/user/profile`</td><td>GET</td><td>Session Cookie</td><td>200, user profile data</td></tr>
+<tr><td>USER-02</td><td>`/api/user/profile`</td><td>PUT</td><td>Session Cookie</td><td>200, profile updated</td></tr>
+<tr><td>USER-03</td><td>`/api/user/roomspaces/count`</td><td>GET</td><td>Session Cookie</td><td>200, roomspace count</td></tr>
+</table>
+<h2>Roomspace Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>ROOM-01</td><td>`/api/roomspaces`</td><td>GET</td><td>Session Cookie</td><td>200, list of roomspaces</td></tr>
+<tr><td>ROOM-02</td><td>`/api/roomspaces`</td><td>POST</td><td>Session Cookie</td><td>201/200, roomspace created</td></tr>
+<tr><td>ROOM-03</td><td>`/api/roomspaces/:id`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, roomspace details</td></tr>
+<tr><td>ROOM-04</td><td>`/api/roomspaces/:id/join`</td><td>POST</td><td>Session Cookie</td><td>200, joined</td></tr>
+<tr><td>ROOM-05</td><td>`/api/roomspaces/:id/leave`</td><td>POST</td><td>Session Cookie</td><td>200, left roomspace</td></tr>
+<tr><td>ROOM-06</td><td>`/api/roomspaces/code/:code`</td><td>GET</td><td>Session Cookie</td><td>200, roomspace by invite code</td></tr>
+<tr><td>ROOM-07</td><td>`/api/roomspaces/code/:code/join`</td><td>POST</td><td>Session Cookie</td><td>200, joined by code</td></tr>
+<tr><td>ROOM-08</td><td>`/api/roomspaces/:id/members`</td><td>DELETE</td><td>Session Cookie + Permission</td><td>200, member removed</td></tr>
+</table>
+<h2>Notification and Join Request Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>NOTIF-01</td><td>`/api/notifications`</td><td>GET</td><td>Session Cookie</td><td>200, notifications list</td></tr>
+<tr><td>NOTIF-02</td><td>`/api/notifications/send-reminder`</td><td>POST</td><td>Session Cookie</td><td>200, reminder sent</td></tr>
+<tr><td>NOTIF-03</td><td>`/api/notifications/:id/read`</td><td>PUT</td><td>Session Cookie</td><td>200, marked read</td></tr>
+<tr><td>NOTIF-04</td><td>`/api/join-requests`</td><td>GET</td><td>Session Cookie</td><td>200, join requests</td></tr>
+<tr><td>NOTIF-05</td><td>`/api/join-requests/pending`</td><td>GET</td><td>Session Cookie</td><td>200, pending requests</td></tr>
+<tr><td>NOTIF-06</td><td>`/api/join-requests/:id/process`</td><td>POST</td><td>Session Cookie + Permission</td><td>200, request processed</td></tr>
+</table>
+<h2>Expense Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>EXP-01</td><td>`/api/expenses`</td><td>POST</td><td>Session Cookie</td><td>201/200, expense created</td></tr>
+<tr><td>EXP-02</td><td>`/api/expenses`</td><td>GET</td><td>Session Cookie</td><td>200, expense list</td></tr>
+<tr><td>EXP-03</td><td>`/api/expenses/:id`</td><td>GET</td><td>Session Cookie</td><td>200, expense details</td></tr>
+<tr><td>EXP-04</td><td>`/api/expenses/:id`</td><td>PUT</td><td>Session Cookie</td><td>200, expense updated</td></tr>
+<tr><td>EXP-05</td><td>`/api/expenses/:id`</td><td>DELETE</td><td>Session Cookie</td><td>200, expense deleted</td></tr>
+<tr><td>EXP-06</td><td>`/api/roomspaces/:id/expenses`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, roomspace expenses</td></tr>
+<tr><td>EXP-07</td><td>`/api/roomspaces/:id/expenses/recent`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, recent expenses</td></tr>
+</table>
+<h2>Personal Expense Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>PEXP-01</td><td>`/api/personal-expenses`</td><td>POST</td><td>Session Cookie</td><td>201/200, personal expense created</td></tr>
+<tr><td>PEXP-02</td><td>`/api/personal-expenses`</td><td>GET</td><td>Session Cookie</td><td>200, personal expenses list</td></tr>
+<tr><td>PEXP-03</td><td>`/api/personal-expenses/:id`</td><td>DELETE</td><td>Session Cookie</td><td>200, personal expense deleted</td></tr>
+</table>
+<h2>Balance and Settlement Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>BAL-01</td><td>`/api/roomspaces/:id/balances`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, roomspace balances</td></tr>
+<tr><td>BAL-02</td><td>`/api/roomspaces/:id/balances/:userId`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, user balance</td></tr>
+<tr><td>BAL-03</td><td>`/api/roomspaces/:id/settlements`</td><td>POST</td><td>Session Cookie + Membership</td><td>201/200, settlement created</td></tr>
+<tr><td>BAL-04</td><td>`/api/roomspaces/:id/settlements`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, settlement history</td></tr>
+<tr><td>BAL-05</td><td>`/api/roomspaces/:id/settlements/suggestions`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, suggested settlements</td></tr>
+<tr><td>BAL-06</td><td>`/api/roomspaces/:id/balances/refresh`</td><td>POST</td><td>Session Cookie + Membership</td><td>200, balance cache refreshed</td></tr>
+</table>
+<h2>Payments and Confirmation Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>PAYC-01</td><td>`/api/roomspaces/:id/payments/confirm`</td><td>POST</td><td>Session Cookie + Membership</td><td>201/200, payment confirmation created</td></tr>
+<tr><td>PAYC-02</td><td>`/api/roomspaces/:id/payments/:paymentId/confirm`</td><td>PUT</td><td>Session Cookie + Membership</td><td>200, payment confirmed</td></tr>
+<tr><td>PAYC-03</td><td>`/api/roomspaces/:id/payments/:paymentId/reject`</td><td>PUT</td><td>Session Cookie + Membership</td><td>200, payment rejected</td></tr>
+<tr><td>PAYC-04</td><td>`/api/roomspaces/:id/payments/pending`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, pending confirmations</td></tr>
+<tr><td>PAYC-05</td><td>`/api/roomspaces/:id/payments/history`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, payment history</td></tr>
+<tr><td>PAYC-06</td><td>`/api/roomspaces/:id/payments/stats`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, payment stats</td></tr>
+</table>
+<h2>Recurring Expense Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>REC-01</td><td>`/api/recurring-expenses`</td><td>POST</td><td>Session Cookie</td><td>201/200, template created</td></tr>
+<tr><td>REC-02</td><td>`/api/roomspaces/:id/recurring-expenses`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, template list</td></tr>
+<tr><td>REC-03</td><td>`/api/recurring-expenses/:template_id`</td><td>PUT</td><td>Session Cookie</td><td>200, template updated</td></tr>
+<tr><td>REC-04</td><td>`/api/recurring-expenses/:template_id`</td><td>DELETE</td><td>Session Cookie</td><td>200, template deleted</td></tr>
+<tr><td>REC-05</td><td>`/api/recurring-expenses/:template_id/restore`</td><td>POST</td><td>Session Cookie</td><td>200, template restored</td></tr>
+<tr><td>REC-06</td><td>`/api/recurring-expenses/notifications`</td><td>GET</td><td>Session Cookie</td><td>200 or known 500 (DB type issue in current build)</td></tr>
+</table>
+<h2>Analytics Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>ANL-01</td><td>`/api/analytics/summary`</td><td>GET</td><td>Session Cookie</td><td>200, summary metrics</td></tr>
+<tr><td>ANL-02</td><td>`/api/analytics/trends`</td><td>GET</td><td>Session Cookie</td><td>200, trend data</td></tr>
+<tr><td>ANL-03</td><td>`/api/analytics/predictions`</td><td>GET</td><td>Session Cookie</td><td>200 or known 500 (ML unavailable path)</td></tr>
+<tr><td>ANL-04</td><td>`/api/analytics/patterns`</td><td>GET</td><td>Session Cookie</td><td>200, pattern data</td></tr>
+<tr><td>ANL-05</td><td>`/api/analytics/anomalies`</td><td>GET</td><td>Session Cookie</td><td>200 or known 500 (ML unavailable path)</td></tr>
+<tr><td>ANL-06</td><td>`/api/analytics/recommendations`</td><td>GET</td><td>Session Cookie</td><td>200 or known 500 (ML unavailable path)</td></tr>
+<tr><td>ANL-07</td><td>`/api/analytics/roomspace/:id`</td><td>GET</td><td>Session Cookie + Membership</td><td>200, roomspace analytics</td></tr>
+<tr><td>ANL-08</td><td>`/api/analytics/feedback`</td><td>POST</td><td>Session Cookie</td><td>200, feedback stored</td></tr>
+</table>
+<h2>Subscription Subsystem</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>SUB-01</td><td>`/api/subscription/current`</td><td>GET</td><td>Session Cookie</td><td>200, active subscription</td></tr>
+<tr><td>SUB-02</td><td>`/api/subscription/cancel`</td><td>POST</td><td>Session Cookie</td><td>200, subscription cancelled</td></tr>
+<tr><td>SUB-03</td><td>`/api/subscription/reactivate`</td><td>POST</td><td>Session Cookie</td><td>200, subscription reactivated</td></tr>
+<tr><td>SUB-04</td><td>`/api/subscription/history`</td><td>GET</td><td>Session Cookie</td><td>200, subscription history</td></tr>
+</table>
+<h2>Admin Subsystem (Currently Public)</h2>
+<table><tr><th>Test ID</th><th>API</th><th>Method</th><th>Auth Required</th><th>Expected Result</th></tr>
+<tr><td>ADM-01</td><td>`/api/admin/stats`</td><td>GET</td><td>No</td><td>200, system stats</td></tr>
+<tr><td>ADM-02</td><td>`/api/admin/users`</td><td>GET</td><td>No</td><td>200, users list</td></tr>
+<tr><td>ADM-03</td><td>`/api/admin/users/:userId/ban-status`</td><td>GET</td><td>No</td><td>200, ban status</td></tr>
+<tr><td>ADM-04</td><td>`/api/admin/roomspaces`</td><td>GET</td><td>No</td><td>200, roomspaces list</td></tr>
+<tr><td>ADM-05</td><td>`/api/admin/expenses`</td><td>GET</td><td>No</td><td>200, expenses list</td></tr>
+</table>
+</body></html>

@@ -1,0 +1,22 @@
+meta {
+  name: Reactivate Subscription
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/subscription/reactivate
+  body: none
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+

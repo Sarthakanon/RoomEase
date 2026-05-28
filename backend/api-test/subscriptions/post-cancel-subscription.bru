@@ -1,0 +1,22 @@
+meta {
+  name: Cancel Subscription
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/subscription/cancel
+  body: none
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+

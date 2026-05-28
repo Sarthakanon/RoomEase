@@ -148,6 +148,7 @@ class RecurringExpenseTemplate {
   final String category;
   final String createdBy;
   final String paidBy;
+  final Map<String, double> payerAmounts;
   final List<String> selectedRoommates;
   final String splitType;
   final Map<String, double> customSplits;
@@ -168,6 +169,7 @@ class RecurringExpenseTemplate {
     required this.category,
     required this.createdBy,
     required this.paidBy,
+    this.payerAmounts = const {},
     required this.selectedRoommates,
     required this.splitType,
     required this.customSplits,
@@ -190,6 +192,7 @@ class RecurringExpenseTemplate {
       'category': category,
       'created_by': createdBy,
       'paid_by': paidBy,
+      if (payerAmounts.isNotEmpty) 'payer_amounts': payerAmounts,
       'selected_roommates': selectedRoommates,
       'split_type': splitType,
       'custom_splits': customSplits,
@@ -213,6 +216,10 @@ class RecurringExpenseTemplate {
       category: json['category'],
       createdBy: json['created_by'],
       paidBy: json['paid_by'] ?? json['created_by'] ?? '',
+      payerAmounts: Map<String, double>.from(
+        (json['payer_amounts'] as Map<String, dynamic>? ?? {})
+            .map((k, v) => MapEntry(k, (v as num).toDouble())),
+      ),
       selectedRoommates: List<String>.from(json['selected_roommates'] ?? []),
       splitType: json['split_type'],
       customSplits: Map<String, double>.from(
@@ -237,6 +244,35 @@ class RecurringExpenseTemplate {
   DateTime? getNextScheduledDate() {
     final baseDate = lastGenerated ?? createdAt;
     return recurringConfig.getNextOccurrence(baseDate);
+  }
+
+  /// Display-oriented next date that avoids showing stale long-overdue cycles.
+  /// Keeps advancing by interval until the date is today or in the future.
+  DateTime? getNextScheduledDateForDisplay() {
+    DateTime? next = getNextScheduledDate();
+    if (next == null) return null;
+    final interval = recurringConfig.interval;
+    if (interval == null) return next;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DateTime candidate = DateTime(next.year, next.month, next.day);
+    int guard = 0;
+    while (candidate.isBefore(today) && guard < 500) {
+      switch (interval) {
+        case RecurringInterval.weekly:
+          candidate = candidate.add(const Duration(days: 7));
+          break;
+        case RecurringInterval.monthly:
+          candidate = DateTime(candidate.year, candidate.month + 1, candidate.day);
+          break;
+        case RecurringInterval.yearly:
+          candidate = DateTime(candidate.year + 1, candidate.month, candidate.day);
+          break;
+      }
+      guard++;
+    }
+    return candidate;
   }
 
   /// Check if this template should generate a new expense
@@ -282,6 +318,7 @@ class RecurringExpenseTemplate {
     String? category,
     String? createdBy,
     String? paidBy,
+    Map<String, double>? payerAmounts,
     List<String>? selectedRoommates,
     String? splitType,
     Map<String, double>? customSplits,
@@ -302,6 +339,7 @@ class RecurringExpenseTemplate {
       category: category ?? this.category,
       createdBy: createdBy ?? this.createdBy,
       paidBy: paidBy ?? this.paidBy,
+      payerAmounts: payerAmounts ?? this.payerAmounts,
       selectedRoommates: selectedRoommates ?? this.selectedRoommates,
       splitType: splitType ?? this.splitType,
       customSplits: customSplits ?? this.customSplits,

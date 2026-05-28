@@ -3,9 +3,9 @@ package middleware
 import (
 	"fmt"
 	"net/http"
-	"time"
 	"roomease/backend/config"
 	"roomease/backend/models"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,7 +17,7 @@ var SessionStore models.SessionStore
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		fmt.Printf("🔐 AuthMiddleware called for: %s %s\n", c.Request.Method, c.Request.URL.Path)
-		
+
 		// Get session cookie
 		sessionID, err := c.Cookie("session_id")
 		if err != nil {
@@ -49,9 +49,9 @@ func AuthMiddleware() gin.HandlerFunc {
 			fmt.Printf("🚫 User is BANNED, invalidating session and returning error\n")
 			// User is banned - invalidate session and return ban error
 			SessionStore.Delete(sessionID)
-			
+
 			c.JSON(http.StatusForbidden, gin.H{
-				"error": err.Error(),
+				"error":  err.Error(),
 				"banned": true,
 				"action": "logout_required",
 			})
@@ -72,6 +72,10 @@ func AuthMiddleware() gin.HandlerFunc {
 
 // checkUserBanStatus checks if a user is currently banned
 func checkUserBanStatus(userUID string) error {
+	if config.DB == nil {
+		return nil
+	}
+
 	var user models.User
 	result := config.DB.Where("firebase_uid = ?", userUID).First(&user)
 	if result.Error != nil {

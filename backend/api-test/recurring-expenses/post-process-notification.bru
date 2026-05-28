@@ -1,0 +1,22 @@
+meta {
+  name: Process Recurring Notification
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/recurring-expenses/notifications/{{notificationId}}/process
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+

@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net/http"
-	"roomease/backend/config"
 	"roomease/backend/models"
 	"roomease/backend/services"
 	"strconv"
@@ -72,63 +71,34 @@ func (h *BalanceHandler) GetRoomspaceBalances(c *gin.Context) {
 		currentUserBalance = 0.0
 	}
 	
-	// Calculate you_owe and you_are_owed by summing up actual expense splits
-	// This gives the TRUE breakdown, not just the net balance
+	// Global net mode:
+	// - Positive currentUserBalance => user is owed that amount in total.
+	// - Negative currentUserBalance => user owes that amount in total.
 	youOwe := 0.0
 	youAreOwed := 0.0
-	
-	// Get all expenses for this roomspace
-	var expenses []models.Expense
-	if err := config.DB.
-		Preload("Splits").
-		Where("roomspace_id = ?", roomspaceID).
-		Find(&expenses).Error; err != nil {
-		fmt.Printf("❌ Error fetching expenses: %v\n", err)
-	} else {
-		// For each expense, check if user paid or owes
-		for _, expense := range expenses {
-			isPaidByMe := expense.PaidBy == userID.(string)
-			
-			// Find my split in this expense
-			var mySplit *models.ExpenseSplit
-			for i := range expense.Splits {
-				if expense.Splits[i].UserUID == userID.(string) {
-					mySplit = &expense.Splits[i]
-					break
-				}
-			}
-			
-			if mySplit == nil {
-				continue // User not involved in this expense
-			}
-			
-			if isPaidByMe {
-				// I paid for this expense
-				// Others owe me: (total amount - my share)
-				othersOweMe := expense.Amount - mySplit.Amount
-				if othersOweMe > 0 {
-					youAreOwed += othersOweMe
-				}
-			} else {
-				// Someone else paid
-				// I owe my share
-				youOwe += mySplit.Amount
-			}
-		}
+	if currentUserBalance > 0.01 {
+		youAreOwed = currentUserBalance
+	} else if currentUserBalance < -0.01 {
+		youOwe = -currentUserBalance
 	}
 
 	// Debug logging
 	fmt.Printf("🏠 Balance calculation for user %s in roomspace %s:\n", userID.(string), roomspaceID)
 	fmt.Printf("💰 Current user net balance: %.2f\n", currentUserBalance)
-	fmt.Printf("💰 You owe (sum of splits): %.2f\n", youOwe)
-	fmt.Printf("💰 You are owed (sum of others' shares): %.2f\n", youAreOwed)
+	fmt.Printf("💰 Global net mode enabled (no per-roommate bilateral split)\n")
+	fmt.Printf("💰 You owe (bilateral netted): %.2f\n", youOwe)
+	fmt.Printf("💰 You are owed (bilateral netted): %.2f\n", youAreOwed)
 
-	// Create response with both summary and current user's specific balance
+	// Keep roommate balances empty in global-net mode by design.
+	roommateBalances := make([]map[string]interface{}, 0)
+
 	responseData := map[string]interface{}{
-		"summary":       summary,
-		"you_owe":       youOwe,
-		"you_are_owed":  youAreOwed,
-		"your_balance":  currentUserBalance,
+		"summary":            summary,
+		"balance_mode":       "global_net",
+		"you_owe":            youOwe,
+		"you_are_owed":       youAreOwed,
+		"your_balance":       currentUserBalance,
+		"roommate_balances":  roommateBalances,
 	}
 
 	c.JSON(http.StatusOK, gin.H{

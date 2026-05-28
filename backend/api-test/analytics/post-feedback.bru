@@ -1,0 +1,22 @@
+meta {
+  name: Submit Analytics Feedback
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/analytics/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+

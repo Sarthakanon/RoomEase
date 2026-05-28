@@ -22,6 +22,8 @@ import 'report_options_screen.dart';
 import 'settlements_screen.dart';
 import 'recurring_payments_screen.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Main expense screen — acts as a router for different expense-related views.
 class ExpenseScreen extends StatefulWidget {
@@ -53,6 +55,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
   StreamSubscription<BalanceUpdateEvent>? _balanceUpdateSubscription;
   StreamSubscription<NotificationEvent>? _notificationSubscription;
   RoomspaceProvider? _roomspaceProvider;
+  static const String _recurringCachePrefix = 'recurring_templates_cache_';
 
   @override
   void initState() {
@@ -82,6 +85,12 @@ class _ExpenseScreenState extends State<ExpenseScreen>
         // Clear cache and refresh
         _cachedExpenseData = null;
         _lastDataLoad = null;
+        _state.forceRefresh(ScreenKeys.expenses);
+        _state.forceRefresh(ScreenKeys.personalExpenses);
+        if (currentRoomspaceId != null) {
+          _state.forceRefresh(ScreenKeys.roomspaceExpenses(currentRoomspaceId));
+          _state.forceRefresh(ScreenKeys.roomspaceBalances(currentRoomspaceId));
+        }
         
         if (mounted) {
           setState(() {}); // Trigger rebuild with fresh data
@@ -100,6 +109,11 @@ class _ExpenseScreenState extends State<ExpenseScreen>
         // Clear cache and refresh
         _cachedExpenseData = null;
         _lastDataLoad = null;
+        _state.forceRefresh(ScreenKeys.expenses);
+        if (currentRoomspaceId != null) {
+          _state.forceRefresh(ScreenKeys.roomspaceBalances(currentRoomspaceId));
+          _state.forceRefresh(ScreenKeys.roomspaceExpenses(currentRoomspaceId));
+        }
         
         if (mounted) {
           setState(() {}); // Trigger rebuild
@@ -112,6 +126,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
       if (event.type == NotificationType.profileUpdated) {
         _cachedExpenseData = null;
         _lastDataLoad = null;
+        _state.forceRefresh(ScreenKeys.expenses);
         if (mounted) {
           setState(() {});
         }
@@ -165,8 +180,12 @@ class _ExpenseScreenState extends State<ExpenseScreen>
 
     debugPrint('🌐 Loading fresh expense data...');
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-    final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+    String? activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
     final isPersonalSpace = roomspaceProvider.isPersonalSpace;
+
+    if (!isPersonalSpace && activeRoomspaceId == null && roomspaceProvider.roomspaces.isNotEmpty) {
+      activeRoomspaceId = roomspaceProvider.roomspaces.first.id;
+    }
 
     // Load data in parallel with caching
     final futures = <String, Future<Map<String, dynamic>>>{};
@@ -181,11 +200,8 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     
     // Load roomspace-specific data if in a roomspace
     if (!isPersonalSpace && activeRoomspaceId != null) {
-      futures['sharedExpenses'] = _smartApi.getRoomspaceExpenses(
+      futures['sharedExpenses'] = _loadSharedExpensesWithFallback(
         activeRoomspaceId,
-        limit: 3,
-        offset: 0,
-        month: _selectedMonth,
         forceRefresh: forceRefresh,
       );
       
@@ -240,7 +256,79 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     }
   }
 
+  Future<Map<String, dynamic>> _loadSharedExpensesWithFallback(
+    String roomspaceId, {
+    required bool forceRefresh,
+  }) async {
+    final recent = await _smartApi.getExpenses(
+      roomspaceId: roomspaceId,
+      limit: 100,
+      offset: 0,
+    );
+
+    final raw = recent['data'];
+    final list = raw is List ? raw : const <dynamic>[];
+    final normalized = list
+        .whereType<Map>()
+        .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+        .toList();
+
+    bool isInSelectedMonth(Map<String, dynamic> e) {
+      final createdAt = e['created_at']?.toString();
+      if (createdAt == null || createdAt.isEmpty) return false;
+      final d = DateTime.tryParse(createdAt);
+      if (d == null) return false;
+      return d.year == _selectedMonth.year && d.month == _selectedMonth.month;
+    }
+
+    final monthFiltered = normalized.where(isInSelectedMonth).toList();
+    final picked = (monthFiltered.length >= 3 ? monthFiltered : normalized).take(3).toList();
+
+    return {
+      ...recent,
+      'data': picked,
+      'meta': {
+        'count': picked.length,
+        'limit': 3,
+        'offset': 0,
+      },
+    };
+  }
+
   Future<Map<String, dynamic>> _loadRecurringExpenses(String roomspaceId) async {
+    Future<Map<String, dynamic>?> readRecurringCache() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString('$_recurringCachePrefix$roomspaceId');
+        if (raw == null || raw.isEmpty) return null;
+        final decoded = Map<String, dynamic>.from(
+          (jsonDecode(raw) as Map).map((k, v) => MapEntry(k.toString(), v)),
+        );
+        final data = decoded['data'];
+        if (data is List) {
+          return {'data': data, 'count': data.length};
+        }
+      } catch (e) {
+        debugPrint('⚠️ Failed to read recurring cache: $e');
+      }
+      return null;
+    }
+
+    Future<void> writeRecurringCache(List<dynamic> data) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          '$_recurringCachePrefix$roomspaceId',
+          jsonEncode({
+            'data': data,
+            'cached_at': DateTime.now().toIso8601String(),
+          }),
+        );
+      } catch (e) {
+        debugPrint('⚠️ Failed to cache recurring templates: $e');
+      }
+    }
+
     try {
       debugPrint('🔄 Loading recurring expenses for roomspace: $roomspaceId');
       
@@ -256,6 +344,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
             : (rawData is Map<String, dynamic> && rawData['data'] is List ? rawData['data'] as List : <dynamic>[]);
         debugPrint('🔄 Found ${recurringData.length} recurring expense templates');
         if (recurringData.isNotEmpty) {
+          await writeRecurringCache(recurringData);
           return {'data': recurringData, 'count': recurringData.length};
         }
         debugPrint('🔄 No templates found, trying fallback from regular expenses');
@@ -270,6 +359,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
           final List<dynamic> upcomingData = upcomingResponse.data['data'] ?? [];
           debugPrint('🔄 Upcoming fallback found ${upcomingData.length} recurring items');
           if (upcomingData.isNotEmpty) {
+            await writeRecurringCache(upcomingData);
             return {'data': upcomingData, 'count': upcomingData.length};
           }
         }
@@ -293,9 +383,14 @@ class _ExpenseScreenState extends State<ExpenseScreen>
         }).toList();
         
         debugPrint('🔄 Found ${recurringExpenses.length} recurring expenses from ${allExpenses.length} total');
+        if (recurringExpenses.isNotEmpty) {
+          await writeRecurringCache(recurringExpenses);
+        }
         return {'data': recurringExpenses, 'count': recurringExpenses.length};
       }
-      
+
+      final cached = await readRecurringCache();
+      if (cached != null) return cached;
       return {'data': [], 'count': 0};
     } catch (e) {
       debugPrint('❌ Error loading recurring expenses: $e');
@@ -316,12 +411,20 @@ class _ExpenseScreenState extends State<ExpenseScreen>
           }).toList();
           
           debugPrint('🔄 Fallback successful: Found ${recurringExpenses.length} recurring expenses');
+          if (recurringExpenses.isNotEmpty) {
+            await writeRecurringCache(recurringExpenses);
+          }
           return {'data': recurringExpenses, 'count': recurringExpenses.length};
         }
       } catch (fallbackError) {
         debugPrint('❌ Fallback also failed: $fallbackError');
       }
-      
+
+      final cached = await readRecurringCache();
+      if (cached != null) {
+        debugPrint('📦 Using cached recurring templates while offline/error');
+        return cached;
+      }
       return {'data': [], 'count': 0, 'error': e.toString()};
     }
   }
@@ -429,7 +532,12 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     
     // Extract data safely
     final personalExpensesList = personalExpenses['data'] as List<dynamic>? ?? [];
-    final sharedExpensesList = sharedExpenses['data'] as List<dynamic>? ?? [];
+    final sharedExpensesRaw = sharedExpenses['data'];
+    final sharedExpensesList = sharedExpensesRaw is List
+        ? sharedExpensesRaw
+        : (sharedExpensesRaw is Map<String, dynamic> && sharedExpensesRaw['data'] is List
+            ? (sharedExpensesRaw['data'] as List)
+            : <dynamic>[]);
     final recurringExpensesList = recurringExpenses['data'] as List<dynamic>? ?? [];
     final pendingPaymentsCount = pendingPayments['count'] as int? ?? 0;
     final profileData = asStringKeyedMap(userProfile['data']);
@@ -442,6 +550,8 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     
     // Filter out recurring expenses from shared expenses to avoid duplication
     final nonRecurringSharedExpenses = sharedExpensesList
+        .whereType<Map>()
+        .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
         .where((expense) {
           final recurringConfig = expense['recurring_config'];
           return recurringConfig == null || recurringConfig['is_recurring'] != true;
@@ -723,6 +833,14 @@ class _ExpenseScreenState extends State<ExpenseScreen>
             // Clear cache and refresh when expense is updated
             _cachedExpenseData = null;
             _lastDataLoad = null;
+            _state.forceRefresh(ScreenKeys.expenses);
+            _state.forceRefresh(ScreenKeys.dashboard);
+            _state.forceRefresh(ScreenKeys.personalExpenses);
+            final activeRoomspaceId = Provider.of<RoomspaceProvider>(context, listen: false).getActiveRoomspaceId();
+            if (activeRoomspaceId != null) {
+              _state.forceRefresh(ScreenKeys.roomspaceExpenses(activeRoomspaceId));
+              _state.forceRefresh(ScreenKeys.roomspaceBalances(activeRoomspaceId));
+            }
             setState(() {});
           },
         );
@@ -864,7 +982,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
   }
 
   Widget _buildRecurringPaymentTile(RecurringExpenseTemplate template, Color themeColor) {
-    final nextPayment = template.getNextScheduledDate();
+    final nextPayment = template.getNextScheduledDateForDisplay();
     
     return InkWell(
       onTap: _openRecurringManager,
@@ -964,7 +1082,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     );
   }
 
-  void _openRecurringManager() {
+  Future<void> _openRecurringManager() async {
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
     if (activeRoomspaceId == null) {
@@ -974,7 +1092,7 @@ class _ExpenseScreenState extends State<ExpenseScreen>
       return;
     }
 
-    Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => RecurringPaymentsScreen(
@@ -983,6 +1101,12 @@ class _ExpenseScreenState extends State<ExpenseScreen>
         ),
       ),
     );
+    if (!mounted) return;
+    _cachedExpenseData = null;
+    _lastDataLoad = null;
+    _state.forceRefresh(ScreenKeys.expenses);
+    _state.forceRefresh(ScreenKeys.dashboard);
+    setState(() {});
   }
 
   IconData _getIcon(String category) {

@@ -27,6 +27,8 @@ class ExpenseData {
   final int? id;
   final String? roomspaceId;  // Changed from int to String to support UUID
   final String? paidBy;
+  final String? createdBy;
+  final Map<String, double> payerAmounts;
   final DateTime? createdAt;
   final List<ExpenseSplit>? splits;
   final String? payerName;
@@ -43,6 +45,8 @@ class ExpenseData {
     this.id,
     this.roomspaceId,
     this.paidBy,
+    this.createdBy,
+    this.payerAmounts = const {},
     this.createdAt,
     this.splits,
     this.payerName,
@@ -62,6 +66,8 @@ class ExpenseData {
       id: _parseIntSafely(json['id']),
       roomspaceId: json['roomspace_id']?.toString(),  // Handle as string for UUID support
       paidBy: json['paid_by'],
+      createdBy: json['created_by'],
+      payerAmounts: const {},
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at']) 
           : null,
@@ -137,6 +143,7 @@ class ExpenseCreateRequest {
   final String splitType;
   final List<String> selectedRoommates;
   final Map<String, double>? customSplits;
+  final Map<String, double>? payerAmounts;
   final RecurringExpenseConfig? recurringConfig;
 
   ExpenseCreateRequest({
@@ -149,6 +156,7 @@ class ExpenseCreateRequest {
     required this.splitType,
     required this.selectedRoommates,
     this.customSplits,
+    this.payerAmounts,
     this.recurringConfig,
   });
 
@@ -169,6 +177,9 @@ class ExpenseCreateRequest {
     
     if (customSplits != null && customSplits!.isNotEmpty) {
       json['custom_splits'] = customSplits!;
+    }
+    if (payerAmounts != null && payerAmounts!.isNotEmpty) {
+      json['payer_amounts'] = payerAmounts!;
     }
     
     if (recurringConfig != null) {
@@ -195,8 +206,145 @@ class ExpenseCreateRequest {
       customSplits: expenseData.customSplits.isNotEmpty 
           ? expenseData.customSplits 
           : null,
+      payerAmounts: expenseData.payerAmounts.isNotEmpty ? expenseData.payerAmounts : null,
       recurringConfig: expenseData.recurringConfig,
     );
+  }
+
+  /// Builds one or more backend-compatible requests from an ExpenseData object.
+  /// For multi-payer expenses, it creates proportional sub-expenses so balances remain exact.
+  static List<ExpenseCreateRequest> fromExpenseDataBatch(
+    ExpenseData expenseData,
+    String roomspaceId,
+  ) {
+    final payerAmounts = Map<String, double>.from(expenseData.payerAmounts)
+      ..removeWhere((_, amount) => amount <= 0);
+
+    if (payerAmounts.isEmpty || payerAmounts.length == 1) {
+      return [ExpenseCreateRequest.fromExpenseData(expenseData, roomspaceId)];
+    }
+
+    final participants = expenseData.selectedRoommateIds.toSet().toList();
+    final participantSplits = _calculateParticipantSplits(expenseData, participants);
+    final totalCents = (expenseData.amount * 100).round();
+
+    final requests = <ExpenseCreateRequest>[];
+    final payerEntries = payerAmounts.entries.toList();
+    int assignedPayerCents = 0;
+
+    for (int i = 0; i < payerEntries.length; i++) {
+      final payer = payerEntries[i];
+      int payerCents;
+      if (i == payerEntries.length - 1) {
+        payerCents = totalCents - assignedPayerCents;
+      } else {
+        payerCents = (payer.value * 100).round();
+        assignedPayerCents += payerCents;
+      }
+      if (payerCents <= 0) continue;
+
+      final payerAmount = payerCents / 100.0;
+      final subSplits = _allocateProportionalSplit(participantSplits, payerCents);
+      final customSplits = <String, double>{
+        for (final entry in subSplits.entries) entry.key: entry.value / 100.0,
+      };
+
+      requests.add(
+        ExpenseCreateRequest(
+          roomspaceId: roomspaceId,
+          title: payerEntries.length > 1
+              ? '${expenseData.title} (${i + 1}/${payerEntries.length})'
+              : expenseData.title,
+          description: expenseData.description,
+          amount: payerAmount,
+          category: expenseData.category,
+          paidBy: payer.key,
+          splitType: SplitType.exact.apiValue,
+          selectedRoommates: participants,
+          customSplits: customSplits,
+          recurringConfig: null,
+        ),
+      );
+    }
+
+    return requests.isEmpty
+        ? [ExpenseCreateRequest.fromExpenseData(expenseData, roomspaceId)]
+        : requests;
+  }
+
+  static Map<String, double> _calculateParticipantSplits(
+    ExpenseData expenseData,
+    List<String> participants,
+  ) {
+    if (participants.isEmpty) return const {};
+
+    if (expenseData.splitType == SplitType.equal) {
+      final totalCents = (expenseData.amount * 100).round();
+      final base = totalCents ~/ participants.length;
+      final remainder = totalCents % participants.length;
+      final map = <String, double>{};
+      for (int i = 0; i < participants.length; i++) {
+        map[participants[i]] = (base + (i < remainder ? 1 : 0)) / 100.0;
+      }
+      return map;
+    }
+
+    if (expenseData.splitType == SplitType.percentage) {
+      final map = <String, double>{};
+      double allocated = 0;
+      String? maxKey;
+      double maxValue = -1;
+      for (final uid in participants) {
+        final p = expenseData.customSplits[uid] ?? 0;
+        final amount = ((expenseData.amount * p / 100.0) * 100).round() / 100.0;
+        map[uid] = amount;
+        allocated += amount;
+        if (amount > maxValue) {
+          maxValue = amount;
+          maxKey = uid;
+        }
+      }
+      final diff = ((expenseData.amount - allocated) * 100).round() / 100.0;
+      if (maxKey != null && diff.abs() > 0) {
+        map[maxKey] = ((map[maxKey] ?? 0) + diff);
+      }
+      return map;
+    }
+
+    return {
+      for (final uid in participants) uid: expenseData.customSplits[uid] ?? 0,
+    };
+  }
+
+  static Map<String, int> _allocateProportionalSplit(
+    Map<String, double> participantSplits,
+    int totalCents,
+  ) {
+    final result = <String, int>{};
+    final remainders = <MapEntry<String, double>>[];
+    int assigned = 0;
+
+    final totalBase = participantSplits.values.fold<double>(0, (a, b) => a + b);
+    if (totalBase <= 0) return result;
+
+    participantSplits.forEach((uid, splitAmount) {
+      final exact = (splitAmount / totalBase) * totalCents;
+      final base = exact.floor();
+      result[uid] = base;
+      assigned += base;
+      remainders.add(MapEntry(uid, exact - base));
+    });
+
+    int remaining = totalCents - assigned;
+    remainders.sort((a, b) => b.value.compareTo(a.value));
+    int idx = 0;
+    while (remaining > 0 && remainders.isNotEmpty) {
+      final uid = remainders[idx % remainders.length].key;
+      result[uid] = (result[uid] ?? 0) + 1;
+      remaining--;
+      idx++;
+    }
+    return result;
   }
 }
 

@@ -1,0 +1,11 @@
+Unit Test Execution Summary
+Date: 2026-05-25
+
+Total PASS lines: 433
+Total SKIP lines: 11
+Total FAIL lines: 0
+
+handlers-go-test-v.txt: PASS=97, SKIP=4, FAIL=0
+middleware-go-test-v.txt: PASS=8, SKIP=2, FAIL=0
+models-go-test-v.txt: PASS=228, SKIP=0, FAIL=0
+services-go-test-v.txt: PASS=100, SKIP=5, FAIL=0

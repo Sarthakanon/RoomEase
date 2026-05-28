@@ -1,0 +1,210 @@
+2026/05/25 19:49:02 ✅ Stripe initialized
+=== RUN   TestAnalyticsHandler_GetSummary_Unauthorized
+--- PASS: TestAnalyticsHandler_GetSummary_Unauthorized (0.00s)
+=== RUN   TestAnalyticsHandler_GetTrends_InvalidGroupBy
+--- PASS: TestAnalyticsHandler_GetTrends_InvalidGroupBy (0.00s)
+=== RUN   TestAnalyticsHandler_GetPredictions_Unauthorized
+--- PASS: TestAnalyticsHandler_GetPredictions_Unauthorized (0.00s)
+=== RUN   TestAnalyticsHandler_SubmitFeedback_InvalidFeedbackType
+--- PASS: TestAnalyticsHandler_SubmitFeedback_InvalidFeedbackType (0.00s)
+=== RUN   TestAuthHandler_Login_MissingToken
+--- PASS: TestAuthHandler_Login_MissingToken (0.00s)
+=== RUN   TestAuthHandler_Login_EmptyToken
+--- PASS: TestAuthHandler_Login_EmptyToken (0.00s)
+=== RUN   TestAuthHandler_Logout_NoSession
+--- PASS: TestAuthHandler_Logout_NoSession (0.00s)
+=== RUN   TestAuthHandler_Verify_NoSession
+--- PASS: TestAuthHandler_Verify_NoSession (0.00s)
+=== RUN   TestAuthHandler_Refresh_NoSession
+--- PASS: TestAuthHandler_Refresh_NoSession (0.00s)
+=== RUN   TestSessionStore_Integration
+--- PASS: TestSessionStore_Integration (0.00s)
+=== RUN   TestGenerateSessionID
+--- PASS: TestGenerateSessionID (0.00s)
+=== RUN   TestLoginRequest_Validation
+=== RUN   TestLoginRequest_Validation/Missing_firebase_token_field
+=== RUN   TestLoginRequest_Validation/Empty_firebase_token
+=== RUN   TestLoginRequest_Validation/Invalid_JSON
+--- PASS: TestLoginRequest_Validation (0.00s)
+    --- PASS: TestLoginRequest_Validation/Missing_firebase_token_field (0.00s)
+    --- PASS: TestLoginRequest_Validation/Empty_firebase_token (0.00s)
+    --- PASS: TestLoginRequest_Validation/Invalid_JSON (0.00s)
+=== RUN   TestResponseStructures
+=== RUN   TestResponseStructures/LoginResponse
+=== RUN   TestResponseStructures/VerifyResponse
+--- PASS: TestResponseStructures (0.00s)
+    --- PASS: TestResponseStructures/LoginResponse (0.00s)
+    --- PASS: TestResponseStructures/VerifyResponse (0.00s)
+=== RUN   TestExpenseHandler_DBCreateDeleteAndIsolation
+    backend_db_test.go:22: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestExpenseHandler_DBCreateDeleteAndIsolation (0.00s)
+=== RUN   TestExpenseHandler_DBRejectsUnauthorizedRoomspace
+    backend_db_test.go:73: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestExpenseHandler_DBRejectsUnauthorizedRoomspace (0.00s)
+=== RUN   TestNotificationHandler_DBListReadAndProcessJoinRequest
+    backend_db_test.go:96: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestNotificationHandler_DBListReadAndProcessJoinRequest (0.00s)
+=== RUN   TestPaymentConfirmationHandler_DBCreateConfirmAndReject
+    backend_db_test.go:134: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestPaymentConfirmationHandler_DBCreateConfirmAndReject (0.00s)
+=== RUN   TestExpenseRoomspaceContextFiltering
+=== RUN   TestExpenseRoomspaceContextFiltering/GetExpenses_with_roomspace_id_filters_correctly
+=== RUN   TestExpenseRoomspaceContextFiltering/GetExpenses_without_roomspace_id_returns_expenses_from_all_user_roomspaces
+=== RUN   TestExpenseRoomspaceContextFiltering/GetExpenseByID_validates_roomspace_membership
+=== RUN   TestExpenseRoomspaceContextFiltering/CreateExpense_validates_roomspace_membership
+=== RUN   TestExpenseRoomspaceContextFiltering/UpdateExpense_validates_roomspace_membership
+=== RUN   TestExpenseRoomspaceContextFiltering/DeleteExpense_validates_roomspace_membership
+=== RUN   TestExpenseRoomspaceContextFiltering/Cross-roomspace_data_access_is_prevented
+--- PASS: TestExpenseRoomspaceContextFiltering (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/GetExpenses_with_roomspace_id_filters_correctly (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/GetExpenses_without_roomspace_id_returns_expenses_from_all_user_roomspaces (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/GetExpenseByID_validates_roomspace_membership (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/CreateExpense_validates_roomspace_membership (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/UpdateExpense_validates_roomspace_membership (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/DeleteExpense_validates_roomspace_membership (0.00s)
+    --- PASS: TestExpenseRoomspaceContextFiltering/Cross-roomspace_data_access_is_prevented (0.00s)
+=== RUN   TestExpenseRepositoryRoomspaceFiltering
+=== RUN   TestExpenseRepositoryRoomspaceFiltering/GetUserExpenses_with_roomspace_id_validates_membership
+=== RUN   TestExpenseRepositoryRoomspaceFiltering/GetUserExpenses_without_roomspace_id_only_returns_user's_roomspace_expenses
+=== RUN   TestExpenseRepositoryRoomspaceFiltering/GetRoomspaceExpenses_returns_only_expenses_for_specified_roomspace
+--- PASS: TestExpenseRepositoryRoomspaceFiltering (0.00s)
+    --- PASS: TestExpenseRepositoryRoomspaceFiltering/GetUserExpenses_with_roomspace_id_validates_membership (0.00s)
+    --- PASS: TestExpenseRepositoryRoomspaceFiltering/GetUserExpenses_without_roomspace_id_only_returns_user's_roomspace_expenses (0.00s)
+    --- PASS: TestExpenseRepositoryRoomspaceFiltering/GetRoomspaceExpenses_returns_only_expenses_for_specified_roomspace (0.00s)
+=== RUN   TestExpenseDataIsolation
+=== RUN   TestExpenseDataIsolation/Expenses_from_different_roomspaces_are_isolated
+=== RUN   TestExpenseDataIsolation/User_can_only_see_expenses_from_their_roomspaces
+=== RUN   TestExpenseDataIsolation/Expense_splits_are_scoped_to_roomspace_members
+--- PASS: TestExpenseDataIsolation (0.00s)
+    --- PASS: TestExpenseDataIsolation/Expenses_from_different_roomspaces_are_isolated (0.00s)
+    --- PASS: TestExpenseDataIsolation/User_can_only_see_expenses_from_their_roomspaces (0.00s)
+    --- PASS: TestExpenseDataIsolation/Expense_splits_are_scoped_to_roomspace_members (0.00s)
+=== RUN   TestExpenseHandler_validateExpenseRequest
+=== RUN   TestExpenseHandler_validateExpenseRequest/valid_equal_split
+=== RUN   TestExpenseHandler_validateExpenseRequest/valid_percentage_split
+=== RUN   TestExpenseHandler_validateExpenseRequest/valid_exact_split
+=== RUN   TestExpenseHandler_validateExpenseRequest/invalid_percentage_split_-_doesn't_sum_to_100
+=== RUN   TestExpenseHandler_validateExpenseRequest/invalid_exact_split_-_doesn't_sum_to_total
+=== RUN   TestExpenseHandler_validateExpenseRequest/no_selected_roommates
+--- PASS: TestExpenseHandler_validateExpenseRequest (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/valid_equal_split (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/valid_percentage_split (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/valid_exact_split (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/invalid_percentage_split_-_doesn't_sum_to_100 (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/invalid_exact_split_-_doesn't_sum_to_total (0.00s)
+    --- PASS: TestExpenseHandler_validateExpenseRequest/no_selected_roommates (0.00s)
+=== RUN   TestExpenseHandler_calculateSplits
+=== RUN   TestExpenseHandler_calculateSplits/equal_split_calculation
+=== RUN   TestExpenseHandler_calculateSplits/percentage_split_calculation
+=== RUN   TestExpenseHandler_calculateSplits/exact_split_calculation
+--- PASS: TestExpenseHandler_calculateSplits (0.00s)
+    --- PASS: TestExpenseHandler_calculateSplits/equal_split_calculation (0.00s)
+    --- PASS: TestExpenseHandler_calculateSplits/percentage_split_calculation (0.00s)
+    --- PASS: TestExpenseHandler_calculateSplits/exact_split_calculation (0.00s)
+=== RUN   TestExpenseHandler_CreateExpense_ValidationErrors
+=== RUN   TestExpenseHandler_CreateExpense_ValidationErrors/invalid_JSON
+=== RUN   TestExpenseHandler_CreateExpense_ValidationErrors/missing_required_fields
+=== RUN   TestExpenseHandler_CreateExpense_ValidationErrors/invalid_split_type
+DEBUG: Received expense request - PaidBy: '', AuthUser: 'test-user-uid', Title: 'Test Expense'
+--- PASS: TestExpenseHandler_CreateExpense_ValidationErrors (0.00s)
+    --- PASS: TestExpenseHandler_CreateExpense_ValidationErrors/invalid_JSON (0.00s)
+    --- PASS: TestExpenseHandler_CreateExpense_ValidationErrors/missing_required_fields (0.00s)
+    --- PASS: TestExpenseHandler_CreateExpense_ValidationErrors/invalid_split_type (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_JoinLimit
+=== RUN   TestMultiRoomspaceIntegration_JoinLimit/user_can_join_up_to_5_roomspaces
+=== RUN   TestMultiRoomspaceIntegration_JoinLimit/user_cannot_join_6th_roomspace
+=== RUN   TestMultiRoomspaceIntegration_JoinLimit/leaving_roomspace_allows_joining_new_one
+--- PASS: TestMultiRoomspaceIntegration_JoinLimit (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_JoinLimit/user_can_join_up_to_5_roomspaces (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_JoinLimit/user_cannot_join_6th_roomspace (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_JoinLimit/leaving_roomspace_allows_joining_new_one (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_DataIsolation
+=== RUN   TestMultiRoomspaceIntegration_DataIsolation/expenses_are_isolated_by_roomspace
+=== RUN   TestMultiRoomspaceIntegration_DataIsolation/analytics_are_calculated_per_roomspace
+=== RUN   TestMultiRoomspaceIntegration_DataIsolation/members_are_filtered_by_roomspace
+--- PASS: TestMultiRoomspaceIntegration_DataIsolation (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_DataIsolation/expenses_are_isolated_by_roomspace (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_DataIsolation/analytics_are_calculated_per_roomspace (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_DataIsolation/members_are_filtered_by_roomspace (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceSwitching
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceSwitching/switching_roomspace_updates_context
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceSwitching/API_endpoints_accept_roomspace_id_parameter
+--- PASS: TestMultiRoomspaceIntegration_RoomspaceSwitching (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_RoomspaceSwitching/switching_roomspace_updates_context (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_RoomspaceSwitching/API_endpoints_accept_roomspace_id_parameter (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces
+=== RUN   TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/analytics_summary_is_roomspace-specific
+=== RUN   TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/spending_predictions_use_roomspace_data
+=== RUN   TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/anomaly_detection_is_roomspace-scoped
+--- PASS: TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/analytics_summary_is_roomspace-specific (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/spending_predictions_use_roomspace_data (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_AnalyticsAcrossRoomspaces/anomaly_detection_is_roomspace-scoped (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_SettingsScreen
+=== RUN   TestMultiRoomspaceIntegration_SettingsScreen/all_roomspaces_are_returned_by_API
+=== RUN   TestMultiRoomspaceIntegration_SettingsScreen/roomspace_details_include_invite_codes
+=== RUN   TestMultiRoomspaceIntegration_SettingsScreen/leave_roomspace_removes_user_from_members
+--- PASS: TestMultiRoomspaceIntegration_SettingsScreen (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_SettingsScreen/all_roomspaces_are_returned_by_API (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_SettingsScreen/roomspace_details_include_invite_codes (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_SettingsScreen/leave_roomspace_removes_user_from_members (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_LeavingAndRejoining
+=== RUN   TestMultiRoomspaceIntegration_LeavingAndRejoining/leaving_roomspace_decrements_count
+=== RUN   TestMultiRoomspaceIntegration_LeavingAndRejoining/can_rejoin_after_leaving
+=== RUN   TestMultiRoomspaceIntegration_LeavingAndRejoining/leaving_active_roomspace_switches_to_another
+--- PASS: TestMultiRoomspaceIntegration_LeavingAndRejoining (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_LeavingAndRejoining/leaving_roomspace_decrements_count (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_LeavingAndRejoining/can_rejoin_after_leaving (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_LeavingAndRejoining/leaving_active_roomspace_switches_to_another (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_CompleteWorkflow
+=== RUN   TestMultiRoomspaceIntegration_CompleteWorkflow/complete_workflow_executes_successfully
+--- PASS: TestMultiRoomspaceIntegration_CompleteWorkflow (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_CompleteWorkflow/complete_workflow_executes_successfully (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceCountEndpoint
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceCountEndpoint/roomspace_count_endpoint_exists
+=== RUN   TestMultiRoomspaceIntegration_RoomspaceCountEndpoint/count_reflects_active_memberships
+--- PASS: TestMultiRoomspaceIntegration_RoomspaceCountEndpoint (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_RoomspaceCountEndpoint/roomspace_count_endpoint_exists (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_RoomspaceCountEndpoint/count_reflects_active_memberships (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_MembershipValidation
+=== RUN   TestMultiRoomspaceIntegration_MembershipValidation/non-members_cannot_access_roomspace_data
+=== RUN   TestMultiRoomspaceIntegration_MembershipValidation/membership_validation_applies_to_all_endpoints
+--- PASS: TestMultiRoomspaceIntegration_MembershipValidation (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_MembershipValidation/non-members_cannot_access_roomspace_data (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_MembershipValidation/membership_validation_applies_to_all_endpoints (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_VisualDistinction
+=== RUN   TestMultiRoomspaceIntegration_VisualDistinction/roomspace_data_includes_visual_identifiers
+--- PASS: TestMultiRoomspaceIntegration_VisualDistinction (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_VisualDistinction/roomspace_data_includes_visual_identifiers (0.00s)
+=== RUN   TestMultiRoomspaceIntegration_ErrorHandling
+=== RUN   TestMultiRoomspaceIntegration_ErrorHandling/invalid_roomspace_id_returns_appropriate_error
+=== RUN   TestMultiRoomspaceIntegration_ErrorHandling/non-existent_roomspace_returns_404
+--- PASS: TestMultiRoomspaceIntegration_ErrorHandling (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_ErrorHandling/invalid_roomspace_id_returns_appropriate_error (0.00s)
+    --- PASS: TestMultiRoomspaceIntegration_ErrorHandling/non-existent_roomspace_returns_404 (0.00s)
+=== RUN   TestGetRoomspaceCount_Unauthorized
+--- PASS: TestGetRoomspaceCount_Unauthorized (0.00s)
+=== RUN   TestGetRoomspaceCount_ResponseStructure
+--- PASS: TestGetRoomspaceCount_ResponseStructure (0.00s)
+=== RUN   TestGetExpenses_RoomspaceFiltering
+=== RUN   TestGetExpenses_RoomspaceFiltering/without_roomspace_id_parameter
+=== RUN   TestGetExpenses_RoomspaceFiltering/with_roomspace_id_parameter
+--- PASS: TestGetExpenses_RoomspaceFiltering (0.00s)
+    --- PASS: TestGetExpenses_RoomspaceFiltering/without_roomspace_id_parameter (0.00s)
+    --- PASS: TestGetExpenses_RoomspaceFiltering/with_roomspace_id_parameter (0.00s)
+=== RUN   TestAnalytics_RoomspaceFiltering
+=== RUN   TestAnalytics_RoomspaceFiltering/summary_without_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/summary_with_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/trends_without_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/trends_with_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/predictions_without_roomspace_id
+=== RUN   TestAnalytics_RoomspaceFiltering/predictions_with_roomspace_id
+--- PASS: TestAnalytics_RoomspaceFiltering (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/summary_without_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/summary_with_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/trends_without_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/trends_with_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/predictions_without_roomspace_id (0.00s)
+    --- PASS: TestAnalytics_RoomspaceFiltering/predictions_with_roomspace_id (0.00s)
+PASS
+ok  	roomease/backend/handlers	0.018s

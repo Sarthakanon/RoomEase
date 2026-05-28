@@ -1,0 +1,22 @@
+meta {
+  name: Ban User
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/admin/users/{{userId}}/ban
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  Cookie: session_id={{sessionId}}
+}
+
+auth:none {
+  token: {{authToken}}
+}
+

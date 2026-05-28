@@ -24,6 +24,7 @@ type Expense struct {
 	Amount      float64          `gorm:"not null;check:amount > 0" json:"amount"`
 	Category    string           `gorm:"not null;size:100;check:length(category) > 0" json:"category"`
 	PaidBy      string           `gorm:"not null;size:128;check:length(paid_by) > 0" json:"paid_by"` // Firebase UID
+	CreatedBy   string           `gorm:"size:128;index" json:"created_by"` // Firebase UID of creator
 	SplitType   ExpenseSplitType `gorm:"not null;check:split_type IN ('EQUAL','PERCENTAGE','EXACT')" json:"split_type"`
 	RecurringConfig *RecurringConfig `gorm:"type:jsonb" json:"recurring_config,omitempty"`
 	CreatedAt   time.Time        `json:"created_at"`
@@ -33,6 +34,7 @@ type Expense struct {
 	// Relationships with proper constraints
 	Roomspace *Roomspace     `gorm:"foreignKey:RoomspaceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"roomspace,omitempty"`
 	Payer     *User          `gorm:"foreignKey:PaidBy;references:FirebaseUID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"payer,omitempty"`
+	Creator   *User          `gorm:"foreignKey:CreatedBy;references:FirebaseUID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"creator,omitempty"`
 	Splits    []ExpenseSplit `gorm:"foreignKey:ExpenseID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"splits,omitempty"`
 }
 
@@ -58,6 +60,7 @@ type CreateExpenseRequest struct {
 	Amount            float64                `json:"amount" binding:"required,gt=0"`
 	Category          string                 `json:"category" binding:"required"`
 	PaidBy            string                 `json:"paid_by,omitempty"` // Optional: who paid (defaults to authenticated user)
+	PayerAmounts      map[string]float64     `json:"payer_amounts,omitempty"`
 	SplitType         ExpenseSplitType       `json:"split_type" binding:"required"`
 	SelectedRoommates []string               `json:"selected_roommates" binding:"required,min=1"`
 	CustomSplits      map[string]float64     `json:"custom_splits,omitempty"`
@@ -72,6 +75,7 @@ type ExpenseResponse struct {
 	Amount      float64                `json:"amount"`
 	Category    string                 `json:"category"`
 	PaidBy      string                 `json:"paid_by"`
+	CreatedBy   string                 `json:"created_by,omitempty"`
 	PayerName   string                 `json:"payer_name"`
 	SplitType   ExpenseSplitType       `json:"split_type"`
 	CreatedAt   time.Time              `json:"created_at"`

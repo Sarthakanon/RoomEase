@@ -274,9 +274,34 @@ class PaymentDialogService {
         onSubmit: (expense) async {
           try {
             final smartApi = SmartApiService();
-            final request = ExpenseCreateRequest.fromExpenseData(expense, activeRoomspace.id);
-            
-            await smartApi.createExpense(request.toJson());
+            final requests = ExpenseCreateRequest.fromExpenseDataBatch(expense, activeRoomspace.id);
+            for (final request in requests) {
+              await smartApi.createExpense(request.toJson());
+            }
+            final isRecurring = expense.recurringConfig?.isRecurring == true;
+            if (isRecurring && requests.length > 1) {
+              final apiService = ApiService();
+              final payerAmounts = Map<String, double>.from(expense.payerAmounts)
+                ..removeWhere((_, v) => v <= 0);
+              final fallbackPayer = expense.paidBy ??
+                  (expense.selectedRoommateIds.isNotEmpty ? expense.selectedRoommateIds.first : '');
+              if (fallbackPayer.isNotEmpty && payerAmounts.isEmpty) {
+                payerAmounts[fallbackPayer] = expense.amount;
+              }
+              await apiService.createRecurringExpenseTemplate({
+                'roomspace_id': activeRoomspace.id,
+                'title': expense.title,
+                'description': expense.description,
+                'amount': expense.amount,
+                'category': expense.category,
+                'paid_by': fallbackPayer,
+                'payer_amounts': payerAmounts,
+                'split_type': expense.splitType.apiValue,
+                'selected_roommates': expense.selectedRoommateIds,
+                'custom_splits': expense.customSplits,
+                'recurring_config': expense.recurringConfig!.toJson(),
+              });
+            }
             
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(

@@ -27,12 +27,23 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
   }
 
   Future<void> _initialize() async {
+    await _connectivityService
+        .initialize()
+        .timeout(const Duration(seconds: 2), onTimeout: () {});
+    await _syncService
+        .initialize()
+        .timeout(const Duration(seconds: 2), onTimeout: () {});
+    await _offlineService
+        .initialize()
+        .timeout(const Duration(seconds: 2), onTimeout: () {});
+
     // Listen to connectivity changes
     _connectivityService.connectivityStream.listen((isConnected) {
       if (mounted) {
         setState(() {
           _isConnected = isConnected;
         });
+        _updateUnsyncedCount();
       }
     });
 
@@ -42,6 +53,7 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
         setState(() {
           _syncStatus = status;
         });
+        _updateUnsyncedCount();
       }
     });
 
@@ -52,7 +64,7 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator> {
     });
 
     // Get unsynced count
-    _updateUnsyncedCount();
+    await _updateUnsyncedCount();
   }
 
   Future<void> _updateUnsyncedCount() async {

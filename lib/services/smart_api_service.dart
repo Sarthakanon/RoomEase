@@ -4,6 +4,11 @@ import 'advanced_cache_service.dart';
 import 'state_management_service.dart';
 import 'real_time_data_service.dart';
 import 'api_service.dart';
+import 'offline_expense_service.dart';
+import 'connectivity_service.dart';
+import 'local_database_service.dart';
+import '../models/expense_models.dart';
+import '../models/recurring_expense_models.dart';
 
 /// Smart API service with advanced caching, state management, and offline support
 class SmartApiService {
@@ -15,9 +20,102 @@ class SmartApiService {
   final StateManagementService _state = StateManagementService();
   final RealTimeDataService _realTimeService = RealTimeDataService();
   final ApiService _api = ApiService();
+  final OfflineExpenseService _offlineExpenseService = OfflineExpenseService();
+  final ConnectivityService _connectivityService = ConnectivityService();
+  final LocalDatabaseService _localDb = LocalDatabaseService();
 
   // Expose dio for direct API calls when needed
   get dio => _api.dio;
+
+  Map<String, dynamic> _expenseToUiMap(ExpenseData e) {
+    final selected = e.selectedRoommateIds;
+    final splitType = e.splitType.apiValue;
+    final customSplits = e.customSplits;
+
+    final derivedSplits = e.splits ??
+        (selected.isNotEmpty
+            ? selected.map((uid) {
+                final amount = splitType == 'EXACT'
+                    ? (customSplits[uid] ?? 0.0)
+                    : (selected.isEmpty ? 0.0 : e.amount / selected.length);
+                return ExpenseSplit(
+                  userUid: uid,
+                  userName: uid,
+                  amount: amount,
+                  percentage: splitType == 'PERCENTAGE'
+                      ? customSplits[uid]
+                      : null,
+                );
+              }).toList()
+            : <ExpenseSplit>[]);
+
+    return {
+      'id': e.id,
+      'title': e.title,
+      'amount': e.amount,
+      'description': e.description,
+      'category': e.category,
+      'roomspace_id': e.roomspaceId,
+      'paid_by': e.paidBy,
+      'created_by': e.createdBy,
+      'payer_name': e.payerName,
+      'split_type': splitType,
+      'selected_roommates': selected,
+      if (customSplits.isNotEmpty) 'custom_splits': customSplits,
+      'created_at': (e.createdAt ?? DateTime.now()).toIso8601String(),
+      'splits': derivedSplits
+          .map((s) => {
+                'user_uid': s.userUid,
+                'user_name': s.userName,
+                'amount': s.amount,
+                'percentage': s.percentage,
+              })
+          .toList(),
+      if (e.recurringConfig != null) 'recurring_config': e.recurringConfig!.toJson(),
+    };
+  }
+
+  List<ExpenseData> _mergeAndSortExpenses(
+    List<ExpenseData> primary,
+    List<ExpenseData> secondary,
+  ) {
+    final byKey = <String, ExpenseData>{};
+
+    String keyFor(ExpenseData e) {
+      final created = (e.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+          .toIso8601String();
+      if (e.id != null) return 'id:$e.id';
+      return 'tmp:${e.title}|${e.amount}|$created|${e.roomspaceId ?? ''}';
+    }
+
+    for (final e in [...primary, ...secondary]) {
+      byKey[keyFor(e)] = e;
+    }
+
+    final merged = byKey.values.toList()
+      ..sort((a, b) {
+        final ad = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bd = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bd.compareTo(ad);
+      });
+    return merged;
+  }
+
+  List<Map<String, dynamic>> _extractMapList(dynamic raw) {
+    dynamic source = raw;
+    if (source is Map) {
+      if (source['data'] is List) {
+        source = source['data'];
+      } else if (source['expenses'] is List) {
+        source = source['expenses'];
+      }
+    }
+    if (source is! List) return const [];
+    return source
+        .whereType<Map>()
+        .map((e) => e.map((k, v) => MapEntry(k.toString(), v)))
+        .toList();
+  }
 
   /// Smart data fetching with multi-level caching and state management
   Future<Map<String, dynamic>> smartFetch({
@@ -77,6 +175,14 @@ class SmartApiService {
 
   /// Get user profile with smart caching
   Future<Map<String, dynamic>> getUserProfile({bool forceRefresh = false}) async {
+    await _connectivityService.initialize();
+    if (!_connectivityService.isConnected && !forceRefresh) {
+      final cached = await _cache.get<Map<String, dynamic>>(
+        'user_profile',
+        allowExpired: true,
+      );
+      if (cached != null) return cached;
+    }
     return await smartFetch(
       screenKey: ScreenKeys.profile,
       cacheKey: 'user_profile',
@@ -88,6 +194,14 @@ class SmartApiService {
 
   /// Get roomspaces with smart caching
   Future<Map<String, dynamic>> getRoomspaces({bool forceRefresh = false}) async {
+    await _connectivityService.initialize();
+    if (!_connectivityService.isConnected && !forceRefresh) {
+      final cached = await _cache.get<Map<String, dynamic>>(
+        'roomspaces',
+        allowExpired: true,
+      );
+      if (cached != null) return cached;
+    }
     return await smartFetch(
       screenKey: ScreenKeys.roomspaces,
       cacheKey: 'roomspaces',
@@ -107,13 +221,65 @@ class SmartApiService {
   }) async {
     final cacheKey = 'expenses_${roomspaceId}_${limit ?? 'all'}_${offset ?? 0}_${month?.toString() ?? 'all'}';
     
-    return await smartFetch(
-      screenKey: ScreenKeys.roomspaceExpenses(roomspaceId),
-      cacheKey: cacheKey,
-      apiCall: () => _api.getRoomspaceExpenses(roomspaceId, limit: limit, offset: offset, month: month),
-      customRefreshInterval: const Duration(minutes: 3),
-      forceRefresh: forceRefresh,
+    await _connectivityService.initialize();
+    final isOnline = _connectivityService.isConnected;
+    if (isOnline) {
+      try {
+        final remote = await smartFetch(
+          screenKey: ScreenKeys.roomspaceExpenses(roomspaceId),
+          cacheKey: cacheKey,
+          apiCall: () => _api.getRoomspaceExpenses(roomspaceId, limit: limit, offset: offset, month: month),
+          customRefreshInterval: const Duration(minutes: 3),
+          forceRefresh: forceRefresh,
+        );
+
+        final remoteList = _extractMapList(remote['data'])
+            .map(ExpenseData.fromJson)
+            .toList();
+        for (final expense in remoteList) {
+          await _localDb.saveExpense(expense, isSynced: true);
+        }
+        final unsyncedLocal = await _offlineExpenseService.getUnsyncedExpenses(
+          roomspaceId: roomspaceId,
+        );
+
+        final merged = _mergeAndSortExpenses(unsyncedLocal, remoteList);
+        return {
+          'success': true,
+          'data': merged.map(_expenseToUiMap).toList(),
+          'meta': remote['meta'] ?? {'count': merged.length, 'offset': offset ?? 0, 'limit': limit ?? merged.length},
+        };
+      } catch (_) {
+        // Fall back to local data quickly if API fails.
+      }
+    }
+
+    final localExpenses = await _offlineExpenseService.getRoomspaceExpenses(
+      roomspaceId,
+      limit: limit,
+      offset: offset,
+      forceSync: false,
     );
+    List<ExpenseData> cachedExpenses = [];
+    final cached = await _cache.get<Map<String, dynamic>>(
+      cacheKey,
+      allowExpired: true,
+    );
+    if (cached != null) {
+      cachedExpenses = _extractMapList(cached['data'])
+          .map(ExpenseData.fromJson)
+          .toList();
+    }
+    final mergedOffline = _mergeAndSortExpenses(localExpenses, cachedExpenses);
+    return {
+      'success': true,
+      'data': mergedOffline.map(_expenseToUiMap).toList(),
+      'meta': {
+        'limit': limit ?? mergedOffline.length,
+        'offset': offset ?? 0,
+        'count': mergedOffline.length,
+      },
+    };
   }
 
   /// Get personal expenses with smart caching
@@ -126,17 +292,72 @@ class SmartApiService {
   }) async {
     final cacheKey = 'personal_expenses_${roomspaceId ?? 'all'}_${limit ?? 'all'}_${offset ?? 0}_${month?.toString() ?? 'all'}';
     
-    return await smartFetch(
-      screenKey: ScreenKeys.personalExpenses,
-      cacheKey: cacheKey,
-      apiCall: () => _api.getPersonalExpenses(roomspaceId: roomspaceId, limit: limit, offset: offset, month: month),
-      customRefreshInterval: const Duration(minutes: 3),
-      forceRefresh: forceRefresh,
+    await _connectivityService.initialize();
+    final isOnline = _connectivityService.isConnected;
+    if (isOnline) {
+      try {
+        final remote = await smartFetch(
+          screenKey: ScreenKeys.personalExpenses,
+          cacheKey: cacheKey,
+          apiCall: () => _api.getPersonalExpenses(roomspaceId: roomspaceId, limit: limit, offset: offset, month: month),
+          customRefreshInterval: const Duration(minutes: 3),
+          forceRefresh: forceRefresh,
+        );
+
+        final remoteList = (remote['data'] as List<dynamic>? ?? const [])
+            .map((e) => PersonalExpenseData.fromJson(e as Map<String, dynamic>))
+            .toList();
+        for (final expense in remoteList) {
+          await _localDb.savePersonalExpense(expense, isSynced: true);
+        }
+        final unsyncedLocal = await _offlineExpenseService.getUnsyncedPersonalExpenses();
+        final merged = <PersonalExpenseData>[
+          ...unsyncedLocal,
+          ...remoteList,
+        ];
+        return {
+          'success': true,
+          'data': merged.map((e) => e.toJson()).toList(),
+          'meta': remote['meta'] ?? {'count': merged.length, 'offset': offset ?? 0, 'limit': limit ?? merged.length},
+        };
+      } catch (_) {
+        // Fall back to local data quickly if API fails.
+      }
+    }
+
+    final expenses = await _offlineExpenseService.getPersonalExpenses(
+      limit: limit,
+      offset: offset,
+      forceSync: false,
     );
+    if (expenses.isEmpty) {
+      final cached = await _cache.get<Map<String, dynamic>>(
+        cacheKey,
+        allowExpired: true,
+      );
+      if (cached != null) return cached;
+    }
+    return {
+      'success': true,
+      'data': expenses.map((e) => e.toJson()).toList(),
+      'meta': {
+        'limit': limit ?? expenses.length,
+        'offset': offset ?? 0,
+        'count': expenses.length,
+      },
+    };
   }
 
   /// Get roomspace balances with smart caching
   Future<Map<String, dynamic>> getRoomspaceBalances(String roomspaceId, {bool forceRefresh = false}) async {
+    await _connectivityService.initialize();
+    if (!_connectivityService.isConnected) {
+      final cached = await _cache.get<Map<String, dynamic>>(
+        'balances_$roomspaceId',
+        allowExpired: true,
+      );
+      if (cached != null) return cached;
+    }
     return await smartFetch(
       screenKey: ScreenKeys.roomspaceBalances(roomspaceId),
       cacheKey: 'balances_$roomspaceId',
@@ -148,6 +369,14 @@ class SmartApiService {
 
   /// Get roomspace members with smart caching
   Future<Map<String, dynamic>> getRoomspaceMembers(String roomspaceId, {bool forceRefresh = false}) async {
+    await _connectivityService.initialize();
+    if (!_connectivityService.isConnected) {
+      final cached = await _cache.get<Map<String, dynamic>>(
+        'members_$roomspaceId',
+        allowExpired: true,
+      );
+      if (cached != null) return cached;
+    }
     return await smartFetch(
       screenKey: 'members_$roomspaceId',
       cacheKey: 'members_$roomspaceId',
@@ -159,6 +388,14 @@ class SmartApiService {
 
   /// Get notifications with smart caching
   Future<Map<String, dynamic>> getNotifications({bool forceRefresh = false}) async {
+    await _connectivityService.initialize();
+    if (!_connectivityService.isConnected) {
+      final cached = await _cache.get<Map<String, dynamic>>(
+        'notifications',
+        allowExpired: true,
+      );
+      if (cached != null) return cached;
+    }
     return await smartFetch(
       screenKey: ScreenKeys.notifications,
       cacheKey: 'notifications',
@@ -170,18 +407,52 @@ class SmartApiService {
 
   /// Create expense with cache invalidation
   Future<Map<String, dynamic>> createExpense(Map<String, dynamic> expenseData) async {
-    final result = await _api.createExpense(expenseData);
+    await _connectivityService.initialize();
+    final isOnline = _connectivityService.isConnected;
+    final request = ExpenseCreateRequest(
+      roomspaceId: expenseData['roomspace_id']?.toString() ?? '',
+      title: (expenseData['title'] ?? '').toString(),
+      description: (expenseData['description'] ?? '').toString(),
+      amount: (expenseData['amount'] as num).toDouble(),
+      category: (expenseData['category'] ?? 'General').toString(),
+      paidBy: expenseData['paid_by']?.toString(),
+      splitType: (expenseData['split_type'] ?? 'EQUAL').toString(),
+      selectedRoommates: ((expenseData['selected_roommates'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(),
+      customSplits: (expenseData['custom_splits'] as Map?)
+          ?.map((key, value) => MapEntry(key.toString(), (value as num).toDouble())),
+      payerAmounts: (expenseData['payer_amounts'] as Map?)
+          ?.map((key, value) => MapEntry(key.toString(), (value as num).toDouble())),
+      recurringConfig: expenseData['recurring_config'] is Map<String, dynamic>
+          ? RecurringExpenseConfig.fromJson(
+              expenseData['recurring_config'] as Map<String, dynamic>,
+            )
+          : null,
+    );
+    final created = await _offlineExpenseService.createExpense(request);
+    final result = {
+      'success': true,
+      'data': _expenseToUiMap(created),
+    };
     
     // Invalidate related caches
     final roomspaceId = expenseData['roomspace_id']?.toString();
     if (roomspaceId != null) {
-      await _cache.invalidateExpenseRelated(roomspaceId);
+      if (isOnline) {
+        await _cache.invalidateExpenseRelated(roomspaceId);
+      }
       _state.forceRefresh(ScreenKeys.roomspaceExpenses(roomspaceId));
-      _state.forceRefresh(ScreenKeys.roomspaceBalances(roomspaceId));
+      if (isOnline) {
+        _state.forceRefresh(ScreenKeys.roomspaceBalances(roomspaceId));
+      }
       _state.forceRefresh(ScreenKeys.dashboard);
       
       // Trigger real-time update
-      _realTimeService.notifyExpenseCreated(roomspaceId, result['data'] ?? expenseData);
+      _realTimeService.notifyExpenseCreated(
+        roomspaceId,
+        (result['data'] as Map<String, dynamic>?) ?? expenseData,
+      );
     }
     
     return result;
@@ -189,7 +460,17 @@ class SmartApiService {
 
   /// Create personal expense with cache invalidation
   Future<Map<String, dynamic>> createPersonalExpense(Map<String, dynamic> expenseData) async {
-    final result = await _api.createPersonalExpense(expenseData);
+    final request = PersonalExpenseCreateRequest(
+      title: (expenseData['title'] ?? '').toString(),
+      amount: (expenseData['amount'] as num).toDouble(),
+      description: (expenseData['description'] ?? '').toString(),
+      category: (expenseData['category'] ?? 'General').toString(),
+    );
+    final created = await _offlineExpenseService.createPersonalExpense(request);
+    final result = {
+      'success': true,
+      'data': created.toJson(),
+    };
     
     // Invalidate related caches
     await _cache.invalidateExpenseRelated('personal');
@@ -197,7 +478,9 @@ class SmartApiService {
     _state.forceRefresh(ScreenKeys.dashboard);
     
     // Trigger real-time update
-    _realTimeService.notifyPersonalExpenseCreated(result['data'] ?? expenseData);
+    _realTimeService.notifyPersonalExpenseCreated(
+      (result['data'] as Map<String, dynamic>?) ?? expenseData,
+    );
     
     return result;
   }

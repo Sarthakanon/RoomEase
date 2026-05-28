@@ -24,6 +24,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
   final ApiService _apiService = ApiService();
 
   List<RecurringExpenseTemplate> _templates = [];
+  List<RecurringExpenseNotification> _notifications = [];
   List<Map<String, String>> _roomspaceMembers = [];
   bool _isLoading = true;
   String? _error;
@@ -45,12 +46,15 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
       final results = await Future.wait([
         _recurringService.getRecurringExpenseTemplates(widget.roomspaceId),
         _loadRoomspaceMembers(),
+        _recurringService.getRecurringExpenseNotifications(),
       ]);
       final templates = results[0] as List<RecurringExpenseTemplate>;
       final members = results[1] as List<Map<String, String>>;
+      final notifications = results[2] as List<RecurringExpenseNotification>;
       setState(() {
         _templates = templates;
         _roomspaceMembers = members;
+        _notifications = notifications;
         _sortTemplates();
         _isLoading = false;
       });
@@ -82,8 +86,8 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
     switch (_sortBy) {
       case 'next_payment':
         _templates.sort((a, b) {
-          final nextA = a.getNextScheduledDate();
-          final nextB = b.getNextScheduledDate();
+          final nextA = a.getNextScheduledDateForDisplay();
+          final nextB = b.getNextScheduledDateForDisplay();
           if (nextA == null && nextB == null) return 0;
           if (nextA == null) return 1;
           if (nextB == null) return -1;
@@ -250,8 +254,12 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
   }
 
   Widget _buildRecurringPaymentCard(RecurringExpenseTemplate template, Color primaryColor) {
-    final nextPayment = template.getNextScheduledDate();
+    final nextPayment = template.getNextScheduledDateForDisplay();
     final daysUntilNext = _calendarDaysUntil(nextPayment);
+    final pendingForTemplate = _notifications.where((n) => n.templateId == (template.id ?? -1) && !n.isProcessed).toList()
+      ..sort((a, b) => a.scheduledDate.compareTo(b.scheduledDate));
+    final dueNotification = pendingForTemplate.isNotEmpty ? pendingForTemplate.first : null;
+    final dueDays = dueNotification == null ? null : _calendarDaysUntil(dueNotification.scheduledDate);
 
     return Container(
       decoration: BoxDecoration(
@@ -350,7 +358,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                                   ? 'Due today'
                                   : daysUntilNext > 0
                                       ? 'In $daysUntilNext day${daysUntilNext != 1 ? 's' : ''}'
-                                      : 'Overdue',
+                                      : 'Pending action',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: daysUntilNext <= 0
@@ -387,6 +395,26 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                  ],
+                  if (dueNotification != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Text(
+                        dueDays == 0
+                            ? 'Recurring payment is due today. Re-add or cancel below.'
+                            : dueDays != null && dueDays > 0
+                                ? 'Recurring payment reminder set ($dueDays day${dueDays == 1 ? '' : 's'} left).'
+                                : 'Recurring payment is awaiting your action.',
+                        style: TextStyle(fontSize: 12, color: Colors.orange.shade800, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -486,6 +514,32 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                     ],
                   ),
           ),
+          if (dueNotification != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _processNotificationForTemplate(dueNotification, 'cancel'),
+                      icon: const Icon(Icons.cancel_rounded, size: 16),
+                      label: const Text('Cancel'),
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade700),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _processNotificationForTemplate(dueNotification, 'create_now'),
+                      icon: const Icon(Icons.add_rounded, size: 16),
+                      label: const Text('Re-add'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -543,7 +597,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
 
   void _showRecurringPaymentDetails(RecurringExpenseTemplate template) {
     final config = template.recurringConfig;
-    final next = template.getNextScheduledDate();
+    final next = template.getNextScheduledDateForDisplay();
     final activeText = template.isActive ? 'Active' : 'Paused';
 
     showDialog(
@@ -574,12 +628,22 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
     final amountCtrl = TextEditingController(text: template.amount.toStringAsFixed(2));
     final categoryCtrl = TextEditingController(text: template.category);
     RecurringInterval selected = template.recurringConfig.interval ?? RecurringInterval.monthly;
-    DateTime selectedNextDate = template.getNextScheduledDate() ?? DateTime.now().add(const Duration(days: 1));
+    DateTime selectedNextDate = template.getNextScheduledDateForDisplay() ?? DateTime.now().add(const Duration(days: 1));
     String selectedPaidBy = template.paidBy.isNotEmpty ? template.paidBy : template.createdBy;
+    Set<String> selectedPayers = template.payerAmounts.keys.toSet();
+    final payerAmounts = Map<String, double>.from(template.payerAmounts);
+    Set<String> selectedRoommateIds = template.selectedRoommates.toSet();
+    if (selectedRoommateIds.isEmpty) {
+      selectedRoommateIds = _roomspaceMembers.map((m) => m['id'] ?? '').where((id) => id.isNotEmpty).toSet();
+    }
+    if (selectedPayers.isEmpty) {
+      selectedPayers = {selectedPaidBy};
+      payerAmounts[selectedPaidBy] = template.amount;
+    }
 
     final payerCandidates = _roomspaceMembers.where((m) {
       final id = m['id'] ?? '';
-      return id.isNotEmpty && (template.selectedRoommates.contains(id) || id == template.createdBy);
+      return id.isNotEmpty && selectedRoommateIds.contains(id);
     }).toList();
     final hasSelectedPayer = payerCandidates.any((m) => m['id'] == selectedPaidBy);
     if (!hasSelectedPayer && selectedPaidBy.isNotEmpty) {
@@ -621,10 +685,87 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                     },
                   ),
                   const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Included Roommates', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade700)),
+                  ),
+                  const SizedBox(height: 6),
+                  ..._roomspaceMembers.map((m) {
+                    final id = m['id'] ?? '';
+                    final name = m['name'] ?? id;
+                    final checked = selectedRoommateIds.contains(id);
+                    return CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: checked,
+                      title: Text(name, style: const TextStyle(fontSize: 13)),
+                      onChanged: (v) {
+                        setLocal(() {
+                          if (v == true) {
+                            selectedRoommateIds.add(id);
+                          } else {
+                            selectedRoommateIds.remove(id);
+                            selectedPayers.remove(id);
+                            payerAmounts.remove(id);
+                          }
+                          if (!selectedRoommateIds.contains(selectedPaidBy) && selectedRoommateIds.isNotEmpty) {
+                            selectedPaidBy = selectedRoommateIds.first;
+                          }
+                        });
+                      },
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Paid by (multi-select)', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade700)),
+                  ),
+                  const SizedBox(height: 6),
+                  ..._roomspaceMembers
+                      .where((m) => selectedRoommateIds.contains(m['id']))
+                      .map((m) {
+                    final id = m['id'] ?? '';
+                    final name = m['name'] ?? id;
+                    final isSelected = selectedPayers.contains(id);
+                    return Row(
+                      children: [
+                        Checkbox(
+                          value: isSelected,
+                          onChanged: (v) {
+                            setLocal(() {
+                              if (v == true) {
+                                selectedPayers.add(id);
+                                payerAmounts.putIfAbsent(id, () => 0.0);
+                              } else {
+                                selectedPayers.remove(id);
+                                payerAmounts.remove(id);
+                              }
+                              if (selectedPayers.isNotEmpty && !selectedPayers.contains(selectedPaidBy)) {
+                                selectedPaidBy = selectedPayers.first;
+                              }
+                            });
+                          },
+                        ),
+                        Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
+                        SizedBox(
+                          width: 120,
+                          child: TextFormField(
+                            initialValue: (payerAmounts[id] ?? 0) > 0 ? (payerAmounts[id] ?? 0).toStringAsFixed(2) : '',
+                            enabled: isSelected,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(labelText: 'Amount'),
+                            onChanged: (v) => payerAmounts[id] = double.tryParse(v) ?? 0.0,
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                  const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     value: selectedPaidBy.isNotEmpty ? selectedPaidBy : null,
                     decoration: const InputDecoration(labelText: 'Paid by'),
-                    items: payerCandidates
+                    items: _roomspaceMembers
+                        .where((m) => selectedPayers.contains(m['id']))
                         .map((m) => DropdownMenuItem<String>(
                               value: m['id'],
                               child: Text(m['name'] ?? m['id'] ?? ''),
@@ -672,7 +813,31 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
             FilledButton(
               onPressed: () {
                 final amount = double.tryParse(amountCtrl.text.trim());
-                if (amount == null || amount <= 0) return;
+                if (amount == null || amount <= 0 || selectedRoommateIds.isEmpty) return;
+                if (selectedPayers.isEmpty) return;
+                final totalPaid = selectedPayers.fold<double>(0.0, (sum, uid) => sum + (payerAmounts[uid] ?? 0.0));
+                if ((totalPaid - amount).abs() > 0.01) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Paid amounts must add up to Rs. ${amount.toStringAsFixed(2)}')),
+                  );
+                  return;
+                }
+                final List<String> roommates = selectedRoommateIds.toList();
+                Map<String, double> updatedSplits = Map<String, double>.from(template.customSplits);
+                updatedSplits.removeWhere((k, _) => !selectedRoommateIds.contains(k));
+                for (final uid in roommates) {
+                  updatedSplits.putIfAbsent(uid, () => 0.0);
+                }
+
+                if (template.splitType.toUpperCase() == 'EQUAL') {
+                  updatedSplits = {};
+                } else if (template.splitType.toUpperCase() == 'PERCENTAGE') {
+                  final equalPercent = 100.0 / roommates.length;
+                  updatedSplits = {for (final uid in roommates) uid: equalPercent};
+                } else if (template.splitType.toUpperCase() == 'EXACT') {
+                  final equalAmount = amount / roommates.length;
+                  updatedSplits = {for (final uid in roommates) uid: equalAmount};
+                }
                 Navigator.pop(
                   context,
                   template.copyWith(
@@ -681,6 +846,11 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
                     amount: amount,
                     category: categoryCtrl.text.trim(),
                     paidBy: selectedPaidBy,
+                    payerAmounts: {
+                      for (final uid in selectedPayers) uid: (payerAmounts[uid] ?? 0.0),
+                    },
+                    selectedRoommates: roommates,
+                    customSplits: updatedSplits,
                     recurringConfig: template.recurringConfig.copyWith(interval: selected),
                   ),
                 );
@@ -709,6 +879,23 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to update recurring payment: $e')),
+      );
+    }
+  }
+
+  Future<void> _processNotificationForTemplate(RecurringExpenseNotification notification, String action) async {
+    if (notification.id == null) return;
+    try {
+      await _recurringService.processRecurringExpenseNotification(notification.id!, action);
+      await _loadTemplates();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(action == 'create_now' ? 'Recurring payment re-added' : 'Recurring payment cancelled')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e')),
       );
     }
   }

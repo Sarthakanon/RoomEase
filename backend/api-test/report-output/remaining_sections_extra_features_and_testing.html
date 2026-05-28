@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>RoomEase Remaining Sections: Extra Features and Testing Evidence</title>
+<style>
+body { font-family: Arial, sans-serif; line-height: 1.45; margin: 32px; color: #111827; }
+h1, h2, h3 { color: #0f172a; }
+.figure { margin: 18px 0 28px 0; }
+.figure img { width: 100%; max-width: 980px; border: 1px solid #d1d5db; }
+.caption { font-size: 13px; color: #374151; margin-top: 6px; }
+table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+th { background: #f3f4f6; }
+.note { background: #eef2ff; border-left: 4px solid #4f46e5; padding: 10px; }
+</style>
+</head>
+<body>
+<h1>7.2 Features Added Beyond Proposal</h1>
+<p>This document contains only the remaining report content requested after subsystem implementation screenshots. The following features were implemented beyond the initially proposed scope and are supported by diagrams for inclusion in the final report.</p>
+
+<h2>7.2.1 Recurring Expense Automation</h2>
+<p>RoomEase now supports recurring expense templates that can be scheduled, notified, and processed into real expense records without manual recreation each cycle. This reduces repetitive input and improves consistency in recurring costs such as rent, internet, and utility payments.</p>
+<div class="figure">
+  <img src="../report-assets/diagram-recurring-workflow.png" alt="Recurring expense workflow" />
+  <div class="caption">Figure A: Recurring Expense Workflow</div>
+</div>
+
+<h2>7.2.2 Payment Confirmation Workflow</h2>
+<p>A complete payment confirmation subsystem was introduced to reduce disputes. Payers submit confirmation details, creditors verify or reject, and settlement records update transparently. This adds trust and traceability to roomspace-level settlements.</p>
+<div class="figure">
+  <img src="../report-assets/diagram-payment-confirmation.png" alt="Payment confirmation workflow" />
+  <div class="caption">Figure B: Payment Confirmation and Settlement Flow</div>
+</div>
+
+<h2>7.2.3 Subscription and Admin Feature Expansion</h2>
+<p>The final system includes subscription lifecycle endpoints (current plan, cancel, reactivate, history), admin-level oversight APIs for users/roomspaces/analytics, and expanded analytics services (summary, trends, patterns, predictions, anomalies, recommendations). These capabilities exceed baseline proposal requirements and align the system with deployable product needs.</p>
+<div class="figure">
+  <img src="../report-assets/diagram-added-features-architecture.png" alt="Added features architecture" />
+  <div class="caption">Figure C: Added Features Architecture (Subscription + Admin + Analytics)</div>
+</div>
+
+<h2>7.3 Final Assessment of Proposal Completion</h2>
+<table>
+  <tr><th>Category</th><th>Status</th><th>Assessment</th></tr>
+  <tr><td>Originally Proposed Core Features</td><td>Completed</td><td>Core scope implemented across authentication, roomspaces, expenses, balance settlement, and analytics.</td></tr>
+  <tr><td>Beyond-Proposal Features</td><td>Completed</td><td>Recurring expense automation, payment confirmation workflows, subscription management, and admin analytics are implemented.</td></tr>
+  <tr><td>Product Readiness</td><td>Improved</td><td>Additional features improve reliability, governance, and real-world usability.</td></tr>
+</table>
+
+<h1>8. Testing Strategy and Quality Evidence (Remaining Part)</h1>
+<h2>8.1 Unit Testing Evidence (Backend)</h2>
+<p>Backend tests were executed using Go test commands in the project backend module. The test run confirms successful execution for packages containing tests (handlers, middleware, models, services).</p>
+<div class="figure">
+  <img src="../report-assets/screenshot-go-test-results.png" alt="Go unit test results" />
+  <div class="caption">Figure D: Backend Unit/Package Test Results (go test ./...)</div>
+</div>
+
+<div class="note">
+  <strong>Note for report integrity:</strong> A coverage screenshot was not included because <code>go test ./... -cover</code> currently fails in this repository with module-resolution issue (<code>package roomease/backend: cannot find package</code>) while standard test execution succeeds. Keep this note if strict evidence traceability is required.
+</div>
+
+<h2>8.2 API Testing Organisation Reference</h2>
+<p>API test cases are now organized subsystem-wise in Bruno under <code>backend/api-test/</code>, with dedicated request files per endpoint and shared collection variables in <code>common/00-collection-vars.bru</code>.</p>
+
+<h2>8.3 Remaining Testing Narrative (Concise)</h2>
+<ul>
+  <li>Unit-level validation was performed on backend service and handler packages using Go tests.</li>
+  <li>Subsystem-based API tests were prepared for execution through Bruno collections.</li>
+  <li>Offline and static analysis evidence can be appended in the same style once screenshots are produced from the target runtime environment.</li>
+</ul>
+
+<p><strong>Prepared on:</strong> 2026-05-25</p>
+</body>
+</html>

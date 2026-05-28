@@ -23,6 +23,14 @@ class _PredictionsCardState extends State<PredictionsCard> {
     _loadPredictions();
   }
 
+  @override
+  void didUpdateWidget(covariant PredictionsCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.roomspaceId != widget.roomspaceId) {
+      _loadPredictions();
+    }
+  }
+
   Future<void> _loadPredictions() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -59,7 +67,27 @@ class _PredictionsCardState extends State<PredictionsCard> {
 
   Widget _buildContent() {
     if (_isLoading) return const ChartSkeletonLoader();
-    if (_error != null || _predictions == null) return const SizedBox();
+    if (_error != null || _predictions == null) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFEEEEF2)),
+        ),
+        child: Column(
+          children: [
+            const Text('Evolving Insights', style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(
+              'Future projections will appear automatically as more analytics data becomes available.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
 
     if (_predictions!.insufficientData) {
       return Container(

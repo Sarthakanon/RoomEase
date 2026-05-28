@@ -1,0 +1,41 @@
+=== RUN   TestAuthMiddleware_NoSessionCookie
+🔐 AuthMiddleware called for: GET /protected
+❌ No session cookie found
+--- PASS: TestAuthMiddleware_NoSessionCookie (0.00s)
+=== RUN   TestAuthMiddleware_InvalidSession
+🔐 AuthMiddleware called for: GET /protected
+🍪 Session ID: invalid-session-123
+❌ Invalid session: session not found
+--- PASS: TestAuthMiddleware_InvalidSession (0.00s)
+=== RUN   TestAuthMiddleware_ValidSession
+🔐 AuthMiddleware called for: GET /protected
+🍪 Session ID: valid-session-123
+✅ Valid session for user: user-123
+✅ User is not banned, proceeding with request
+--- PASS: TestAuthMiddleware_ValidSession (0.00s)
+=== RUN   TestAuthMiddleware_ExpiredSession
+🔐 AuthMiddleware called for: GET /protected
+🍪 Session ID: expired-session-456
+❌ Invalid session: session expired
+--- PASS: TestAuthMiddleware_ExpiredSession (0.00s)
+=== RUN   TestAuthMiddleware_EmptySessionCookie
+🔐 AuthMiddleware called for: GET /protected
+🍪 Session ID: 
+❌ Invalid session: session not found
+--- PASS: TestAuthMiddleware_EmptySessionCookie (0.00s)
+=== RUN   TestAuthMiddleware_BannedUser
+    auth_test.go:218: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestAuthMiddleware_BannedUser (0.00s)
+=== RUN   TestCORSMiddleware_AllowsLocalhostOrigin
+--- PASS: TestCORSMiddleware_AllowsLocalhostOrigin (0.00s)
+=== RUN   TestLoggerMiddleware_DoesNotBlockRequest
+2026/05/25 19:49:02 → GET /ping | User: anonymous
+2026/05/25 19:49:02 ← GET /ping | Status: 200 | Duration: 109.442µs | User: anonymous
+--- PASS: TestLoggerMiddleware_DoesNotBlockRequest (0.00s)
+=== RUN   TestValidateRoomspaceMembership
+    roomspace_test.go:17: set ROOM_EASE_TEST_DB=true to run Postgres-backed tests
+--- SKIP: TestValidateRoomspaceMembership (0.00s)
+=== RUN   TestValidateRoomspaceMembership_Unauthenticated
+--- PASS: TestValidateRoomspaceMembership_Unauthenticated (0.00s)
+PASS
+ok  	roomease/backend/middleware	0.043s

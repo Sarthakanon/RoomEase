@@ -3,9 +3,11 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"roomease/backend/config"
 	"roomease/backend/models"
 	"roomease/backend/services"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -216,6 +218,24 @@ func (h *NotificationHandler) SendPaymentReminder(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+		return
+	}
+
+	// Enforce reminder rate limit: max 2 reminders per 24h for the same sender->recipient->roomspace.
+	var sentCount int64
+	cutoff := time.Now().Add(-24 * time.Hour)
+	if err := config.DB.Model(&models.Notification{}).
+		Where("recipient_uid = ? AND type = ? AND created_at >= ?", req.RecipientUID, models.NotificationTypePaymentReminder, cutoff).
+		Where("data::jsonb->>'sender_uid' = ? AND data::jsonb->>'roomspace_id' = ?", senderUID.(string), req.RoomspaceID).
+		Count(&sentCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate reminder limit"})
+		return
+	}
+	if sentCount >= 2 {
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error": "Reminder limit reached",
+			"message": "You can only send 2 reminders within 24 hours to this roommate in this roomspace.",
+		})
 		return
 	}
 

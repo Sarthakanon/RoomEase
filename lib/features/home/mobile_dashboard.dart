@@ -6,6 +6,7 @@ import '../../core/widgets/global_roomspace_selector.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/mixins/auto_refresh_mixin.dart';
 import '../../services/smart_api_service.dart';
+import '../../services/api_service.dart';
 import '../../services/state_management_service.dart';
 import '../../services/payment_notification_service.dart';
 import '../../services/ocr_service.dart';
@@ -15,6 +16,7 @@ import 'dart:async';
 import '../../models/payment_notification.dart';
 import '../../models/expense_models.dart';
 import '../../providers/roomspace_provider.dart';
+import '../../widgets/sync_status_indicator.dart';
 import 'widgets/add_expense_dialog.dart';
 import 'widgets/personal_expense_dialog.dart';
 import 'widgets/receipt_scanner_dialog.dart';
@@ -33,6 +35,7 @@ class MobileDashboard extends StatefulWidget {
 class _MobileDashboardState extends State<MobileDashboard>
     with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, AutoRefreshMixin {
   final SmartApiService _smartApi = SmartApiService();
+  final ApiService _apiService = ApiService();
   final StateManagementService _state = StateManagementService();
   final RealTimeDataService _realTimeService = RealTimeDataService();
 
@@ -93,6 +96,12 @@ class _MobileDashboardState extends State<MobileDashboard>
         debugPrint('🔄 Dashboard: Clearing cache and refreshing');
         _cachedDashboardData = null;
         _lastDataLoad = null;
+        _state.forceRefresh(ScreenKeys.dashboard);
+        _state.forceRefresh(ScreenKeys.personalExpenses);
+        if (currentRoomspaceId != null) {
+          _state.forceRefresh(ScreenKeys.roomspaceExpenses(currentRoomspaceId));
+          _state.forceRefresh(ScreenKeys.roomspaceBalances(currentRoomspaceId));
+        }
         
         if (mounted) {
           setState(() {}); // Trigger rebuild with fresh data
@@ -112,6 +121,11 @@ class _MobileDashboardState extends State<MobileDashboard>
         debugPrint('🔄 Dashboard: Clearing cache and refreshing balances');
         _cachedDashboardData = null;
         _lastDataLoad = null;
+        _state.forceRefresh(ScreenKeys.dashboard);
+        if (currentRoomspaceId != null) {
+          _state.forceRefresh(ScreenKeys.roomspaceBalances(currentRoomspaceId));
+          _state.forceRefresh(ScreenKeys.roomspaceExpenses(currentRoomspaceId));
+        }
         
         if (mounted) {
           setState(() {}); // Trigger rebuild
@@ -243,7 +257,7 @@ class _MobileDashboardState extends State<MobileDashboard>
     // Load roomspace-specific data if in a roomspace
     if (!isPersonalSpace && activeRoomspaceId != null) {
       futures['roomspaceExpenses'] = _smartApi.getRoomspaceExpenses(activeRoomspaceId, limit: 3, forceRefresh: forceRefresh);
-      futures['balances'] = _smartApi.getRoomspaceBalances(activeRoomspaceId, forceRefresh: forceRefresh);
+      futures['balances'] = _smartApi.getRoomspaceBalances(activeRoomspaceId, forceRefresh: true);
       futures['members'] = _smartApi.getRoomspaceMembers(activeRoomspaceId, forceRefresh: forceRefresh);
     }
 
@@ -698,14 +712,38 @@ class _MobileDashboardState extends State<MobileDashboard>
   Future<void> _handleExpenseSubmission(ExpenseData expense) async {
     await performOperationWithRefresh(
       () async {
-        final request = ExpenseCreateRequest.fromExpenseData(
-            expense, _currentRoomspaceId!);
-        
-        // Debug: Log the request data
-        debugPrint('Creating expense with paid_by: ${request.paidBy}');
-        debugPrint('Request JSON: ${request.toJson()}');
-        
-        await _smartApi.createExpense(request.toJson());
+        final requests = ExpenseCreateRequest.fromExpenseDataBatch(
+          expense,
+          _currentRoomspaceId!,
+        );
+        for (final request in requests) {
+          debugPrint('Creating expense with paid_by: ${request.paidBy}');
+          debugPrint('Request JSON: ${request.toJson()}');
+          await _smartApi.createExpense(request.toJson());
+        }
+        final isRecurring = expense.recurringConfig?.isRecurring == true;
+        if (isRecurring && requests.length > 1) {
+          final payerAmounts = Map<String, double>.from(expense.payerAmounts)
+            ..removeWhere((_, v) => v <= 0);
+          final fallbackPayer = expense.paidBy ??
+              (expense.selectedRoommateIds.isNotEmpty ? expense.selectedRoommateIds.first : '');
+          if (fallbackPayer.isNotEmpty && payerAmounts.isEmpty) {
+            payerAmounts[fallbackPayer] = expense.amount;
+          }
+          await _apiService.createRecurringExpenseTemplate({
+            'roomspace_id': _currentRoomspaceId!,
+            'title': expense.title,
+            'description': expense.description,
+            'amount': expense.amount,
+            'category': expense.category,
+            'paid_by': fallbackPayer,
+            'payer_amounts': payerAmounts,
+            'split_type': expense.splitType.apiValue,
+            'selected_roommates': expense.selectedRoommateIds,
+            'custom_splits': expense.customSplits,
+            'recurring_config': expense.recurringConfig!.toJson(),
+          });
+        }
         
         // Clear cache and trigger immediate refresh
         _cachedDashboardData = null;
@@ -1078,6 +1116,12 @@ class _MobileDashboardState extends State<MobileDashboard>
             ],
           ),
 
+          const SizedBox(height: 10),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: SyncStatusIndicator(),
+          ),
+
           const SizedBox(height: 16),
 
           // Balance row — only in roomspace mode
@@ -1154,24 +1198,28 @@ class _MobileDashboardState extends State<MobileDashboard>
     double youOwe = 0.0;
     double youAreOwed = 0.0;
     
-    // Handle the response structure with you_owe and you_are_owed fields
+    // Prefer net balance for display so both sides never appear non-zero together.
     if (balanceData is Map<String, dynamic>) {
-      // Extract the breakdown values (not your_balance which is the net)
-      youOwe = (balanceData['you_owe'] as num?)?.toDouble() ?? 0.0;
-      youAreOwed = (balanceData['you_are_owed'] as num?)?.toDouble() ?? 0.0;
-      
+      final yourBalance = (balanceData['your_balance'] as num?)?.toDouble() ??
+          (((balanceData['you_are_owed'] as num?)?.toDouble() ?? 0.0) -
+              ((balanceData['you_owe'] as num?)?.toDouble() ?? 0.0));
+      if (yourBalance > 0.01) {
+        youAreOwed = yourBalance;
+        youOwe = 0.0;
+      } else if (yourBalance < -0.01) {
+        youOwe = -yourBalance;
+        youAreOwed = 0.0;
+      }
+
       // Debug logging
-      debugPrint('💰 Balance breakdown: you_owe=$youOwe, you_are_owed=$youAreOwed');
+      debugPrint('💰 Dashboard net display: you_owe=$youOwe, you_are_owed=$youAreOwed');
       debugPrint('💰 Net balance: ${balanceData['your_balance']}');
     }
-    final netYouOwe = (youOwe - youAreOwed).clamp(0.0, double.infinity);
-    final netYouAreOwed = (youAreOwed - youOwe).clamp(0.0, double.infinity);
-    
     return Row(
       children: [
-        Expanded(child: _buildBalanceTile('You\'ll get back', netYouAreOwed, true)),
+        Expanded(child: _buildBalanceTile('You\'ll get back', youAreOwed, true)),
         const SizedBox(width: 10),
-        Expanded(child: _buildBalanceTile('You need to pay', netYouOwe, false)),
+        Expanded(child: _buildBalanceTile('You need to pay', youOwe, false)),
       ],
     );
   }
@@ -1659,6 +1707,9 @@ class _MobileDashboardState extends State<MobileDashboard>
     final title = expense['title'] as String? ?? 'Unknown Expense';
     final amount = (expense['amount'] as num?)?.toDouble() ?? 0.0;
     final payerName = expense['payer_name'] as String?;
+    final payerLabel = (payerName != null && payerName.trim().isNotEmpty)
+        ? payerName
+        : ((paidBy != null && paidBy.isNotEmpty) ? paidBy : 'Unknown');
     final createdAt = expense['created_at'] as String?;
     
     DateTime? date;
@@ -1674,7 +1725,7 @@ class _MobileDashboardState extends State<MobileDashboard>
       title: title,
       subtitle: isPaidByMe
           ? 'Shared · You paid'
-          : 'Shared · ${payerName ?? 'Someone'} paid',
+          : 'Shared · $payerLabel paid',
       amount: 'Rs. ${amount.toStringAsFixed(0)}',
       amountColor: isPaidByMe ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
       date: _formatDate(date),
