@@ -1,0 +1,301 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RoomEase Full Expense System Flow (A to Z)</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0.6in; }
+h1, h2, h3 { color: #0f172a; margin-top: 16pt; margin-bottom: 8pt; }
+h1 { font-size: 20pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+p { margin: 6pt 0; }
+ul, ol { margin: 6pt 0 6pt 18pt; }
+li { margin: 2pt 0; }
+code { font-family: Consolas, 'Courier New', monospace; background: #f8fafc; padding: 1pt 3pt; border-radius: 3px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt; border-radius: 4px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #cbd5e1; padding: 6pt; text-align: left; }
+th { background: #f1f5f9; }
+blockquote { border-left: 3px solid #94a3b8; margin: 8pt 0; padding: 4pt 10pt; color: #334155; background: #f8fafc; }
+</style></head><body><h1 id="roomease-full-expense-system-flow-a-to-z">RoomEase Full Expense System Flow (A to Z)</h1>
+<h2 id="technical-summary-paragraph">Technical Summary Paragraph</h2>
+<p>The RoomEase expense system is a roomspace-scoped financial ledger pipeline where expense creation, split attribution, balance computation, settlements, recurring automation, and dashboard rendering are connected through a shared API/cache/event architecture. On the client, dashboard and expense pages submit typed payloads through <code>SmartApiService</code>/<code>ApiService</code>, while split validation happens both in UI utilities and backend handlers for integrity. On the server, expense records (<code>expenses</code>) and participant shares (<code>expense_splits</code>) are persisted transactionally, then consumed by balance logic that computes net positions from payer-credit minus split-debit with settlement reconciliation. Recurring templates run through a scheduler/notification workflow (<code>cron</code> + recurring service), generating reminders and optionally materializing expenses. Overall, this is a stateful, database-driven domain model with roomspace membership authorization at every shared boundary.</p>
+<hr />
+<h2 id="1-dashboard-add-expense-integration-exact-flow">1. Dashboard -&gt; Add Expense integration (exact flow)</h2>
+<h2 id="frontend-call-chain">Frontend call chain</h2>
+<ol>
+<li>
+<p>User opens add expense from dashboard:
+- <code>MobileDashboard</code> opens <code>AddExpenseDialog</code> (<code>lib/features/home/widgets/add_expense_dialog.dart</code>)</p>
+</li>
+<li>
+<p>Form preparation and validation in dialog:
+- title/amount/category/roommates/payers/split type/custom splits/recurring config
+- validates payer total equals amount
+- validates split data with:
+  - <code>ExpenseCalculationUtils.validateSplitData(...)</code></p>
+</li>
+<li>
+<p>Submit path:
+- dialog emits <code>ExpenseData</code> via <code>onSubmit</code>
+- dashboard builds API request (<code>ExpenseCreateRequest</code>/JSON)
+- <code>SmartApiService.createExpense(expenseData)</code>
+- online/offline service integration
+- backend call eventually hits <code>ApiService.createExpense(...)</code> -&gt; <code>POST /api/expenses</code></p>
+</li>
+<li>
+<p>Post-submit refresh:
+- dashboard/balances/expense caches invalidated
+- realtime event trigger (<code>notifyExpenseCreated</code>) updates dependent views</p>
+</li>
+</ol>
+<hr />
+<h2 id="2-ocr-receipt-scanning-how-it-works">2. OCR receipt scanning (how it works)</h2>
+<h2 id="file">File</h2>
+<ul>
+<li><code>lib/services/ocr_service.dart</code></li>
+</ul>
+<h2 id="packages-used">Packages used</h2>
+<ul>
+<li><code>google_mlkit_text_recognition</code></li>
+<li><code>image_picker</code></li>
+<li><code>permission_handler</code></li>
+</ul>
+<h2 id="ocr-pipeline">OCR pipeline</h2>
+<ol>
+<li>Request camera/gallery permission.</li>
+<li>Pick image from camera/gallery.</li>
+<li>Convert file to ML Kit input image.</li>
+<li>Run text recognizer (<code>TextRecognizer.processImage</code>).</li>
+<li>Parse extracted text using regex heuristics:
+- likely total amount
+- candidate merchant name
+- date
+- all amount-like values</li>
+<li>Return <code>OcrScanResult</code> to UI (<code>ReceiptScannerDialog</code> / add expense flow).</li>
+</ol>
+<p>Notes:
+- OCR extraction is heuristic-based, not guaranteed exact; user can edit before submit.</p>
+<hr />
+<h2 id="3-expense-creationsplitting-backend-logic">3. Expense creation/splitting backend logic</h2>
+<h2 id="handler">Handler</h2>
+<ul>
+<li><code>backend/handlers/expense.go</code></li>
+</ul>
+<h2 id="key-backend-checks-createexpense">Key backend checks (<code>CreateExpense</code>)</h2>
+<ol>
+<li>Auth required (<code>user_id</code> from middleware).</li>
+<li>Request validation (<code>CreateExpenseRequest</code>).</li>
+<li>Membership validation for roomspace.</li>
+<li>Payer validation (<code>paid_by</code> must be member; default = auth user).</li>
+<li>Split validation (<code>validateExpenseRequest</code>) by split type:
+- <code>EQUAL</code>
+- <code>PERCENTAGE</code> (must sum exactly 100)
+- <code>EXACT</code> (must sum exactly expense amount)</li>
+<li>Split calculation (<code>calculateSplits</code>):
+- equal split includes payer in participant set if missing
+- percentage/exact uses provided custom map</li>
+<li>Persist expense + splits using DB service transaction.</li>
+<li>Optional recurring-template creation if recurring config exists.</li>
+<li>Notifications to affected roommates.</li>
+</ol>
+<h2 id="persist-layer">Persist layer</h2>
+<ul>
+<li><code>PostgresService.CreateExpense(...)</code> creates <code>expenses</code> then <code>expense_splits</code> in transaction.</li>
+</ul>
+<hr />
+<h2 id="4-balance-calculation-and-settlement-logic">4. Balance calculation and settlement logic</h2>
+<h2 id="core-service">Core service</h2>
+<ul>
+<li><code>backend/services/balance_service.go</code></li>
+</ul>
+<h2 id="roomspace-balance-algorithm">Roomspace balance algorithm</h2>
+<p>For each expense:
+1. Credit full amount to payer balance.
+2. Debit each participant by split share.
+3. Uses <code>normalizedSharesByUser(...)</code> to prevent split duplication/corruption from inflating totals.</p>
+<p>After expenses:
+4. Apply settlements:
+- payer of settlement (<code>from_user</code>) gets balance increase
+- receiver (<code>to_user</code>) gets balance decrease</p>
+<p>Output:
+- <code>BalanceSummary</code> (<code>total_expenses</code>, <code>user_balances</code>, member list, etc.)</p>
+<h2 id="api-surface">API surface</h2>
+<ul>
+<li><code>GET /api/roomspaces/:id/balances</code></li>
+<li><code>GET /api/roomspaces/:id/balances/:userId</code></li>
+<li><code>POST /api/roomspaces/:id/settlements</code></li>
+<li><code>GET /api/roomspaces/:id/settlements</code></li>
+<li><code>GET /api/roomspaces/:id/settlements/suggestions</code></li>
+<li><code>POST /api/roomspaces/:id/balances/refresh</code></li>
+</ul>
+<h2 id="current-mode">Current mode</h2>
+<ul>
+<li>response indicates <code>balance_mode: global_net</code></li>
+<li>primary values surfaced as:</li>
+<li><code>you_owe</code></li>
+<li><code>you_are_owed</code></li>
+<li><code>your_balance</code></li>
+</ul>
+<hr />
+<h2 id="5-who-owes-who-balance-overview-settlements-pages">5. “Who owes who”, balance overview, settlements pages</h2>
+<p>These pages consume the same backend balance/settlement endpoints rather than re-implementing balance math in UI.</p>
+<p>Key frontend pages/services:
+- <code>who_owes_who_screen.dart</code>
+- <code>balance_breakdown_screen.dart</code>
+- <code>payment_confirmation_screen.dart</code>
+- <code>balance_service.dart</code>
+- <code>smart_api_service.dart</code> (<code>getRoomspaceBalances</code>)</p>
+<p>Data sources:
+- balances endpoint for net view
+- settlement history endpoint
+- settlement suggestion endpoint</p>
+<hr />
+<h2 id="6-recurring-payments-system-template-notification-action">6. Recurring payments system (template + notification + action)</h2>
+<h2 id="models">Models</h2>
+<ul>
+<li><code>RecurringExpenseTemplate</code> (<code>recurring_expense_templates</code>)</li>
+<li><code>RecurringExpenseNotification</code> (<code>recurring_expense_notifications</code>)</li>
+<li><code>RecurringConfig</code> (<code>is_recurring</code>, interval, start/end, notify flags)</li>
+</ul>
+<h2 id="scheduling-logic">Scheduling logic</h2>
+<p>Backend service:
+- <code>backend/services/recurring_expense_service.go</code></p>
+<p>Scheduler:
+- <code>backend/services/cron_service.go</code>
+- jobs:
+  - recurring processing hourly (<code>0 * * * *</code>)
+  - cleanup old processed notifications daily (<code>0 2 * * *</code>)</p>
+<h2 id="notify-before-one-day-behavior">“Notify before one day” behavior</h2>
+<p>In model method:
+- <code>RecurringExpenseTemplate.ShouldSendNotification(currentDate)</code></p>
+<p>Logic:
+1. compute next scheduled date from interval + last_generated/created_at
+2. compute <code>notificationDate = nextDate - notification_days_before</code>
+3. compare date-only (day precision) and notify exactly on that day</p>
+<p>So if <code>notification_days_before = 1</code>, reminder is generated on previous day.</p>
+<h2 id="notification-processing-actions">Notification processing actions</h2>
+<p>Endpoint:
+- <code>POST /api/recurring-expenses/notifications/:notification_id/process</code></p>
+<p>Actions supported:
+- <code>create_now</code> (generate expense now)
+- <code>schedule_later</code>
+- <code>skip_once</code>
+- <code>cancel</code> (deactivate template)</p>
+<p>Also supports soft-delete/restore template window (24h undo).</p>
+<hr />
+<h2 id="7-personal-expense-vs-shared-expense">7. Personal expense vs shared expense</h2>
+<p>Shared expenses:
+- require roomspace membership
+- use splits and affect balances</p>
+<p>Personal expenses:
+- user-private only
+- endpoints:
+  - <code>POST /api/personal-expenses</code>
+  - <code>GET /api/personal-expenses</code>
+  - <code>DELETE /api/personal-expenses/:id</code>
+- do not affect roomspace balances</p>
+<hr />
+<h2 id="8-exact-frontend-to-backend-method-mapping-expense-system">8. Exact Frontend-to-Backend Method Mapping (Expense System)</h2>
+<ol>
+<li>
+<p>Create shared expense:
+- <code>AddExpenseDialog._submit()</code>
+- <code>MobileDashboard</code>/<code>ExpenseScreen</code> submit handler
+- <code>SmartApiService.createExpense(...)</code>
+- <code>ApiService.createExpense(...)</code>
+- <code>POST /api/expenses</code></p>
+</li>
+<li>
+<p>Update expense:
+- edit dialog/screen
+- <code>SmartApiService.updateExpense(expenseId, payload)</code>
+- <code>ApiService.updateExpense(...)</code>
+- <code>PUT /api/expenses/:id</code></p>
+</li>
+<li>
+<p>Delete expense:
+- <code>SmartApiService.deleteExpense(expenseId)</code>
+- <code>ApiService.deleteExpense(...)</code>
+- <code>DELETE /api/expenses/:id</code></p>
+</li>
+<li>
+<p>Roomspace expenses list/recent:
+- <code>SmartApiService.getRoomspaceExpenses(...)</code>
+- <code>ApiService.getRoomspaceExpenses(...)</code>
+- <code>GET /api/roomspaces/:id/expenses</code>
+- <code>GET /api/roomspaces/:id/expenses/recent</code></p>
+</li>
+<li>
+<p>Personal expense operations:
+- <code>SmartApiService.createPersonalExpense(...)</code> -&gt; <code>POST /api/personal-expenses</code>
+- <code>ApiService.getPersonalExpenses(...)</code> -&gt; <code>GET /api/personal-expenses</code>
+- <code>ApiService.deletePersonalExpense(...)</code> -&gt; <code>DELETE /api/personal-expenses/:id</code></p>
+</li>
+<li>
+<p>Balance + settlements:
+- <code>SmartApiService.getRoomspaceBalances(...)</code> -&gt; <code>GET /api/roomspaces/:id/balances</code>
+- <code>BalanceService.getSettlementSuggestions(...)</code> -&gt; <code>GET /api/roomspaces/:id/settlements/suggestions</code>
+- <code>BalanceService.getSettlementHistory(...)</code> -&gt; <code>GET /api/roomspaces/:id/settlements</code>
+- <code>BalanceService.createSettlement(...)</code> -&gt; <code>POST /api/roomspaces/:id/settlements</code></p>
+</li>
+<li>
+<p>Recurring templates + notifications:
+- <code>RecurringExpenseService.getRecurringExpenseTemplates(...)</code> -&gt; <code>GET /api/roomspaces/:id/recurring-expenses</code>
+- <code>ApiService.createRecurringExpenseTemplate(...)</code> -&gt; <code>POST /api/recurring-expenses</code>
+- <code>RecurringExpenseService.updateRecurringExpenseTemplate(...)</code> -&gt; <code>PUT /api/recurring-expenses/:template_id</code>
+- <code>RecurringExpenseService.deleteRecurringExpenseTemplate(...)</code> -&gt; <code>DELETE /api/recurring-expenses/:template_id</code>
+- <code>RecurringExpenseService.restoreRecurringExpenseTemplate(...)</code> -&gt; <code>POST /api/recurring-expenses/:template_id/restore</code>
+- <code>RecurringExpenseService.getRecurringExpenseNotifications()</code> -&gt; <code>GET /api/recurring-expenses/notifications</code>
+- <code>RecurringExpenseService.processRecurringExpenseNotification(...)</code> -&gt; <code>POST /api/recurring-expenses/notifications/:notification_id/process</code></p>
+</li>
+</ol>
+<hr />
+<h2 id="9-database-tables-used-and-purpose-expense-system">9. Database tables used and purpose (Expense System)</h2>
+<p>Core expense ledger:
+1. <code>expenses</code>
+- shared expense header rows (roomspace_id, amount, paid_by, split_type, etc.)</p>
+<ol start="2">
+<li>
+<p><code>expense_splits</code>
+- participant-level owed share rows per expense</p>
+</li>
+<li>
+<p><code>personal_expenses</code>
+- private user expense ledger</p>
+</li>
+</ol>
+<p>Balance &amp; settlement:
+4. <code>user_balances</code>
+- cached computed balances per user+roomspace</p>
+<ol start="5">
+<li><code>settlements</code>
+- payment settlement records between users</li>
+</ol>
+<p>Recurring subsystem:
+6. <code>recurring_expense_templates</code>
+- recurring template definition and recurrence config</p>
+<ol start="7">
+<li><code>recurring_expense_notifications</code>
+- reminder/action queue rows for upcoming recurring payments</li>
+</ol>
+<p>History and governance:
+8. <code>expense_history</code>
+- created/edited/deleted audit-style history</p>
+<ol start="9">
+<li>
+<p><code>expense_deletion_requests</code>
+- deletion approval workflow request header</p>
+</li>
+<li>
+<p><code>expense_deletion_approvals</code>
+- per-user approvals/rejections for deletion requests</p>
+</li>
+</ol>
+<p>Notification context:
+11. <code>notifications</code>
+- cross-feature user notification inbox (expense/join/reminder/etc.)</p>
+<p>Identity/membership dependency tables used for authorization and names:
+12. <code>users</code>
+13. <code>roomspaces</code>
+14. <code>roomspace_members</code></p>
+<hr />
+<h2 id="10-one-line-summary">10. One-line summary</h2>
+<p>Expense system = validated split entry -&gt; transactional persistence -&gt; normalized net balance computation + settlement reconciliation -&gt; recurring reminder/generation workflow -&gt; dashboard/pages rendered from roomspace-scoped APIs and cache-aware frontend services.</p></body></html>

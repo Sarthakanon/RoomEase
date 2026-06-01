@@ -1,6 +1,8 @@
 import '../models/recurring_expense_models.dart';
 import 'api_service.dart';
 import 'real_time_data_service.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Service for managing recurring expenses
 class RecurringExpenseService {
@@ -9,6 +11,64 @@ class RecurringExpenseService {
   RecurringExpenseService._internal();
 
   final ApiService _apiService = ApiService();
+  static const String _templatesCachePrefix = 'recurring_templates_cache_';
+  static const String _notificationsCachePrefix = 'recurring_notifications_cache_';
+
+  Future<void> _cacheTemplates(String roomspaceId, List<dynamic> data) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '$_templatesCachePrefix$roomspaceId',
+        jsonEncode({
+          'data': data,
+          'cached_at': DateTime.now().toIso8601String(),
+        }),
+      );
+    } catch (_) {}
+  }
+
+  Future<List<RecurringExpenseTemplate>> _readCachedTemplates(String roomspaceId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_templatesCachePrefix$roomspaceId');
+      if (raw == null || raw.isEmpty) return [];
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final list = decoded['data'] as List<dynamic>? ?? const [];
+      return list
+          .map((data) => RecurringExpenseTemplate.fromJson(Map<String, dynamic>.from(data as Map)))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _cacheNotifications(String roomspaceId, List<dynamic> data) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '$_notificationsCachePrefix$roomspaceId',
+        jsonEncode({
+          'data': data,
+          'cached_at': DateTime.now().toIso8601String(),
+        }),
+      );
+    } catch (_) {}
+  }
+
+  Future<List<RecurringExpenseNotification>> _readCachedNotifications(String roomspaceId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_notificationsCachePrefix$roomspaceId');
+      if (raw == null || raw.isEmpty) return [];
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final list = decoded['data'] as List<dynamic>? ?? const [];
+      return list
+          .map((data) => RecurringExpenseNotification.fromJson(Map<String, dynamic>.from(data as Map)))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
 
   /// Get recurring expense templates for a roomspace
   Future<List<RecurringExpenseTemplate>> getRecurringExpenseTemplates(String roomspaceId) async {
@@ -17,13 +77,17 @@ class RecurringExpenseService {
       
       if (response['success'] == true && response['data'] != null) {
         final List<dynamic> templatesData = response['data'];
+        await _cacheTemplates(roomspaceId, templatesData);
         return templatesData
             .map((data) => RecurringExpenseTemplate.fromJson(data))
             .toList();
       }
-      
+      final cached = await _readCachedTemplates(roomspaceId);
+      if (cached.isNotEmpty) return cached;
       return [];
     } catch (e) {
+      final cached = await _readCachedTemplates(roomspaceId);
+      if (cached.isNotEmpty) return cached;
       throw Exception('Failed to get recurring expense templates: ${e.toString()}');
     }
   }
@@ -110,19 +174,29 @@ class RecurringExpenseService {
   }
 
   /// Get recurring expense notifications
-  Future<List<RecurringExpenseNotification>> getRecurringExpenseNotifications() async {
+  Future<List<RecurringExpenseNotification>> getRecurringExpenseNotifications([String? roomspaceId]) async {
     try {
       final response = await _apiService.getRecurringExpenseNotifications();
       
       if (response['success'] == true && response['data'] != null) {
         final List<dynamic> notificationsData = response['data'];
+        if (roomspaceId != null && roomspaceId.isNotEmpty) {
+          await _cacheNotifications(roomspaceId, notificationsData);
+        }
         return notificationsData
             .map((data) => RecurringExpenseNotification.fromJson(data))
             .toList();
       }
       
+      if (roomspaceId != null && roomspaceId.isNotEmpty) {
+        return await _readCachedNotifications(roomspaceId);
+      }
       return [];
     } catch (e) {
+      if (roomspaceId != null && roomspaceId.isNotEmpty) {
+        final cached = await _readCachedNotifications(roomspaceId);
+        if (cached.isNotEmpty) return cached;
+      }
       throw Exception('Failed to get recurring expense notifications: ${e.toString()}');
     }
   }

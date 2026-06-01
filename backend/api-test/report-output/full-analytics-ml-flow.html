@@ -1,0 +1,167 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RoomEase Full Analytics + ML Bridge Flow</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0.6in; }
+h1, h2, h3 { color: #0f172a; margin-top: 16pt; margin-bottom: 8pt; }
+h1 { font-size: 20pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+p { margin: 6pt 0; }
+ul, ol { margin: 6pt 0 6pt 18pt; }
+li { margin: 2pt 0; }
+code { font-family: Consolas, 'Courier New', monospace; background: #f8fafc; padding: 1pt 3pt; border-radius: 3px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt; border-radius: 4px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #cbd5e1; padding: 6pt; text-align: left; }
+th { background: #f1f5f9; }
+blockquote { border-left: 3px solid #94a3b8; margin: 8pt 0; padding: 4pt 10pt; color: #334155; background: #f8fafc; }
+</style></head><body><h1 id="roomease-full-analytics-ml-bridge-flow">RoomEase Full Analytics + ML Bridge Flow</h1>
+<h2 id="technical-summary-paragraph">Technical Summary Paragraph</h2>
+<p>RoomEase analytics is implemented as a hybrid computation stack: deterministic aggregates and trend math run in the Go backend, while advanced predictions/recommendations/anomaly detection are delegated to an external ML bridge service via HTTP. The backend builds user-scoped (and optional roomspace-scoped) feature payloads from expense data, calls ML endpoints, then maps responses into frontend contracts. When ML is unavailable, the backend can return fallback analytics summary values and warnings, which keeps the app functional. In the current repository, ML model training code (CNN/RNN formulas, training loops, dataset row counts, and final training metrics) is not present; only the bridge integration contracts and metadata tables are included.</p>
+<hr />
+<h2 id="1-analytics-architecture-in-this-repo">1. Analytics architecture in this repo</h2>
+<p>Core backend files:
+- <code>backend/handlers/analytics_handler.go</code>
+- <code>backend/services/analytics_service.go</code>
+- <code>backend/config/ml_config.go</code>
+- <code>backend/models/analytics.go</code></p>
+<p>Frontend consumer:
+- <code>lib/features/analytics/presentation/analytics_page.dart</code>
+- <code>lib/services/analytics_service.dart</code>
+- <code>lib/services/smart_api_service.dart</code></p>
+<p>Bridge config:
+- <code>ML_API_URL</code> and <code>ML_API_PORT</code> (<code>backend/.env.example</code>)
+- default bridge URL if not configured: <code>http://localhost:5001</code></p>
+<hr />
+<h2 id="2-api-endpoints-exposed-by-backend-analytics">2. API endpoints exposed by backend analytics</h2>
+<p>Protected endpoints:
+- <code>GET /api/analytics/summary</code>
+- <code>GET /api/analytics/trends</code>
+- <code>GET /api/analytics/predictions</code>
+- <code>GET /api/analytics/patterns</code>
+- <code>GET /api/analytics/anomalies</code>
+- <code>GET /api/analytics/recommendations</code>
+- <code>GET /api/analytics/roomspace/:id</code>
+- <code>POST /api/analytics/feedback</code></p>
+<p>All support authenticated user context, and most support optional <code>roomspace_id</code> filtering (with membership validation).</p>
+<hr />
+<h2 id="3-ml-bridge-integration-mechanics">3. ML bridge integration mechanics</h2>
+<p>Implemented in <code>AnalyticsService.callMLAPI(...)</code>:
+- POST JSON payload to ML bridge endpoint
+- reads response body
+- non-200 response is treated as error</p>
+<p>ML endpoints called by backend service:
+- <code>/api/ml/predictions</code>
+- <code>/api/ml/recommendations</code>
+- <code>/api/ml/anomalies</code></p>
+<p>Payload shape (from service):
+- <code>user_id</code>
+- optional <code>roomspace_id</code>
+- <code>expenses[]</code> as <code>MLExpense</code>
+  - <code>id</code>
+  - <code>amount</code>
+  - <code>category</code>
+  - <code>date</code> (<code>YYYY-MM-DD</code>)
+  - <code>user_uid</code></p>
+<p>Bridge response objects expected:
+- predictions with confidence ranges and confidence score
+- recommendations with potential savings and priority
+- anomalies with anomaly score and confidence</p>
+<hr />
+<h2 id="4-fallback-behavior-when-ml-is-unavailable">4. Fallback behavior when ML is unavailable</h2>
+<p>In <code>GetSummary</code> handler:
+- base summary (total spend/top categories/trend) is computed from DB data
+- ML predictions/recommendations are attempted
+- if ML fails, response still returns success with fallback values and warnings</p>
+<p>For dedicated endpoints (<code>/predictions</code>, <code>/anomalies</code>, <code>/recommendations</code>):
+- backend returns 500 when bridge call fails
+- this is what your logs currently show (<code>ml ... unavailable</code>)</p>
+<hr />
+<h2 id="5-ml-model-type-formulas-training-metrics-what-is-available-vs-missing">5. ML model type, formulas, training metrics (what is available vs missing)</h2>
+<h2 id="available-in-this-repo">Available in this repo</h2>
+<ol>
+<li>Bridge contract and API integration are present.</li>
+<li>Analytics metadata schema exists:
+- <code>ml_models</code> table fields include <code>accuracy</code>, <code>mae</code>, <code>model_name</code>, <code>version</code>, <code>metadata</code>.</li>
+<li>Migration docs reference model metadata and cache architecture.</li>
+</ol>
+<h2 id="not-available-in-this-repo-cannot-be-derived-from-current-code">Not available in this repo (cannot be derived from current code)</h2>
+<ol>
+<li>Actual ML training code for CNN/RNN/LSTM/Transformer/etc.</li>
+<li>Explicit loss formulas used during training.</li>
+<li>Whether model is classification vs regression per task in implementation code.</li>
+<li>Dataset source files and exact row counts used for training.</li>
+<li>Final validated metrics (MSE, RMSE, MAE, accuracy, F1, etc.) produced by training runs.</li>
+</ol>
+<p>Important: if you want exact “how many rows” and exact training metrics, we need the external ML bridge repository or model artifacts that train and serve <code>assistant_v2/FinanceAssistantV2</code> (mentioned in migration plan docs).</p>
+<hr />
+<h2 id="6-likely-task-types-inference-from-api-schema">6. Likely task types (inference from API schema)</h2>
+<p>Based on request/response contracts:
+- Spending predictions: regression-like output (<code>predicted_amount</code> numeric).
+- Recommendations: rule/model ranking output (optimization/recommendation task).
+- Anomalies: anomaly scoring/outlier detection (<code>anomaly_score</code> numeric).</p>
+<p>This is an inference from contract shape, not proof of specific architecture (CNN/RNN/etc.).</p>
+<hr />
+<h2 id="7-frontend-to-backend-method-mapping-analytics">7. Frontend-to-backend method mapping (analytics)</h2>
+<ol>
+<li>
+<p>Summary:
+- analytics page/service -&gt; <code>ApiService.get('/api/analytics/summary?...')</code></p>
+</li>
+<li>
+<p>Trends:
+- analytics page/service -&gt; <code>ApiService.get('/api/analytics/trends?...')</code></p>
+</li>
+<li>
+<p>Predictions:
+- analytics page/service -&gt; <code>ApiService.get('/api/analytics/predictions?...')</code></p>
+</li>
+<li>
+<p>Recommendations:
+- analytics page/service -&gt; <code>ApiService.get('/api/analytics/recommendations?...')</code></p>
+</li>
+<li>
+<p>Anomalies:
+- analytics page/service -&gt; <code>ApiService.get('/api/analytics/anomalies?...')</code></p>
+</li>
+<li>
+<p>Patterns:
+- analytics page/service -&gt; <code>ApiService.get('/api/analytics/patterns?...')</code></p>
+</li>
+</ol>
+<hr />
+<h2 id="8-database-tables-used-analytics">8. Database tables used (analytics)</h2>
+<p>Core analytics tables:
+1. <code>analytics_cache</code>
+- cached analytics JSON by user/roomspace/cache_type with expiry</p>
+<ol start="2">
+<li>
+<p><code>recommendation_feedback</code>
+- user feedback on recommendation usefulness/application</p>
+</li>
+<li>
+<p><code>anomaly_acknowledgments</code>
+- marks anomaly as normal/acknowledged</p>
+</li>
+<li>
+<p><code>ml_models</code>
+- model metadata/versioning/status/metrics fields (<code>accuracy</code>, <code>mae</code>)</p>
+</li>
+</ol>
+<p>Input/source domain tables used by analytics computations:
+5. <code>expenses</code>
+6. <code>expense_splits</code>
+7. <code>roomspace_members</code>
+8. <code>users</code></p>
+<hr />
+<h2 id="9-why-your-app-shows-ml-unavailable-errors">9. Why your app shows ML unavailable errors</h2>
+<p>Given your setup notes:
+- backend can be local or render
+- ML bridge is separate deployment (render)</p>
+<p>Common causes visible from code/log behavior:
+1. <code>ML_API_URL</code> misconfigured/unreachable from backend environment.
+2. ML bridge running but endpoint contract mismatch.
+3. Bridge timeout/error returning non-200.
+4. Bridge deployed without required V2 model bundle.</p>
+<hr />
+<h2 id="10-one-line-summary">10. One-line summary</h2>
+<p>Analytics in this repo is an API-orchestrated hybrid: Go computes deterministic summaries and delegates advanced forecasting/recommendation/anomaly inference to an external ML bridge; detailed model-training internals and final training metrics are not stored in this codebase.</p></body></html>

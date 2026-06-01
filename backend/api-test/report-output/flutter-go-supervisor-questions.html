@@ -1,0 +1,746 @@
+<!doctype html><html><head><meta charset="utf-8"><title>High-Probability Supervisor Questions (Flutter + Go Gin + GORM)</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0.6in; }
+h1, h2, h3 { color: #0f172a; margin-top: 16pt; margin-bottom: 8pt; }
+h1 { font-size: 20pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+p { margin: 6pt 0; }
+ul, ol { margin: 6pt 0 6pt 18pt; }
+li { margin: 2pt 0; }
+code { font-family: Consolas, 'Courier New', monospace; background: #f8fafc; padding: 1pt 3pt; border-radius: 3px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt; border-radius: 4px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #cbd5e1; padding: 6pt; text-align: left; }
+th { background: #f1f5f9; }
+blockquote { border-left: 3px solid #94a3b8; margin: 8pt 0; padding: 4pt 10pt; color: #334155; background: #f8fafc; }
+</style></head><body><h1 id="high-probability-supervisor-questions-flutter-go-gin-gorm">High-Probability Supervisor Questions (Flutter + Go Gin + GORM)</h1>
+<p>This is a viva-style question bank with concise model answers aligned to your RoomEase implementation.</p>
+<hr />
+<h2 id="a-architecture-and-design">A. Architecture and design</h2>
+<ol>
+<li>
+<p>Q: Why did you choose Flutter for frontend?
+A: Single codebase for Android/iOS, fast UI iteration, rich widget ecosystem, strong async networking, and predictable state management with Provider.</p>
+</li>
+<li>
+<p>Q: Why Go + Gin for backend?
+A: Go gives low-latency concurrency and simple deployment; Gin adds lightweight high-performance routing and middleware support.</p>
+</li>
+<li>
+<p>Q: Why separate handler and service layers?
+A: Handlers manage HTTP concerns, services manage business logic and DB operations. This keeps code testable and maintainable.</p>
+</li>
+<li>
+<p>Q: Explain your end-to-end request path.
+A: Flutter UI -&gt; ApiService (Dio) -&gt; Gin route -&gt; middleware chain -&gt; handler -&gt; service -&gt; GORM/Postgres -&gt; JSON response -&gt; UI update.</p>
+</li>
+</ol>
+<hr />
+<h2 id="b-auth-and-security">B. Auth and security</h2>
+<ol start="5">
+<li>
+<p>Q: Do you use JWT everywhere?
+A: Firebase ID token (JWT) is used at login only. After verification, backend issues cookie session (<code>session_id</code>) used for protected APIs.</p>
+</li>
+<li>
+<p>Q: How is login verified?
+A: Backend verifies Firebase token via Firebase Admin SDK, finds/creates PostgreSQL user, creates session in session store, sets HttpOnly cookie.</p>
+</li>
+<li>
+<p>Q: What middleware secures APIs?
+A: <code>AuthMiddleware</code> validates session cookie and checks ban status before passing request to protected handlers.</p>
+</li>
+<li>
+<p>Q: How is banned user enforced?
+A: <code>users.is_banned</code> is checked in middleware. If banned, session is deleted and API returns forbidden with logout-required semantics.</p>
+</li>
+<li>
+<p>Q: Is session storage persistent?
+A: Current implementation uses in-memory sessions (<code>InMemorySessionStore</code>), so sessions reset on server restart.</p>
+</li>
+<li>
+<p>Q: How do you handle unauthorized errors in app?
+A: Dio interceptor catches <code>401</code>, clears cookies, signs out Firebase user, and redirects auth flow.</p>
+</li>
+</ol>
+<hr />
+<h2 id="c-cors-and-networking">C. CORS and networking</h2>
+<ol start="11">
+<li>
+<p>Q: Why do you need CORS if app is mobile?
+A: Web builds and browser contexts need CORS. Also consistent API behavior is maintained across platforms.</p>
+</li>
+<li>
+<p>Q: Why <code>AllowCredentials=true</code> in CORS?
+A: Required because auth after login relies on cookies.</p>
+</li>
+<li>
+<p>Q: Why allow empty origin?
+A: Many mobile requests do not carry browser-style Origin header, so allowing empty origin prevents false rejection.</p>
+</li>
+<li>
+<p>Q: How does Flutter persist backend auth state?
+A: <code>dio_cookie_manager</code> + <code>PersistCookieJar</code> stores session cookies across app restarts.</p>
+</li>
+</ol>
+<hr />
+<h2 id="d-database-and-gorm">D. Database and GORM</h2>
+<ol start="15">
+<li>
+<p>Q: Why GORM?
+A: Faster CRUD development, model-based schema mapping, query building, <code>Preload</code> for relations, and migration support.</p>
+</li>
+<li>
+<p>Q: How do migrations run?
+A: On backend startup through <code>PostgresService.AutoMigrate()</code> unless skipped via env flag.</p>
+</li>
+<li>
+<p>Q: What DB is used?
+A: PostgreSQL (Supabase in cloud; local Postgres for development/testing).</p>
+</li>
+<li>
+<p>Q: What is the role of PostgreSQL in auth?
+A: Stores user profile/domain state and ban flags; identity proof itself is by Firebase.</p>
+</li>
+<li>
+<p>Q: How is DB connection tuned?
+A: Connection pooling (<code>max open</code>, <code>max idle</code>, <code>conn max lifetime</code>) configured in <code>config/postgres.go</code>.</p>
+</li>
+</ol>
+<hr />
+<h2 id="e-roomspace-and-authorization-boundary">E. Roomspace and authorization boundary</h2>
+<ol start="20">
+<li>
+<p>Q: What is a roomspace technically?
+A: A shared tenancy boundary. Shared expenses, balances, and settlements are scoped by <code>roomspace_id</code>.</p>
+</li>
+<li>
+<p>Q: How do you prevent cross-room data access?
+A: <code>ValidateRoomspaceMembership()</code> middleware validates active membership before roomspace-scoped handlers execute.</p>
+</li>
+<li>
+<p>Q: How is join flow controlled?
+A: Invite-code join creates <code>join_requests</code> pending approval. Approved request activates membership in <code>roomspace_members</code>.</p>
+</li>
+</ol>
+<hr />
+<h2 id="f-expense-split-and-balance">F. Expense, split, and balance</h2>
+<ol start="23">
+<li>
+<p>Q: How are splits stored?
+A: Parent expense in <code>expenses</code>; participant obligations in <code>expense_splits</code>.</p>
+</li>
+<li>
+<p>Q: Where is net balance logic handled?
+A: Balance service computes net per user and settlement suggestions for roomspace members.</p>
+</li>
+<li>
+<p>Q: Why can “you owe” and “you get back” both appear in pairwise mode?
+A: Pairwise obligations can offset across different members; global net mode simplifies to final net settlements.</p>
+</li>
+</ol>
+<hr />
+<h2 id="g-recurring-and-notifications">G. Recurring and notifications</h2>
+<ol start="26">
+<li>
+<p>Q: Is recurring auto-added without user action?
+A: Current product logic uses notifications for due events; user can re-add/cancel through notification processing flow.</p>
+</li>
+<li>
+<p>Q: Where are recurring templates/notifications stored?
+A: <code>recurring_expense_templates</code> and <code>recurring_expense_notifications</code>.</p>
+</li>
+<li>
+<p>Q: How are reminders rate-limited?
+A: Backend reminder endpoint enforces limit behavior (e.g., 429 handling), and UI should map it to “limit reached” message.</p>
+</li>
+</ol>
+<hr />
+<h2 id="h-analytics-and-ml-bridge">H. Analytics and ML bridge</h2>
+<ol start="29">
+<li>
+<p>Q: Why do some analytics APIs return fallback values?
+A: Core summary can still be computed from DB while external ML endpoints (predictions/recommendations/anomalies) may be unavailable.</p>
+</li>
+<li>
+<p>Q: What is the ML bridge relationship?
+A: Backend calls separate ML service; if unreachable/errors, app should show graceful fallback/retry messaging.</p>
+</li>
+</ol>
+<hr />
+<h2 id="i-admin-and-moderation">I. Admin and moderation</h2>
+<ol start="31">
+<li>
+<p>Q: How does ban work end-to-end?
+A: Admin API updates <code>users.is_banned</code>, <code>ban_reason</code>, <code>banned_at</code>; middleware blocks subsequent protected calls and invalidates session.</p>
+</li>
+<li>
+<p>Q: Any security risk in admin today?
+A: Yes. In current <code>main.go</code>, <code>/api/admin/*</code> routes are public; production should protect them with admin auth/role checks.</p>
+</li>
+</ol>
+<hr />
+<h2 id="j-testing-and-production-readiness">J. Testing and production readiness</h2>
+<ol start="33">
+<li>
+<p>Q: How did you test backend modules?
+A: Go tests for handlers/services/middleware/models plus API collection tests; DB-backed tests for realistic behavior.</p>
+</li>
+<li>
+<p>Q: What would you improve before production?
+A: Secure admin routes, move sessions to Redis/DB, harden observability, and add stricter permission checks/audit logs.</p>
+</li>
+<li>
+<p>Q: Why not only Firebase and no backend session?
+A: Backend session simplifies server-side control (ban invalidation, cookie middleware, centralized authorization).</p>
+</li>
+</ol>
+<hr />
+<h2 id="k-quick-rapid-fire-one-liners">K. Quick rapid-fire one-liners</h2>
+<ol start="36">
+<li>
+<p>Q: ORM full form?
+A: Object-Relational Mapping.</p>
+</li>
+<li>
+<p>Q: CORS full form?
+A: Cross-Origin Resource Sharing.</p>
+</li>
+<li>
+<p>Q: Gin’s role?
+A: HTTP routing + middleware framework.</p>
+</li>
+<li>
+<p>Q: Dio’s role?
+A: Flutter HTTP client with interceptors and timeout controls.</p>
+</li>
+<li>
+<p>Q: Why <code>Preload</code> in GORM?
+A: Eager-load relations to avoid manual multi-query mapping in handlers.</p>
+</li>
+</ol>
+<hr />
+<h2 id="l-questions-you-can-ask-supervisor-back-good-impression">L. Questions you can ask supervisor back (good impression)</h2>
+<ol>
+<li>Should we prioritize Redis-backed sessions next for resilience across redeploys?</li>
+<li>Do you prefer role-based admin auth via middleware or dedicated admin identity provider?</li>
+<li>For analytics reliability, should we adopt queued async inference and cache-first responses?</li>
+<li>Should we enforce formal API versioning (<code>/api/v1</code>) before scaling?</li>
+</ol>
+<hr />
+<h2 id="m-flutter-frontend-deep-dive-questions">M. Flutter frontend deep-dive questions</h2>
+<ol start="41">
+<li>
+<p>Q: Why use Provider here instead of setState everywhere?
+A: Provider centralizes shared app state (roomspace selection, subscription, cached data) and avoids prop-drilling across screens.</p>
+</li>
+<li>
+<p>Q: How do you avoid stale UI after navigation?
+A: Key screens trigger refresh on return, and some flows use real-time/event streams plus smart cache invalidation.</p>
+</li>
+<li>
+<p>Q: How is offline behavior handled?
+A: App uses cache-first fetch in smart services; when network fails, cached values are shown with sync/retry behavior.</p>
+</li>
+<li>
+<p>Q: Where is API timeout configured?
+A: In <code>ApiService</code> via Dio <code>connectTimeout</code>, <code>receiveTimeout</code>, and <code>sendTimeout</code>.</p>
+</li>
+<li>
+<p>Q: How do you handle global API errors in Flutter?
+A: Dio interceptors normalize logging and centralize 401/403/ban/session handling.</p>
+</li>
+<li>
+<p>Q: Why use dialogs heavily (add/edit/recurring/details)?
+A: Dialogs keep users in context on dashboard/expense screens and reduce navigation complexity.</p>
+</li>
+<li>
+<p>Q: How does roomspace selection persist between logins?
+A: Roomspace provider persists last active roomspace key scoped by Firebase user ID.</p>
+</li>
+<li>
+<p>Q: What causes null-check operator crash in edit flow typically?
+A: Missing required payload for edit mode (e.g., absent model fields/splits/payer config) or reusing add-flow state without null guards.</p>
+</li>
+<li>
+<p>Q: How are permission prompts handled?
+A: First-time permissions dialog asks notification and SMS-related permissions for payment detection features.</p>
+</li>
+<li>
+<p>Q: Is UI currency consistent?
+A: Should be <code>Rs.</code>; if <code>$</code> appears it is a formatting bug in display components.</p>
+</li>
+</ol>
+<hr />
+<h2 id="n-go-gin-backend-deep-dive-questions">N. Go + Gin backend deep-dive questions</h2>
+<ol start="51">
+<li>
+<p>Q: Why <code>gin.Default()</code>?
+A: It bootstraps Gin with common middleware and router setup quickly; project then adds custom CORS/logging middleware.</p>
+</li>
+<li>
+<p>Q: Why group protected routes under <code>/api</code> with middleware?
+A: It avoids repeating auth checks per route and keeps access control consistent.</p>
+</li>
+<li>
+<p>Q: What does context enrichment mean in middleware?
+A: Middleware sets <code>user_id</code>, <code>email</code>, <code>session_id</code> in Gin context so handlers can trust and use authenticated identity.</p>
+</li>
+<li>
+<p>Q: Why not call DB directly in every handler?
+A: Service layer reduces duplication and keeps business rules testable independent of HTTP transport.</p>
+</li>
+<li>
+<p>Q: What is a transaction and where useful here?
+A: Transaction ensures multi-step DB changes succeed/fail together (e.g., roomspace creation + creator membership, join request processing).</p>
+</li>
+<li>
+<p>Q: Why use <code>Preload</code> in admin handlers?
+A: To return related entities (creator/user/payer) in one logical query pipeline for display-ready API responses.</p>
+</li>
+<li>
+<p>Q: What is the risk of very verbose middleware logging?
+A: Sensitive data leakage and noisy logs; production should sanitize and control log levels.</p>
+</li>
+<li>
+<p>Q: Why is ban check done in middleware instead of each handler?
+A: Centralized enforcement guarantees banned users are blocked across all protected features.</p>
+</li>
+<li>
+<p>Q: What is the tradeoff of in-memory sessions?
+A: Simple and fast, but not shared across instances and lost on restart.</p>
+</li>
+<li>
+<p>Q: How to make sessions production-grade?
+A: Move to Redis/DB-backed sessions with TTL, horizontal scaling support, and revocation controls.</p>
+</li>
+</ol>
+<hr />
+<h2 id="o-gorm-postgresql-advanced-questions">O. GORM + PostgreSQL advanced questions</h2>
+<ol start="61">
+<li>
+<p>Q: Difference between <code>First</code>, <code>Find</code>, and <code>Scan</code>?
+A: <code>First</code> expects one row and can fail not-found, <code>Find</code> loads list/records, <code>Scan</code> maps custom selected projections.</p>
+</li>
+<li>
+<p>Q: Why use <code>Count</code> with model query builders?
+A: To support pagination metadata separate from paged data retrieval.</p>
+</li>
+<li>
+<p>Q: What is N+1 problem and where can it appear?
+A: Extra queries per row when loading relations lazily; mitigated using <code>Preload</code>.</p>
+</li>
+<li>
+<p>Q: Why connection pool tuning matters?
+A: Controls DB concurrency, prevents connection exhaustion, and stabilizes latency.</p>
+</li>
+<li>
+<p>Q: Why Supabase needs <code>sslmode=require</code>?
+A: Cloud Postgres endpoints require TLS-secured connections.</p>
+</li>
+<li>
+<p>Q: Why AutoMigrate order matters?
+A: Dependent tables need parent tables ready first to avoid relation/constraint issues.</p>
+</li>
+<li>
+<p>Q: Why store Firebase UID in users table?
+A: It is stable identity key that maps external auth to internal domain data.</p>
+</li>
+<li>
+<p>Q: Should every table have indexes?
+A: Only on high-selectivity/lookup columns (UIDs, foreign keys, status/date filters); over-indexing hurts writes.</p>
+</li>
+<li>
+<p>Q: What is soft delete in GORM?
+A: Mark row deleted via timestamp instead of hard deletion; allows recoverability and audit.</p>
+</li>
+<li>
+<p>Q: Why use <code>WithContext(ctx)</code> in DB calls?
+A: Propagates request cancellation/timeouts to DB operations.</p>
+</li>
+</ol>
+<hr />
+<h2 id="p-auth-session-and-security-hard-questions">P. Auth, session, and security hard questions</h2>
+<ol start="71">
+<li>
+<p>Q: Why hybrid auth (Firebase + backend session)?
+A: Firebase handles identity proof; backend session simplifies domain authorization, cookie auth, and centralized ban/session invalidation.</p>
+</li>
+<li>
+<p>Q: Are cookies secure by default here?
+A: HttpOnly is used for session cookie, but production should enforce secure flags and strict environment config.</p>
+</li>
+<li>
+<p>Q: What happens if Firebase login succeeds but backend login fails?
+A: App treats it as authentication failure path and signs out/reset state to avoid partial login.</p>
+</li>
+<li>
+<p>Q: Why verify email for password users?
+A: Prevents unverified account misuse and improves trust/anti-abuse posture.</p>
+</li>
+<li>
+<p>Q: Is forgot-password handled by backend?
+A: No, current flow uses Firebase password reset email directly.</p>
+</li>
+<li>
+<p>Q: Why is admin ban-status endpoint risky if public?
+A: Potential user enumeration and moderation metadata exposure.</p>
+</li>
+<li>
+<p>Q: How would you secure admin endpoints?
+A: Add admin role middleware, protect routes under auth, and add audit logging/rate limits.</p>
+</li>
+<li>
+<p>Q: What is CSRF concern with cookie auth?
+A: Cookie-based auth can be CSRF-prone on web; mitigate with same-site policy/CSRF tokens depending on clients.</p>
+</li>
+<li>
+<p>Q: Why is session refresh endpoint useful?
+A: Extends active session safely without forcing frequent relogin.</p>
+</li>
+<li>
+<p>Q: What is least privilege in this system?
+A: Restrict route capabilities by user role/membership (roomspace/member/admin).</p>
+</li>
+</ol>
+<hr />
+<h2 id="q-roomspace-and-collaboration-edge-cases">Q. Roomspace and collaboration edge cases</h2>
+<ol start="81">
+<li>
+<p>Q: What if creator leaves roomspace?
+A: Ownership transfer logic promotes eligible member; if none remain, roomspace may be deleted.</p>
+</li>
+<li>
+<p>Q: How duplicate join requests are prevented?
+A: Service-level checks block duplicate pending requests and existing-member rejoin attempts.</p>
+</li>
+<li>
+<p>Q: How member removal is controlled?
+A: Only creator can remove others in current rule set; creator self-removal through dedicated leave flow.</p>
+</li>
+<li>
+<p>Q: Why validate roomspace membership middleware on read routes too?
+A: Prevents data leaks from unauthorized reads, not only writes.</p>
+</li>
+<li>
+<p>Q: Why pending join acceptance may not reflect instantly in app?
+A: Cache/state refresh timing; solve with refresh hooks/event-driven invalidation.</p>
+</li>
+<li>
+<p>Q: Should roomspace ID be UUID?
+A: Yes, UUID gives globally unique non-sequential IDs suitable for distributed systems.</p>
+</li>
+<li>
+<p>Q: What table stores roles?
+A: <code>roomspace_members</code> with role fields (<code>creator</code>, <code>admin</code>, <code>member</code>, etc.).</p>
+</li>
+<li>
+<p>Q: How invite code collision avoided?
+A: Generated code is checked against existing rows until unique.</p>
+</li>
+<li>
+<p>Q: Why active flag on membership?
+A: Supports logical leave/deactivation while retaining historical relationships.</p>
+</li>
+<li>
+<p>Q: What is tenancy boundary here?
+A: Roomspace acts as data partition boundary for shared-domain operations.</p>
+</li>
+</ol>
+<hr />
+<h2 id="r-expense-split-settlement-and-recurring-deep-questions">R. Expense, split, settlement, and recurring deep questions</h2>
+<ol start="91">
+<li>
+<p>Q: Equal split precision issue handling?
+A: Floating division may produce decimals; UI/backend should use consistent rounding policy for display and settlement.</p>
+</li>
+<li>
+<p>Q: Why global net settlement preferred over pairwise in your use case?
+A: It reduces circular obligations and gives minimal-transfer final settlement.</p>
+</li>
+<li>
+<p>Q: How suggested settlement is computed conceptually?
+A: Debtors and creditors are matched by net amounts until all net balances resolve.</p>
+</li>
+<li>
+<p>Q: Why can dashboard show confusing owe/get-back simultaneously?
+A: If pairwise obligations are surfaced instead of net simplification.</p>
+</li>
+<li>
+<p>Q: Where recurring template and generated reminder differ?
+A: Template defines rule (frequency/members/payer config); notification is due-instance trigger to process action.</p>
+</li>
+<li>
+<p>Q: Does recurring auto-create expense always?
+A: Current behavior is user-driven notification processing flow unless explicit auto-generation path is enabled.</p>
+</li>
+<li>
+<p>Q: Why overdue may appear incorrectly?
+A: Date sync/state refresh mismatch between recurring detail source and expense-screen snapshot.</p>
+</li>
+<li>
+<p>Q: Why multi-payer support is important?
+A: Real shared expenses often have split payers; recurring edit/add must align with normal add-expense model.</p>
+</li>
+<li>
+<p>Q: What causes recurring notifications SQL type error (<code>text = uuid</code>)?
+A: Mismatched DB column types in query joins/filters; fix by schema alignment/casting correction.</p>
+</li>
+<li>
+<p>Q: Why reminder limit (429) UX message should be custom?
+A: Better user clarity: “Reminder limit reached for today” instead of generic failure.</p>
+</li>
+</ol>
+<hr />
+<h2 id="s-analytics-ml-bridge-and-fallback-questions">S. Analytics, ML bridge, and fallback questions</h2>
+<ol start="101">
+<li>
+<p>Q: Why summary can be 200 while predictions endpoint is 500?
+A: Summary has local DB fallback computations, but predictions/recommendations/anomalies depend on ML bridge availability.</p>
+</li>
+<li>
+<p>Q: What is graceful degradation in analytics?
+A: Show usable summary/trends and warnings when advanced ML endpoints fail.</p>
+</li>
+<li>
+<p>Q: Why have warnings in summary response?
+A: To expose partial degradation transparently (<code>ML unavailable; using fallback</code>).</p>
+</li>
+<li>
+<p>Q: How should frontend handle ML endpoint failures?
+A: Non-blocking UI with retry option and explanatory copy, not hard-crash or blank page.</p>
+</li>
+<li>
+<p>Q: Why separate ML bridge service?
+A: Decouples heavy model/runtime dependencies from core API service.</p>
+</li>
+<li>
+<p>Q: Is this classification or regression?
+A: Spending prediction and amount forecasting are regression-style outputs; anomaly/recommendation logic may combine heuristics + model outputs.</p>
+</li>
+<li>
+<p>Q: What if ML latency is high?
+A: Use timeout bounds, caching, async precompute, or queue-based inference.</p>
+</li>
+<li>
+<p>Q: Why trends endpoint still useful without ML?
+A: Historical aggregation alone provides strong analytical value.</p>
+</li>
+<li>
+<p>Q: What does “future projection unavailable” indicate?
+A: ML inference failed/timeouts/no model output for given inputs.</p>
+</li>
+<li>
+<p>Q: What is first production fix for analytics reliability?
+A: Add robust fallback contract and telemetry around ML bridge failures.</p>
+</li>
+</ol>
+<hr />
+<h2 id="t-notifications-permissions-and-payment-detection-questions">T. Notifications, permissions, and payment detection questions</h2>
+<ol start="111">
+<li>
+<p>Q: Why need notification and SMS permissions?
+A: For payment auto-detection from app notifications and bank/payment SMS content.</p>
+</li>
+<li>
+<p>Q: Is permission requested at first launch?
+A: Yes via first-time permissions dialog flow.</p>
+</li>
+<li>
+<p>Q: Can app work without these permissions?
+A: Yes core manual expense features work; auto-detection capabilities degrade.</p>
+</li>
+<li>
+<p>Q: How avoid duplicate detected payments?
+A: Validation/dedupe logic checks recent transaction similarity/exact matches.</p>
+</li>
+<li>
+<p>Q: How to test payment detection safely?
+A: Use test notification pathways and inspect parser results/logs.</p>
+</li>
+<li>
+<p>Q: Why payment settings include app and merchant filters?
+A: To reduce false positives and user-noise.</p>
+</li>
+<li>
+<p>Q: Where detected payments are stored?
+A: <code>payment_notifications</code> table and related processing endpoints.</p>
+</li>
+<li>
+<p>Q: What if permissions revoked later?
+A: Feature should show disabled state and prompt user to re-enable permissions.</p>
+</li>
+<li>
+<p>Q: Why have processed flag for payment notifications?
+A: Supports queue-like lifecycle and avoids repeated handling.</p>
+</li>
+<li>
+<p>Q: What is biggest false-positive source?
+A: Ambiguous SMS formats and non-payment notification text patterns.</p>
+</li>
+</ol>
+<hr />
+<h2 id="u-stripesubscriptionprofile-questions">U. Stripe/subscription/profile questions</h2>
+<ol start="121">
+<li>
+<p>Q: Why both eSewa and Stripe paths?
+A: Multi-channel payments for different flows/users; subscription and settlement verification endpoints exist for each supported provider path.</p>
+</li>
+<li>
+<p>Q: How subscription state is tracked?
+A: User plan fields plus subscription payment/history tables and current subscription endpoints.</p>
+</li>
+<li>
+<p>Q: What profile data is editable?
+A: Name/phone/QR image and related account metadata from profile endpoints.</p>
+</li>
+<li>
+<p>Q: Why separate payment verification endpoint after intent creation?
+A: Ensures server-side confirmation before updating subscription/entitlement state.</p>
+</li>
+<li>
+<p>Q: What is idempotency concern in payment flows?
+A: Duplicate callbacks/retries can double-process unless unique references and verification guards are used.</p>
+</li>
+<li>
+<p>Q: Why keep payment history endpoint?
+A: Auditability, user trust, and reconciliation support.</p>
+</li>
+<li>
+<p>Q: How cancellation/reactivation flows work conceptually?
+A: Toggle effective subscription state and maintain historical payment records.</p>
+</li>
+<li>
+<p>Q: What should happen when plan expires?
+A: Enforce free-plan limits while preserving user data.</p>
+</li>
+<li>
+<p>Q: Where to add webhook validation logic?
+A: Backend payment handlers/services with signature verification and replay protection.</p>
+</li>
+<li>
+<p>Q: Why test mode keys should never be in app release?
+A: Security and compliance; secrets must stay server-side/env-managed.</p>
+</li>
+</ol>
+<hr />
+<h2 id="v-deployment-devops-and-reliability-questions">V. Deployment, DevOps, and reliability questions</h2>
+<ol start="131">
+<li>
+<p>Q: What is your current runtime topology?
+A: Flutter app clients -&gt; backend (local/Render) -&gt; PostgreSQL (Supabase/local) + optional ML bridge service on Render.</p>
+</li>
+<li>
+<p>Q: Why did local login fail with connection refused?
+A: App pointed to LAN backend URL while server was unreachable/not running at that address.</p>
+</li>
+<li>
+<p>Q: Why Render login timed out at 30s?
+A: Cold start/slow backend response/network path; client timed out before response.</p>
+</li>
+<li>
+<p>Q: How to mitigate cold-start timeout?
+A: Increase initial login timeout, warm instances, optimize startup migrations, and use health checks.</p>
+</li>
+<li>
+<p>Q: Why SKIP_STARTUP_MIGRATIONS env exists?
+A: To avoid platform startup timeout penalties during boot on constrained hosting.</p>
+</li>
+<li>
+<p>Q: What logs are most useful in incidents?
+A: Request path/status, DB errors, timeout metrics, auth/session failures, and ML bridge error rates.</p>
+</li>
+<li>
+<p>Q: What should be environment-driven?
+A: Base URLs, DB URLs, secrets, payment keys, CORS origin allowlist, feature flags.</p>
+</li>
+<li>
+<p>Q: How do you do safe schema changes?
+A: Backward-compatible migrations first, deploy app/backend in compatible order, then cleanup.</p>
+</li>
+<li>
+<p>Q: Should admin APIs be internet-open?
+A: No; guard with auth/role checks and ideally network controls.</p>
+</li>
+<li>
+<p>Q: What is minimum production observability set?
+A: Structured logs, error tracking, latency percentiles, uptime checks, and alerting thresholds.</p>
+</li>
+</ol>
+<hr />
+<h2 id="w-testing-and-debugging-deep-questions">W. Testing and debugging deep questions</h2>
+<ol start="141">
+<li>
+<p>Q: What test layers are present?
+A: Unit-style package tests, DB-backed integration tests, and API request collection checks.</p>
+</li>
+<li>
+<p>Q: How to reproduce recurring notification bug quickly?
+A: Seed template with due date near current date, call notifications endpoint, inspect SQL/type mismatch and model field types.</p>
+</li>
+<li>
+<p>Q: How to debug stale roomspace after accept?
+A: Trace provider refresh triggers, notification event bus updates, and cache invalidation keys.</p>
+</li>
+<li>
+<p>Q: Why is integration test data reset important?
+A: Prevents flaky outcomes from leftover state and keeps assertions deterministic.</p>
+</li>
+<li>
+<p>Q: Which bug class often appears in Flutter forms?
+A: Null-state mismatch between create and edit modes.</p>
+</li>
+<li>
+<p>Q: How to validate settlement math correctness?
+A: Use fixed known scenarios with expected net outputs and compare service results + UI rendering.</p>
+</li>
+<li>
+<p>Q: What is a good API error response contract?
+A: Consistent fields (<code>success</code>, <code>error</code>, optional <code>details</code>, actionable code) for deterministic client handling.</p>
+</li>
+<li>
+<p>Q: Why include warnings in successful responses?
+A: Communicates degraded mode without breaking consumer flow.</p>
+</li>
+<li>
+<p>Q: What should be tested for ban flow?
+A: ban apply -&gt; protected call forbidden -&gt; session invalidated -&gt; client logout + ban message.</p>
+</li>
+<li>
+<p>Q: How to test reminder limit rule?
+A: Send reminder &gt;2 times within window and assert <code>429</code> plus precise UI message mapping.</p>
+</li>
+</ol>
+<hr />
+<h2 id="x-2-day-study-strategy-for-your-9-docs">X. 2-Day Study strategy for your 9 docs</h2>
+<p>Day 1 (Understanding pass):
+1. <code>full-frontend-backend-stack-explained.md</code>
+2. <code>full-authentication-flow.md</code>
+3. <code>full-roomspace-flow.md</code>
+4. <code>full-expense-system-flow.md</code>
+5. <code>full-settings-flow.md</code></p>
+<p>Day 2 (Viva answer + edge cases):
+1. <code>full-analytics-ml-flow.md</code>
+2. <code>full-profile-subscription-stripe-flow.md</code>
+3. <code>full-admin-flow.md</code>
+4. <code>flutter-go-supervisor-questions.md</code> (full revision + mock viva)</p>
+<p>How to practice:
+1. Read each section title and explain it aloud in 60-90 seconds.
+2. For every bug you fixed, prepare: problem, root cause, fix, and proof.
+3. Memorize 20 strongest answers from sections B, N, O, P, R, V.
+4. End with 10 rapid-fire terms (CORS, ORM, middleware, session, preload, etc.).</p>
+<hr />
+<h2 id="y-final-confidence-questions-must-know">Y. Final confidence questions (must-know)</h2>
+<ol>
+<li>Can you explain your full login flow in 45 seconds?</li>
+<li>Can you explain why cookie session is used after Firebase token verification?</li>
+<li>Can you explain roomspace authorization boundary and middleware checks?</li>
+<li>Can you explain one recurring bug and how you diagnosed/fixed it?</li>
+<li>Can you explain one analytics failure mode and fallback behavior?</li>
+<li>Can you explain ban enforcement end-to-end?</li>
+<li>Can you explain why admin public routes are risky and how to secure them?</li>
+<li>Can you explain how GORM migrations and table relations work in your app?</li>
+<li>Can you explain one performance bottleneck and mitigation?</li>
+<li>Can you explain one production hardening plan for next version?</li>
+</ol></body></html>

@@ -205,6 +205,10 @@ class ApiService {
       final response = await _dio.post(
         '/api/auth/login',
         data: {'firebase_token': firebaseToken},
+        options: Options(
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 90),
+        ),
       );
       
       // After successful login, check if user is banned
@@ -294,7 +298,10 @@ class ApiService {
 
   Future<Map<String, dynamic>> get(String path) async {
     try {
-      final response = await _dio.get(path);
+      final response = await _requestWithCloudflareRetry(
+        () => _dio.get(path),
+        path: path,
+      );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
@@ -311,7 +318,10 @@ class ApiService {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final response = await _dio.post(path, data: data);
+      final response = await _requestWithCloudflareRetry(
+        () => _dio.post(path, data: data),
+        path: path,
+      );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
@@ -328,7 +338,10 @@ class ApiService {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final response = await _dio.put(path, data: data);
+      final response = await _requestWithCloudflareRetry(
+        () => _dio.put(path, data: data),
+        path: path,
+      );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
@@ -345,7 +358,10 @@ class ApiService {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final response = await _dio.delete(path, data: data);
+      final response = await _requestWithCloudflareRetry(
+        () => _dio.delete(path, data: data),
+        path: path,
+      );
       return response.data as Map<String, dynamic>;
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
@@ -885,5 +901,34 @@ class ApiService {
     // and reinitialize the Dio instance
     print('Backend IP update requested: $newIp');
     // Note: This would require reinitializing the Dio instance with new baseUrl
+  }
+
+  Future<Response<dynamic>> _requestWithCloudflareRetry(
+    Future<Response<dynamic>> Function() requestFn, {
+    required String path,
+  }) async {
+    try {
+      return await requestFn();
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 520) {
+        int retryAfterSeconds = 2;
+        final data = e.response?.data;
+        if (data is Map<String, dynamic>) {
+          final retryAfter = data['retry_after'];
+          if (retryAfter is int) {
+            retryAfterSeconds = retryAfter;
+          } else if (retryAfter is String) {
+            retryAfterSeconds = int.tryParse(retryAfter) ?? retryAfterSeconds;
+          }
+        }
+        // Keep retry bounded so the UI is not blocked too long.
+        final boundedRetry = retryAfterSeconds.clamp(1, 8);
+        print('⚠️ Cloudflare 520 on $path. Retrying in ${boundedRetry}s...');
+        await Future.delayed(Duration(seconds: boundedRetry));
+        return await requestFn();
+      }
+      rethrow;
+    }
   }
 }

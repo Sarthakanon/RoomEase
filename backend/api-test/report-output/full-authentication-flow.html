@@ -1,0 +1,361 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RoomEase Full Authentication Flow (Frontend + Backend)</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0.6in; }
+h1, h2, h3 { color: #0f172a; margin-top: 16pt; margin-bottom: 8pt; }
+h1 { font-size: 20pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+p { margin: 6pt 0; }
+ul, ol { margin: 6pt 0 6pt 18pt; }
+li { margin: 2pt 0; }
+code { font-family: Consolas, 'Courier New', monospace; background: #f8fafc; padding: 1pt 3pt; border-radius: 3px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt; border-radius: 4px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #cbd5e1; padding: 6pt; text-align: left; }
+th { background: #f1f5f9; }
+blockquote { border-left: 3px solid #94a3b8; margin: 8pt 0; padding: 4pt 10pt; color: #334155; background: #f8fafc; }
+</style></head><body><h1 id="roomease-full-authentication-flow-frontend-backend">RoomEase Full Authentication Flow (Frontend + Backend)</h1>
+<p>This document explains exactly how authentication works in your current codebase.</p>
+<hr />
+<h2 id="technical-summary-paragraph">Technical Summary Paragraph</h2>
+<p>RoomEase authentication is implemented as a federated identity plus server-session architecture: the Flutter client first authenticates with Firebase Authentication (Google OAuth or email/password) and obtains a Firebase ID token, then exchanges that token with the Go backend at <code>/api/auth/login</code>. The backend verifies the token with Firebase Admin SDK, upserts the user record in PostgreSQL by <code>firebase_uid</code>, and issues an HttpOnly <code>session_id</code> cookie backed by a server-side in-memory session store (24h TTL). From that point onward, protected API authorization is cookie/session driven via Gin middleware, which also enriches request context (<code>user_id</code>, <code>email</code>) and enforces ban checks from PostgreSQL. In short, Firebase performs identity proofing, PostgreSQL stores application user/domain state, and backend middleware enforces runtime access control for all authenticated operations.</p>
+<hr />
+<h2 id="1-high-level-architecture">1. High-level architecture</h2>
+<p>Your app uses <strong>hybrid auth</strong>:</p>
+<ol>
+<li><strong>Firebase Authentication</strong> handles identity proof (Google sign-in, email/password sign-up/sign-in, forgot password email).</li>
+<li><strong>Go backend</strong> verifies Firebase ID token and creates its own <strong>server session</strong>.</li>
+<li>App then uses <strong>cookie-based session auth</strong> (<code>session_id</code>) for all protected backend APIs.</li>
+<li><strong>PostgreSQL</strong> stores user profile + domain data (roomspaces, expenses, etc.), and also user ban status.</li>
+</ol>
+<p>Important: current backend auth is <strong>session cookie based</strong>, not JWT-based.</p>
+<hr />
+<h2 id="2-frontend-auth-files-and-what-each-does">2. Frontend auth files and what each does</h2>
+<h2 id="core-frontend-auth-files">Core frontend auth files</h2>
+<ul>
+<li><code>lib/services/firebase_auth_service.dart</code></li>
+<li>Wraps Firebase client SDK (<code>firebase_auth</code>) + Google SDK (<code>google_sign_in</code>).</li>
+<li>
+<p>Handles:</p>
+<ul>
+<li>email signup</li>
+<li>email login</li>
+<li>Google login</li>
+<li>send email verification</li>
+<li>send password reset email</li>
+<li>sign out</li>
+</ul>
+</li>
+<li>
+<p><code>lib/features/auth/controllers/auth_controller.dart</code></p>
+</li>
+<li>Orchestrates app login/signup flow.</li>
+<li>After Firebase login, fetches Firebase ID token and calls backend <code>/api/auth/login</code>.</li>
+<li>
+<p>For signup (email/password), does <strong>not</strong> login backend until user verifies email and logs in later.</p>
+</li>
+<li>
+<p><code>lib/services/api_service.dart</code></p>
+</li>
+<li>HTTP client (<code>dio</code>) with cookie manager.</li>
+<li>Calls backend login/logout/verify/refresh.</li>
+<li>
+<p>Persists cookie on device via <code>PersistCookieJar</code>.</p>
+</li>
+<li>
+<p><code>lib/features/auth/presentation/login_screen.dart</code></p>
+</li>
+<li>Login UI.</li>
+<li>
+<p>Calls <code>AuthController.loginWithEmail()</code> / <code>loginWithGoogle()</code>.</p>
+</li>
+<li>
+<p><code>lib/features/auth/presentation/signup_screen.dart</code></p>
+</li>
+<li>Signup UI.</li>
+<li>
+<p>Creates Firebase account, sends email verification, then sends user back to login.</p>
+</li>
+<li>
+<p><code>lib/features/auth/presentation/forgot_password_screen.dart</code></p>
+</li>
+<li>
+<p>Calls Firebase reset email flow.</p>
+</li>
+<li>
+<p><code>lib/widgets/auth_state_listener.dart</code></p>
+</li>
+<li>Watches Firebase auth state and routes user to login on sign-out.</li>
+</ul>
+<hr />
+<h2 id="3-backend-auth-files-and-what-each-does-go">3. Backend auth files and what each does (Go)</h2>
+<h2 id="core-backend-auth-files">Core backend auth files</h2>
+<ul>
+<li><code>backend/main.go</code></li>
+<li>Initializes Firebase Admin SDK + PostgreSQL + in-memory session store.</li>
+<li>Registers routes.</li>
+<li>Public route: <code>POST /api/auth/login</code>.</li>
+<li>
+<p>Protected routes use <code>middleware.AuthMiddleware()</code>.</p>
+</li>
+<li>
+<p><code>backend/handlers/auth.go</code></p>
+</li>
+<li><code>Login</code>: verifies Firebase token, upserts user in Postgres, creates session, sets <code>session_id</code> cookie.</li>
+<li><code>Logout</code>: deletes session + clears cookie.</li>
+<li><code>Verify</code>: checks session validity from middleware context.</li>
+<li>
+<p><code>Refresh</code>: extends session expiry.</p>
+</li>
+<li>
+<p><code>backend/services/firebase.go</code></p>
+</li>
+<li><code>VerifyToken(idToken)</code> via Firebase Admin (<code>VerifyIDToken</code>).</li>
+<li>
+<p>Extracts <code>UID</code>, <code>email</code>, <code>name</code> claims.</p>
+</li>
+<li>
+<p><code>backend/middleware/auth.go</code></p>
+</li>
+<li>Reads <code>session_id</code> cookie.</li>
+<li>Validates session from session store.</li>
+<li>Loads ban status (from Postgres) and blocks banned users.</li>
+<li>
+<p>Sets context values: <code>user_id</code>, <code>email</code>, <code>session_id</code>.</p>
+</li>
+<li>
+<p><code>backend/services/session.go</code></p>
+</li>
+<li>In-memory session store (<code>map + mutex</code>).</li>
+<li>Generates random session IDs (32 bytes -&gt; 64 hex chars).</li>
+<li>
+<p>24h session TTL support + cleanup goroutine.</p>
+</li>
+<li>
+<p><code>backend/models/session.go</code></p>
+</li>
+<li>
+<p>Session model (<code>id</code>, <code>user_id</code>, <code>email</code>, <code>created_at</code>, <code>expires_at</code>).</p>
+</li>
+<li>
+<p><code>backend/services/postgres.go</code></p>
+</li>
+<li>
+<p>User lookup/creation (<code>GetUserByFirebaseUID</code>, <code>CreateUser</code>, etc.).</p>
+</li>
+<li>
+<p><code>backend/config/firebase.go</code></p>
+</li>
+<li>Initializes Firebase Admin credentials (env JSON/env fields/file fallback).</li>
+</ul>
+<hr />
+<h2 id="4-exact-login-flow-google">4. Exact login flow (Google)</h2>
+<ol>
+<li>User taps Google login in <code>login_screen.dart</code>.</li>
+<li><code>AuthController.loginWithGoogle()</code> calls <code>FirebaseAuthService.signInWithGoogle()</code>.</li>
+<li>Firebase SDK signs in user locally and returns Firebase user.</li>
+<li>App calls <code>user.getIdToken()</code>.</li>
+<li>App sends token to backend:
+   - <code>POST /api/auth/login</code>
+   - body: <code>{ "firebase_token": "&lt;Firebase ID Token&gt;" }</code></li>
+<li>Backend <code>AuthHandler.Login</code>:
+   - verifies token with Firebase Admin (<code>services.VerifyToken</code>).
+   - finds or creates user in Postgres by <code>firebase_uid</code>.
+   - creates server session with 24h expiry.
+   - sets <code>HttpOnly</code> cookie <code>session_id</code>.</li>
+<li>App stores cookie via Dio cookie manager.</li>
+<li>Further API calls are authenticated via cookie.</li>
+</ol>
+<hr />
+<h2 id="5-exact-login-flow-emailpassword">5. Exact login flow (email/password)</h2>
+<ol>
+<li>User signs in using Firebase email/password (<code>FirebaseAuthService.signInWithEmailAndPassword</code>).</li>
+<li>App enforces <code>emailVerified == true</code>; otherwise signs out and blocks login.</li>
+<li>If verified, app gets Firebase ID token.</li>
+<li>App calls backend <code>/api/auth/login</code> same as Google flow.</li>
+<li>Backend verifies token, creates session cookie.</li>
+</ol>
+<hr />
+<h2 id="6-tokenjwt-details-what-is-actually-used">6. Token/JWT details (what is actually used)</h2>
+<ul>
+<li><strong>Sent from app to backend once at login</strong>:</li>
+<li>Firebase <strong>ID token</strong> (JWT issued by Firebase).</li>
+<li><strong>Used for backend session after login</strong>:</li>
+<li><code>session_id</code> cookie (opaque random token, server-side session store).</li>
+<li><strong>For protected APIs</strong>:</li>
+<li>Cookie auth (<code>session_id</code>) only.</li>
+</ul>
+<p>So in your current implementation:
+- Firebase JWT is used for initial authentication proof.
+- App/backend then switch to cookie session model.
+- Backend is <strong>not issuing its own JWT</strong> for API auth.</p>
+<p>Note: <code>github.com/golang-jwt/jwt/v4</code> appears in <code>go.mod</code> as indirect dependency but not used in this main auth flow.</p>
+<hr />
+<h2 id="7-how-verification-is-done">7. How verification is done</h2>
+<h2 id="firebase-verification">Firebase verification</h2>
+<ul>
+<li>Backend calls Firebase Admin <code>VerifyIDToken</code> in <code>backend/services/firebase.go</code>.</li>
+<li>If invalid/expired =&gt; backend returns 401.</li>
+</ul>
+<h2 id="session-verification">Session verification</h2>
+<ul>
+<li>Every protected route passes through <code>backend/middleware/auth.go</code>.</li>
+<li>Middleware checks <code>session_id</code> cookie in session store.</li>
+<li>If missing/invalid/expired =&gt; 401.</li>
+</ul>
+<h2 id="ban-verification">Ban verification</h2>
+<ul>
+<li>Middleware also checks user ban flags in Postgres (<code>models.User</code> via <code>config.DB</code>).</li>
+<li>If banned =&gt; 403 and forces logout behavior client-side.</li>
+</ul>
+<hr />
+<h2 id="8-is-postgresql-included-in-login-what-is-its-role">8. Is PostgreSQL included in login? What is its role?</h2>
+<p>Yes, PostgreSQL is part of login flow.</p>
+<p>During <code>/api/auth/login</code>:
+- Backend checks if user exists by <code>firebase_uid</code>.
+- If not exists, creates user row.
+- If exists, may sync name from Firebase.</p>
+<p>PostgreSQL roles in auth ecosystem:
+- stores app user records and metadata
+- stores ban/suspension flags
+- stores all business-domain data (roomspaces/expenses/etc.)</p>
+<p>PostgreSQL is <strong>not</strong> verifying password or Google OAuth directly; Firebase does that.</p>
+<hr />
+<h2 id="9-create-account-flow">9. Create account flow</h2>
+<p>Current create-account path uses Firebase email/password.</p>
+<ol>
+<li><code>SignupScreen</code> -&gt; <code>AuthController.signUpWithEmail(...)</code>.</li>
+<li><code>FirebaseAuthService.signUpWithEmailAndPassword(...)</code>:
+   - creates Firebase user
+   - sets display name
+   - sends email verification</li>
+<li>Controller creates Firestore user doc (marked as non-critical/backward compatibility).</li>
+<li>User is asked to verify email and then login.</li>
+<li>Backend session is <strong>not</strong> created at signup time; created on actual login.</li>
+</ol>
+<hr />
+<h2 id="10-forgot-password-flow">10. Forgot password flow</h2>
+<p><code>ForgotPasswordScreen</code> calls:
+- <code>FirebaseAuthService.sendPasswordResetEmail(email)</code>
+- internally <code>FirebaseAuth.sendPasswordResetEmail</code></p>
+<p>This is handled by Firebase directly (email reset link workflow).
+No backend password reset API is used in this flow.</p>
+<hr />
+<h2 id="101-change-password-flow-from-settings">10.1 Change password flow (from Settings)</h2>
+<p>Change password is implemented on the Firebase side and is triggered from Settings UI.</p>
+<p>Frontend flow:
+1. <code>SettingsScreen._showChangePasswordDialog()</code>
+2. <code>FirebaseAuthService.changePassword(currentPassword, newPassword)</code>
+3. Internally:
+   - <code>EmailAuthProvider.credential(email, currentPassword)</code>
+   - <code>user.reauthenticateWithCredential(...)</code>
+   - <code>user.updatePassword(newPassword)</code></p>
+<p>Important behavior:
+- This flow works only for users with email/password credentials.
+- For Google-only accounts, password change is not managed by your backend; identity/provider policy is handled by Firebase/Google.
+- No <code>/api/auth/change-password</code> endpoint is used in current backend.</p>
+<hr />
+<h2 id="11-packages-handling-auth">11. Packages handling auth</h2>
+<h2 id="flutter-side">Flutter side</h2>
+<ul>
+<li><code>firebase_auth</code></li>
+<li><code>google_sign_in</code></li>
+<li><code>dio</code></li>
+<li><code>dio_cookie_manager</code></li>
+<li><code>cookie_jar</code></li>
+</ul>
+<h2 id="backend-go-side">Backend Go side</h2>
+<ul>
+<li><code>firebase.google.com/go/v4</code> (Admin SDK)</li>
+<li><code>firebase.google.com/go/v4/auth</code></li>
+<li><code>github.com/gin-gonic/gin</code></li>
+<li>in-memory session store implementation in your own code (<code>services/session.go</code>)</li>
+</ul>
+<hr />
+<h2 id="12-key-observations-caveats-in-current-implementation">12. Key observations / caveats in current implementation</h2>
+<ol>
+<li>Backend sessions are in-memory (<code>NewInMemorySessionStore</code>).
+   - Sessions are lost on backend restart/redeploy.</li>
+<li>Cookie in <code>auth.go</code> currently sets <code>secure=false</code>.
+   - Should be <code>true</code> in production HTTPS-only environments.</li>
+<li>Admin routes in <code>main.go</code> are currently public (comment says add admin auth later).</li>
+<li>Firebase is source of identity; Postgres is source of app data and authorization context.</li>
+</ol>
+<hr />
+<h2 id="13-exact-frontend-to-backend-method-mapping-auth">13. Exact Frontend-to-Backend Method Mapping (Auth)</h2>
+<p>Frontend method call chain for auth:</p>
+<ol>
+<li>
+<p>Google login:
+- <code>LoginScreen._googleLogin()</code>
+- <code>AuthController.loginWithGoogle()</code>
+- <code>FirebaseAuthService.signInWithGoogle()</code>
+- <code>User.getIdToken()</code>
+- <code>ApiService.login(idToken)</code> -&gt; <code>POST /api/auth/login</code></p>
+</li>
+<li>
+<p>Email login:
+- <code>LoginScreen._login()</code>
+- <code>AuthController.loginWithEmail(email, password)</code>
+- <code>FirebaseAuthService.signInWithEmailAndPassword(...)</code>
+- <code>User.getIdToken()</code>
+- <code>ApiService.login(idToken)</code> -&gt; <code>POST /api/auth/login</code></p>
+</li>
+<li>
+<p>Logout:
+- <code>AuthController.logout()</code>
+- <code>ApiService.logout()</code> -&gt; <code>POST /api/auth/logout</code>
+- <code>FirebaseAuthService.signOut()</code></p>
+</li>
+<li>
+<p>Session verify/refresh:
+- <code>ApiService.verifySession()</code> -&gt; <code>GET /api/auth/verify</code>
+- <code>ApiService.refreshSession()</code> -&gt; <code>POST /api/auth/refresh</code></p>
+</li>
+<li>
+<p>Forgot password:
+- <code>ForgotPasswordScreen</code> submit
+- <code>FirebaseAuthService.sendPasswordResetEmail(email)</code>
+- Firebase sends reset email directly</p>
+</li>
+<li>
+<p>Change password (settings):
+- <code>SettingsScreen._showChangePasswordDialog()</code>
+- <code>FirebaseAuthService.changePassword(currentPassword, newPassword)</code>
+- <code>EmailAuthProvider.credential(...)</code> + <code>reauthenticateWithCredential(...)</code> + <code>updatePassword(...)</code></p>
+</li>
+</ol>
+<p>Backend auth handlers serving above:
+- <code>AuthHandler.Login</code> (<code>backend/handlers/auth.go</code>)
+- <code>AuthHandler.Logout</code> (<code>backend/handlers/auth.go</code>)
+- <code>AuthHandler.Verify</code> (<code>backend/handlers/auth.go</code>)
+- <code>AuthHandler.Refresh</code> (<code>backend/handlers/auth.go</code>)</p>
+<p>Token/session bridge used for frontend-backend connection:
+- Request body field: <code>firebase_token</code> (Firebase ID token JWT)
+- Response/session mechanism: <code>session_id</code> HttpOnly cookie
+- Subsequent API auth: cookie-based via <code>AuthMiddleware</code></p>
+<hr />
+<h2 id="14-one-line-summary">14. One-line summary</h2>
+<p>RoomEase auth = <strong>Firebase identity token at login</strong> -&gt; <strong>backend verifies with Firebase Admin</strong> -&gt; <strong>backend creates cookie session (<code>session_id</code>)</strong> -&gt; <strong>all protected APIs use session middleware + Postgres checks</strong>.</p>
+<hr />
+<h2 id="15-database-tables-used-auth">15. Database Tables Used (Auth)</h2>
+<p>Tables used directly in auth flow:</p>
+<ol>
+<li>
+<p><code>users</code>
+- Purpose:
+  - maps Firebase identity (<code>firebase_uid</code>) to app user profile
+  - stores email/name and account-level flags (<code>is_banned</code>, <code>ban_reason</code>, etc.)
+- Used by:
+  - <code>AuthHandler.Login</code> for find-or-create user behavior
+  - <code>AuthMiddleware</code> ban check path</p>
+</li>
+<li>
+<p><code>session</code> storage (not a DB table in current implementation)
+- Current state:
+  - backend sessions are in-memory (<code>InMemorySessionStore</code>)
+  - cookie <code>session_id</code> points to memory map entry
+- Operational implication:
+  - sessions are cleared on backend restart/redeploy</p>
+</li>
+</ol></body></html>

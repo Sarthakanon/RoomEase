@@ -303,15 +303,19 @@ class _ExpenseHistoryScreenState extends State<ExpenseHistoryScreen> {
                         color: Colors.grey.shade500,
                       ),
                       const SizedBox(width: 4),
-                      Text(
-                        item.performedByName,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
+                      Flexible(
+                        child: Text(
+                          item.performedByName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Icon(
                         Icons.access_time,
                         size: 14,
@@ -320,6 +324,8 @@ class _ExpenseHistoryScreenState extends State<ExpenseHistoryScreen> {
                       const SizedBox(width: 4),
                       Text(
                         _formatTime(item.timestamp),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade500,

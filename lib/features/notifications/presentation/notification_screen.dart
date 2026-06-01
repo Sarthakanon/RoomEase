@@ -59,6 +59,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = _notifications.isEmpty && _joinRequests.isEmpty && _paymentNotifications.isEmpty);
     try {
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+
       Map<String, dynamic> notificationsResult = {'data': _notifications};
       Map<String, dynamic> joinRequestsResult = {'data': _joinRequests};
       List<PaymentNotification> paymentNotificationsResult = _paymentNotifications;
@@ -75,8 +78,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
       } catch (_) {}
 
       setState(() {
-        _notifications = notificationsResult['data'] ?? [];
-        _joinRequests = joinRequestsResult['data'] ?? [];
+        final rawNotifications = (notificationsResult['data'] ?? []) as List<dynamic>;
+        final rawJoinRequests = (joinRequestsResult['data'] ?? []) as List<dynamic>;
+
+        _notifications = _filterNotificationsForActiveRoomspace(rawNotifications, activeRoomspaceId);
+        _joinRequests = _filterJoinRequestsForActiveRoomspace(rawJoinRequests, activeRoomspaceId);
         _paymentNotifications = paymentNotificationsResult;
         _isLoading = false;
       });
@@ -88,13 +94,75 @@ class _NotificationScreenState extends State<NotificationScreen> {
       ]).then((fresh) {
         if (!mounted) return;
         setState(() {
-          _notifications = (fresh[0]['data'] ?? []) as List<dynamic>;
-          _joinRequests = (fresh[1]['data'] ?? []) as List<dynamic>;
+          final rawNotifications = (fresh[0]['data'] ?? []) as List<dynamic>;
+          final rawJoinRequests = (fresh[1]['data'] ?? []) as List<dynamic>;
+          _notifications = _filterNotificationsForActiveRoomspace(rawNotifications, activeRoomspaceId);
+          _joinRequests = _filterJoinRequestsForActiveRoomspace(rawJoinRequests, activeRoomspaceId);
         });
       }).catchError((_) {});
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  List<dynamic> _filterJoinRequestsForActiveRoomspace(
+    List<dynamic> requests,
+    String? activeRoomspaceId,
+  ) {
+    if (activeRoomspaceId == null || activeRoomspaceId.isEmpty) return requests;
+    return requests.where((req) {
+      final roomspaceId = _extractRoomspaceIdFromJoinRequest(req);
+      return roomspaceId == activeRoomspaceId;
+    }).toList();
+  }
+
+  List<dynamic> _filterNotificationsForActiveRoomspace(
+    List<dynamic> notifications,
+    String? activeRoomspaceId,
+  ) {
+    if (activeRoomspaceId == null || activeRoomspaceId.isEmpty) return notifications;
+
+    return notifications.where((item) {
+      if (item is! Map) return true;
+      final map = item.map((k, v) => MapEntry(k.toString(), v));
+      final type = (map['type'] ?? '').toString();
+      if (type != 'JOIN_REQUEST') return true;
+
+      final data = _parseNotificationData(map['data']);
+      final roomspaceId = (data['roomspace_id'] ?? '').toString();
+      if (roomspaceId.isEmpty) return true;
+      return roomspaceId == activeRoomspaceId;
+    }).toList();
+  }
+
+  String _extractRoomspaceIdFromJoinRequest(dynamic req) {
+    if (req is! Map) return '';
+    final map = req.map((k, v) => MapEntry(k.toString(), v));
+
+    final direct = (map['roomspace_id'] ?? '').toString();
+    if (direct.isNotEmpty) return direct;
+
+    final roomspace = map['roomspace'];
+    if (roomspace is Map) {
+      final nested = (roomspace['id'] ?? '').toString();
+      if (nested.isNotEmpty) return nested;
+    }
+
+    final dataField = map['data'];
+    if (dataField is Map) {
+      final nested = (dataField['roomspace_id'] ?? '').toString();
+      if (nested.isNotEmpty) return nested;
+    } else if (dataField is String && dataField.isNotEmpty) {
+      try {
+        final parsed = jsonDecode(dataField);
+        if (parsed is Map<String, dynamic>) {
+          final nested = (parsed['roomspace_id'] ?? '').toString();
+          if (nested.isNotEmpty) return nested;
+        }
+      } catch (_) {}
+    }
+
+    return '';
   }
 
   Future<void> _processJoinRequest(
@@ -462,7 +530,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   ),
                   if (notification['message'] != null)
                     Text(
-                      notification['message'],
+                      _normalizeCurrencyText(notification['message'].toString()),
                       style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
                     ),
                 ],
@@ -478,6 +546,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       ),
     );
+  }
+
+  String _normalizeCurrencyText(String input) {
+    // Replace dollar symbol usages from backend templates with local app currency label.
+    return input.replaceAll('\$', 'Rs. ');
   }
 
   Future<void> _handleNotificationTap(dynamic notification) async {

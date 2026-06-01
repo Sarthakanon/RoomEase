@@ -46,7 +46,7 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
       final results = await Future.wait([
         _recurringService.getRecurringExpenseTemplates(widget.roomspaceId),
         _loadRoomspaceMembers(),
-        _recurringService.getRecurringExpenseNotifications(),
+        _recurringService.getRecurringExpenseNotifications(widget.roomspaceId),
       ]);
       final templates = results[0] as List<RecurringExpenseTemplate>;
       final members = results[1] as List<Map<String, String>>;
@@ -653,212 +653,379 @@ class _RecurringPaymentsScreenState extends State<RecurringPaymentsScreen> {
     final updated = await showDialog<RecurringExpenseTemplate>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Edit Recurring Payment'),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Title')),
-                  const SizedBox(height: 10),
-                  TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description')),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: amountCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Amount'),
+        builder: (context, setLocal) {
+          final theme = Theme.of(context);
+          final primary = theme.colorScheme.primary;
+          final sectionTitleStyle = TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade700,
+          );
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 480,
+                maxHeight: MediaQuery.of(context).size.height * 0.86,
+              ),
+              child: Theme(
+                data: theme.copyWith(
+                  inputDecorationTheme: InputDecorationTheme(
+                    filled: true,
+                    fillColor: const Color(0xFFF7F8FC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: primary, width: 1.3),
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  TextField(controller: categoryCtrl, decoration: const InputDecoration(labelText: 'Category')),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<RecurringInterval>(
-                    value: selected,
-                    decoration: const InputDecoration(labelText: 'Frequency'),
-                    items: RecurringInterval.values
-                        .map((e) => DropdownMenuItem(value: e, child: Text(e.label)))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) setLocal(() => selected = v);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Included Roommates', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade700)),
-                  ),
-                  const SizedBox(height: 6),
-                  ..._roomspaceMembers.map((m) {
-                    final id = m['id'] ?? '';
-                    final name = m['name'] ?? id;
-                    final checked = selectedRoommateIds.contains(id);
-                    return CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      value: checked,
-                      title: Text(name, style: const TextStyle(fontSize: 13)),
-                      onChanged: (v) {
-                        setLocal(() {
-                          if (v == true) {
-                            selectedRoommateIds.add(id);
-                          } else {
-                            selectedRoommateIds.remove(id);
-                            selectedPayers.remove(id);
-                            payerAmounts.remove(id);
-                          }
-                          if (!selectedRoommateIds.contains(selectedPaidBy) && selectedRoommateIds.isNotEmpty) {
-                            selectedPaidBy = selectedRoommateIds.first;
-                          }
-                        });
-                      },
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Paid by (multi-select)', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade700)),
-                  ),
-                  const SizedBox(height: 6),
-                  ..._roomspaceMembers
-                      .where((m) => selectedRoommateIds.contains(m['id']))
-                      .map((m) {
-                    final id = m['id'] ?? '';
-                    final name = m['name'] ?? id;
-                    final isSelected = selectedPayers.contains(id);
-                    return Row(
-                      children: [
-                        Checkbox(
-                          value: isSelected,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: primary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(Icons.repeat_rounded, color: primary),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Edit Recurring Payment',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Title')),
+                        const SizedBox(height: 10),
+                        TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description')),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: amountCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Amount'),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(controller: categoryCtrl, decoration: const InputDecoration(labelText: 'Category')),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<RecurringInterval>(
+                          value: selected,
+                          decoration: const InputDecoration(labelText: 'Frequency'),
+                          items: RecurringInterval.values
+                              .map((e) => DropdownMenuItem(value: e, child: Text(e.label)))
+                              .toList(),
                           onChanged: (v) {
-                            setLocal(() {
-                              if (v == true) {
-                                selectedPayers.add(id);
-                                payerAmounts.putIfAbsent(id, () => 0.0);
-                              } else {
-                                selectedPayers.remove(id);
-                                payerAmounts.remove(id);
-                              }
-                              if (selectedPayers.isNotEmpty && !selectedPayers.contains(selectedPaidBy)) {
-                                selectedPaidBy = selectedPayers.first;
-                              }
-                            });
+                            if (v != null) setLocal(() => selected = v);
                           },
                         ),
-                        Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
-                        SizedBox(
-                          width: 120,
-                          child: TextFormField(
-                            initialValue: (payerAmounts[id] ?? 0) > 0 ? (payerAmounts[id] ?? 0).toStringAsFixed(2) : '',
-                            enabled: isSelected,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(labelText: 'Amount'),
-                            onChanged: (v) => payerAmounts[id] = double.tryParse(v) ?? 0.0,
+                        const SizedBox(height: 14),
+                        Text('Included Roommates', style: sectionTitleStyle),
+                        const SizedBox(height: 6),
+                        ..._roomspaceMembers.map((m) {
+                          final id = m['id'] ?? '';
+                          final name = m['name'] ?? id;
+                          final checked = selectedRoommateIds.contains(id);
+                          return CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: checked,
+                            title: Text(name, style: const TextStyle(fontSize: 13)),
+                            onChanged: (v) {
+                              setLocal(() {
+                                if (v == true) {
+                                  selectedRoommateIds.add(id);
+                                } else {
+                                  selectedRoommateIds.remove(id);
+                                  selectedPayers.remove(id);
+                                  payerAmounts.remove(id);
+                                }
+                                if (!selectedRoommateIds.contains(selectedPaidBy) && selectedRoommateIds.isNotEmpty) {
+                                  selectedPaidBy = selectedRoommateIds.first;
+                                }
+                              });
+                            },
+                          );
+                        }),
+                        const SizedBox(height: 8),
+                        Text('Paid by (multi-select)', style: sectionTitleStyle),
+                        const SizedBox(height: 6),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () async {
+                            final allowedMembers = _roomspaceMembers
+                                .where((m) => selectedRoommateIds.contains(m['id']))
+                                .toList();
+                            final tempSelection = Set<String>.from(selectedPayers)
+                              ..removeWhere((uid) => !selectedRoommateIds.contains(uid));
+
+                            final result = await showModalBottomSheet<Set<String>>(
+                              context: context,
+                              isScrollControlled: true,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                              ),
+                              builder: (sheetContext) => StatefulBuilder(
+                                builder: (sheetContext, setSheet) => SafeArea(
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 42,
+                                          height: 4,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade300,
+                                            borderRadius: BorderRadius.circular(999),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        const Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            'Select who paid',
+                                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        ...allowedMembers.map((m) {
+                                          final id = m['id'] ?? '';
+                                          final name = m['name'] ?? id;
+                                          return CheckboxListTile(
+                                            value: tempSelection.contains(id),
+                                            contentPadding: EdgeInsets.zero,
+                                            title: Text(name),
+                                            onChanged: (v) {
+                                              setSheet(() {
+                                                if (v == true) {
+                                                  tempSelection.add(id);
+                                                } else {
+                                                  tempSelection.remove(id);
+                                                }
+                                              });
+                                            },
+                                          );
+                                        }),
+                                        const SizedBox(height: 6),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: FilledButton(
+                                            onPressed: () => Navigator.pop(sheetContext, tempSelection),
+                                            child: const Text('Done'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+
+                            if (result != null) {
+                              setLocal(() {
+                                selectedPayers = result;
+                                payerAmounts.removeWhere((uid, _) => !selectedPayers.contains(uid));
+                                for (final uid in selectedPayers) {
+                                  payerAmounts.putIfAbsent(uid, () => 0.0);
+                                }
+                                if (selectedPayers.isNotEmpty) {
+                                  selectedPaidBy = selectedPayers.first;
+                                }
+                              });
+                            }
+                          },
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Paid by',
+                              suffixIcon: Icon(Icons.arrow_drop_down_rounded),
+                            ),
+                            child: Text(
+                              selectedPayers.isEmpty
+                                  ? 'Select payer(s)'
+                                  : _roomspaceMembers
+                                      .where((m) => selectedPayers.contains(m['id']))
+                                      .map((m) => (m['name'] ?? m['id'] ?? '').toString())
+                                      .join(', '),
+                              style: TextStyle(
+                                color: selectedPayers.isEmpty ? Colors.grey.shade600 : Colors.black87,
+                              ),
+                            ),
                           ),
                         ),
-                      ],
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: selectedPaidBy.isNotEmpty ? selectedPaidBy : null,
-                    decoration: const InputDecoration(labelText: 'Paid by'),
-                    items: _roomspaceMembers
-                        .where((m) => selectedPayers.contains(m['id']))
-                        .map((m) => DropdownMenuItem<String>(
-                              value: m['id'],
-                              child: Text(m['name'] ?? m['id'] ?? ''),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setLocal(() => selectedPaidBy = value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(Icons.event_rounded, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Next payment: ${_formatDate(selectedNextDate)}',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        const SizedBox(height: 10),
+                        if (selectedPayers.isNotEmpty) ...[
+                          Text('Amount by selected payer', style: sectionTitleStyle),
+                          const SizedBox(height: 6),
+                          ..._roomspaceMembers
+                              .where((m) => selectedPayers.contains(m['id']))
+                              .map((m) {
+                            final id = m['id'] ?? '';
+                            final name = m['name'] ?? id;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  SizedBox(
+                                    width: 140,
+                                    child: TextFormField(
+                                      initialValue: (payerAmounts[id] ?? 0) > 0
+                                          ? (payerAmounts[id] ?? 0).toStringAsFixed(2)
+                                          : '',
+                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      decoration: const InputDecoration(labelText: 'Amount', isDense: true),
+                                      onChanged: (v) => payerAmounts[id] = double.tryParse(v) ?? 0.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F8FC),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.event_rounded, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Next payment: ${_formatDate(selectedNextDate)}',
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: selectedNextDate,
+                                    firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                                    lastDate: DateTime.now().add(const Duration(days: 3650)),
+                                  );
+                                  if (picked != null) {
+                                    setLocal(() => selectedNextDate = picked);
+                                  }
+                                },
+                                child: const Text('Change'),
+                              ),
+                            ],
+                          ),
+                        ),
+                            ],
+                          ),
                         ),
                       ),
-                      TextButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: selectedNextDate,
-                            firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                            lastDate: DateTime.now().add(const Duration(days: 3650)),
-                          );
-                          if (picked != null) {
-                            setLocal(() => selectedNextDate = picked);
-                          }
-                        },
-                        child: const Text('Change'),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(48),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size.fromHeight(48),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: () {
+                                final amount = double.tryParse(amountCtrl.text.trim());
+                                if (amount == null || amount <= 0 || selectedRoommateIds.isEmpty) return;
+                                if (selectedPayers.isEmpty) return;
+                                final totalPaid = selectedPayers.fold<double>(0.0, (sum, uid) => sum + (payerAmounts[uid] ?? 0.0));
+                                if ((totalPaid - amount).abs() > 0.01) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Paid amounts must add up to Rs. ${amount.toStringAsFixed(2)}')),
+                                  );
+                                  return;
+                                }
+                                final List<String> roommates = selectedRoommateIds.toList();
+                                Map<String, double> updatedSplits = Map<String, double>.from(template.customSplits);
+                                updatedSplits.removeWhere((k, _) => !selectedRoommateIds.contains(k));
+                                for (final uid in roommates) {
+                                  updatedSplits.putIfAbsent(uid, () => 0.0);
+                                }
+
+                                if (template.splitType.toUpperCase() == 'EQUAL') {
+                                  updatedSplits = {};
+                                } else if (template.splitType.toUpperCase() == 'PERCENTAGE') {
+                                  final equalPercent = 100.0 / roommates.length;
+                                  updatedSplits = {for (final uid in roommates) uid: equalPercent};
+                                } else if (template.splitType.toUpperCase() == 'EXACT') {
+                                  final equalAmount = amount / roommates.length;
+                                  updatedSplits = {for (final uid in roommates) uid: equalAmount};
+                                }
+                                Navigator.pop(
+                                  context,
+                                  template.copyWith(
+                                    title: titleCtrl.text.trim(),
+                                    description: descCtrl.text.trim(),
+                                    amount: amount,
+                                    category: categoryCtrl.text.trim(),
+                                    paidBy: selectedPaidBy,
+                                    payerAmounts: {
+                                      for (final uid in selectedPayers) uid: (payerAmounts[uid] ?? 0.0),
+                                    },
+                                    selectedRoommates: roommates,
+                                    customSplits: updatedSplits,
+                                    recurringConfig: template.recurringConfig.copyWith(interval: selected),
+                                  ),
+                                );
+                              },
+                              child: const Text('Save'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () {
-                final amount = double.tryParse(amountCtrl.text.trim());
-                if (amount == null || amount <= 0 || selectedRoommateIds.isEmpty) return;
-                if (selectedPayers.isEmpty) return;
-                final totalPaid = selectedPayers.fold<double>(0.0, (sum, uid) => sum + (payerAmounts[uid] ?? 0.0));
-                if ((totalPaid - amount).abs() > 0.01) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Paid amounts must add up to Rs. ${amount.toStringAsFixed(2)}')),
-                  );
-                  return;
-                }
-                final List<String> roommates = selectedRoommateIds.toList();
-                Map<String, double> updatedSplits = Map<String, double>.from(template.customSplits);
-                updatedSplits.removeWhere((k, _) => !selectedRoommateIds.contains(k));
-                for (final uid in roommates) {
-                  updatedSplits.putIfAbsent(uid, () => 0.0);
-                }
-
-                if (template.splitType.toUpperCase() == 'EQUAL') {
-                  updatedSplits = {};
-                } else if (template.splitType.toUpperCase() == 'PERCENTAGE') {
-                  final equalPercent = 100.0 / roommates.length;
-                  updatedSplits = {for (final uid in roommates) uid: equalPercent};
-                } else if (template.splitType.toUpperCase() == 'EXACT') {
-                  final equalAmount = amount / roommates.length;
-                  updatedSplits = {for (final uid in roommates) uid: equalAmount};
-                }
-                Navigator.pop(
-                  context,
-                  template.copyWith(
-                    title: titleCtrl.text.trim(),
-                    description: descCtrl.text.trim(),
-                    amount: amount,
-                    category: categoryCtrl.text.trim(),
-                    paidBy: selectedPaidBy,
-                    payerAmounts: {
-                      for (final uid in selectedPayers) uid: (payerAmounts[uid] ?? 0.0),
-                    },
-                    selectedRoommates: roommates,
-                    customSplits: updatedSplits,
-                    recurringConfig: template.recurringConfig.copyWith(interval: selected),
-                  ),
-                );
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
 

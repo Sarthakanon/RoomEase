@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import '../main.dart' show navigatorKey;
+import '../services/ban_monitoring_service.dart';
 
 /// Listens to Firebase auth state changes and automatically navigates to login
 /// when the user is logged out (e.g., due to 401 error or ban)
@@ -52,6 +53,11 @@ class _AuthStateListenerState extends State<AuthStateListener> {
       // If user was logged in and now is logged out, navigate to login
       // BUT: Don't navigate if the user just signed up and hasn't verified email yet
       if (_previousUser != null && user == null) {
+        if (BanMonitoringService().banFlowActive) {
+          print('🔒 Auth logout detected during ban flow - skipping auto navigation');
+          _previousUser = user;
+          return;
+        }
         print('🔒 Auth state changed: User logged out - navigating to login');
         _navigateToLogin();
       }
@@ -72,6 +78,13 @@ class _AuthStateListenerState extends State<AuthStateListener> {
     final currentRoute = navigator.overlay?.context != null 
         ? ModalRoute.of(navigator.overlay!.context)?.settings.name 
         : null;
+
+    // Route can be null while overlays/dialog transitions are active.
+    // Avoid force navigation in this transient state to prevent closing dialogs.
+    if (currentRoute == null) {
+      print('🔒 Current route unresolved (null), skipping forced login navigation');
+      return;
+    }
 
     // Only navigate if not already on login/splash screen
     if (currentRoute != '/login' && currentRoute != '/') {

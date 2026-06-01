@@ -260,10 +260,11 @@ class _ExpenseScreenState extends State<ExpenseScreen>
     String roomspaceId, {
     required bool forceRefresh,
   }) async {
-    final recent = await _smartApi.getExpenses(
-      roomspaceId: roomspaceId,
+    final recent = await _smartApi.getRoomspaceExpenses(
+      roomspaceId,
       limit: 100,
       offset: 0,
+      forceRefresh: forceRefresh,
     );
 
     final raw = recent['data'];

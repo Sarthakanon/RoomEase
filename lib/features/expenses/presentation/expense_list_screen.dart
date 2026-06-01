@@ -141,13 +141,22 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
                 ))
             .toList();
       } else if (effectiveId != null) {
-        // Use generic expenses endpoint with explicit roomspace filter.
-        // This avoids backend month-default filtering issues on roomspace-specific endpoint.
-        final response = await _smartApiService.getExpenses(
-          roomspaceId: effectiveId,
-          limit: _pageSize,
-          offset: _currentPage * _pageSize,
-        );
+        // Prefer unified expenses endpoint for complete shared list,
+        // then fall back to roomspace-local cache path if request fails.
+        Map<String, dynamic> response;
+        try {
+          response = await _smartApiService.getExpenses(
+            roomspaceId: effectiveId,
+            limit: _pageSize,
+            offset: _currentPage * _pageSize,
+          );
+        } catch (_) {
+          response = await _smartApiService.getRoomspaceExpenses(
+            effectiveId,
+            limit: _pageSize,
+            offset: _currentPage * _pageSize,
+          );
+        }
         expenses = (response['data'] as List<dynamic>? ?? const [])
             .map((e) => ExpenseData.fromJson(e as Map<String, dynamic>))
             .toList();

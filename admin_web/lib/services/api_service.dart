@@ -7,7 +7,7 @@ class AdminApiService {
   late final Dio _dio;
   
   // Backend API URL
-  static const String baseUrl = 'http://localhost:8080';
+  static const String baseUrl = 'https://roomease-backend-80x8.onrender.com';
 
   AdminApiService._internal() {
     _dio = Dio(

@@ -1,17 +1,15 @@
 /// App-wide constants and configuration
 class AppConstants {
   // Backend Configuration
-  // Production backend URL (Render) - temporarily disabled for local development.
-  // static const String backendBaseUrl = 'https://roomease-backend-80x8.onrender.com';
-  // Android emulator must use 10.0.2.2 to reach host machine localhost.
-  static const String backendBaseUrl = 'http://192.168.1.70:8080';
+  // Production backend URL (Render).
+  static const String backendBaseUrl = 'https://roomease-backend-80x8.onrender.com';
 
   // Local backend host/port (used by compatibility code paths and settings UI)
-  static const String backendIp = '192.168.1.70';
-  static const int backendPort = 8080;
+  static const String backendIp = 'roomease-backend-80x8.onrender.com';
+  static const int backendPort = 443;
   
   // Default backend IP for fallback
-  static const String defaultBackendIp = '192.168.1.70';
+  static const String defaultBackendIp = 'roomease-backend-80x8.onrender.com';
   
   // Timeout settings
   static const Duration connectTimeout = Duration(seconds: 10);

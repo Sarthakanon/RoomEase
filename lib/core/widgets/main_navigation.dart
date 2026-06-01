@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:developer';
+import 'dart:async';
 import '../../features/home/mobile_dashboard.dart';
 import '../../features/roomspace/presentation/roomspace_router.dart';
 import '../../features/expenses/presentation/expense_screen.dart';
@@ -8,6 +9,7 @@ import '../../features/analytics/presentation/analytics_page.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../providers/roomspace_provider.dart';
 import '../../services/payment_dialog_service.dart';
+import '../../services/real_time_data_service.dart';
 import '../../widgets/first_time_permissions_dialog.dart';
 
 /// Main navigation widget that maintains state across tab switches
@@ -26,6 +28,10 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObserver {
   late int _currentIndex;
+  final RealTimeDataService _realTimeService = RealTimeDataService();
+  StreamSubscription<JoinRequestUpdateEvent>? _joinRequestSubscription;
+  StreamSubscription<NotificationEvent>? _notificationSubscription;
+  Timer? _roomspaceRefreshTimer;
 
   // Keep all screens alive to prevent reloading
   late final List<Widget> _screens;
@@ -46,6 +52,8 @@ class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObse
     
     // Add lifecycle observer for app state changes
     WidgetsBinding.instance.addObserver(this);
+    _setupLiveRefreshListeners();
+    _startRoomspaceRefreshTimer();
     
     // Set context for payment dialog service
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -57,7 +65,40 @@ class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObse
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _joinRequestSubscription?.cancel();
+    _notificationSubscription?.cancel();
+    _roomspaceRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _setupLiveRefreshListeners() {
+    // Local real-time update after join-request actions from notification screen.
+    _joinRequestSubscription = _realTimeService.joinRequestUpdates.listen((event) {
+      if (event.type == JoinRequestUpdateType.accepted) {
+        _refreshRoomspacesSilently();
+      }
+    });
+
+    // Refresh when notifications are updated to catch join acceptance effects.
+    _notificationSubscription = _realTimeService.notifications.listen((event) {
+      if (event.type == NotificationType.notificationsUpdated) {
+        _refreshRoomspacesSilently();
+      }
+    });
+  }
+
+  void _startRoomspaceRefreshTimer() {
+    // Periodic lightweight sync so accepted invites appear without relogin.
+    _roomspaceRefreshTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      _refreshRoomspacesSilently();
+    });
+  }
+
+  Future<void> _refreshRoomspacesSilently() async {
+    if (!mounted) return;
+    final provider = Provider.of<RoomspaceProvider>(context, listen: false);
+    if (provider.isLoading) return;
+    await provider.refreshRoomspaces();
   }
 
   @override
@@ -69,6 +110,7 @@ class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObse
       case AppLifecycleState.resumed:
         PaymentDialogService.setAppForegroundState(true);
         PaymentDialogService.setContext(context);
+        _refreshRoomspacesSilently();
         log('App resumed - foreground state: true');
         break;
       case AppLifecycleState.paused:

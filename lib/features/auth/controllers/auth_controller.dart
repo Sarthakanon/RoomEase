@@ -75,7 +75,26 @@ class AuthController extends ChangeNotifier {
           debugPrint('✅ AuthController: Backend login successful');
         } catch (e) {
           debugPrint('❌ AuthController: Backend login failed: $e');
-          // Sign out from Firebase if backend login fails
+          final rawMessage = e.toString();
+          final message = rawMessage.toLowerCase();
+          final isTimeoutOrNetwork = message.contains('timeout') ||
+              message.contains('connection') ||
+              message.contains('network');
+          final isBanned = message.contains('suspended') ||
+              message.contains('banned');
+          // Keep Firebase session for transient backend/network failures,
+          // so user can retry without full sign-out loop.
+          if (isTimeoutOrNetwork) {
+            setLoading(false);
+            throw 'Server is waking up. Please retry in a few seconds.';
+          }
+          // Preserve ban reason so UI can show suspended-account dialog.
+          if (isBanned) {
+            await _authService.signOut();
+            setLoading(false);
+            rethrow;
+          }
+          // For non-transient auth/server errors, sign out to keep states aligned.
           await _authService.signOut();
           setLoading(false);
           throw 'Failed to authenticate with server. Please try again.';

@@ -1,0 +1,351 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RoomEase Full Roomspace Flow (A to Z)</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0.6in; }
+h1, h2, h3 { color: #0f172a; margin-top: 16pt; margin-bottom: 8pt; }
+h1 { font-size: 20pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+p { margin: 6pt 0; }
+ul, ol { margin: 6pt 0 6pt 18pt; }
+li { margin: 2pt 0; }
+code { font-family: Consolas, 'Courier New', monospace; background: #f8fafc; padding: 1pt 3pt; border-radius: 3px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt; border-radius: 4px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #cbd5e1; padding: 6pt; text-align: left; }
+th { background: #f1f5f9; }
+blockquote { border-left: 3px solid #94a3b8; margin: 8pt 0; padding: 4pt 10pt; color: #334155; background: #f8fafc; }
+</style></head><body><h1 id="roomease-full-roomspace-flow-a-to-z">RoomEase Full Roomspace Flow (A to Z)</h1>
+<h2 id="technical-summary-paragraph">Technical Summary Paragraph</h2>
+<p>Roomspace in RoomEase is implemented as a membership-scoped collaboration context where every shared operation (expenses, balances, analytics, notifications, recurring templates) is constrained by roomspace identity and validated member access. The Flutter app maintains an active roomspace state (or personal-space null context) via <code>RoomspaceProvider</code>, with cache-first + network-refresh behavior and persisted last selection per Firebase user. On the backend, Gin middleware enforces authentication and roomspace membership checks, while <code>PostgresService</code> owns roomspace lifecycle rules (create/join/leave/remove/process join requests/ownership transfer). Join flow is approval-based using <code>join_requests</code> and notifications, and leave flow includes creator handoff or room deletion logic. In effect, roomspace acts as the core authorization boundary and tenancy unit for shared household data.</p>
+<hr />
+<h2 id="1-what-a-roomspace-is-in-this-codebase">1. What a Roomspace is in this codebase</h2>
+<p>A roomspace is a shared tenant-like container for group expense data.</p>
+<p>Primary entities:
+- <code>roomspaces</code> (<code>backend/models/roomspace.go</code>)
+- <code>roomspace_members</code> (<code>backend/models/roomspace_member.go</code>)
+- <code>join_requests</code> (<code>backend/models/join_request.go</code>)</p>
+<p>Key properties:
+- <code>roomspaces.id</code> is UUID
+- <code>invite_code</code> is unique 8-char code
+- creator tracked by <code>creator_id</code> (Firebase UID)
+- active membership tracked in <code>roomspace_members</code>
+- approval queue managed via <code>join_requests</code></p>
+<hr />
+<h2 id="2-frontend-roomspace-architecture">2. Frontend roomspace architecture</h2>
+<h2 id="main-frontend-files">Main frontend files</h2>
+<ul>
+<li><code>lib/providers/roomspace_provider.dart</code></li>
+<li>source of truth for active roomspace in app state</li>
+<li>supports personal-space mode (<code>activeRoomspace == null</code>)</li>
+<li>
+<p>loads roomspaces, caches them, restores last active roomspace per user</p>
+</li>
+<li>
+<p><code>lib/features/roomspace/presentation/roomspace_router.dart</code></p>
+</li>
+<li>
+<p>routes user to:</p>
+<ul>
+<li>roomspace details (if has roomspace)</li>
+<li>pending request state</li>
+<li>roomspace selection state</li>
+<li>personal-space fallback</li>
+</ul>
+</li>
+<li>
+<p><code>lib/models/roomspace_data.dart</code></p>
+</li>
+<li>
+<p>Flutter model for roomspace list/state rendering</p>
+</li>
+<li>
+<p><code>lib/services/smart_api_service.dart</code></p>
+</li>
+<li>
+<p>roomspace API wrappers + cache-backed fetch strategy</p>
+</li>
+<li>
+<p><code>lib/core/widgets/global_roomspace_selector.dart</code> and <code>roomspace_switcher.dart</code></p>
+</li>
+<li>UI switching between personal space and roomspaces</li>
+</ul>
+<hr />
+<h2 id="3-backend-roomspace-architecture">3. Backend roomspace architecture</h2>
+<h2 id="main-backend-files">Main backend files</h2>
+<ul>
+<li><code>backend/handlers/roomspace.go</code></li>
+<li>
+<p>HTTP handlers for create/get/join/join-by-code/leave/remove member/count</p>
+</li>
+<li>
+<p><code>backend/handlers/notification.go</code></p>
+</li>
+<li>join request retrieval and processing (accept/reject)</li>
+<li>
+<p>notification fanout for join outcomes</p>
+</li>
+<li>
+<p><code>backend/middleware/roomspace.go</code></p>
+</li>
+<li>
+<p>membership guard middleware for roomspace-scoped endpoints</p>
+</li>
+<li>
+<p><code>backend/services/postgres.go</code></p>
+</li>
+<li>
+<p>business logic for roomspace lifecycle and membership operations</p>
+</li>
+<li>
+<p><code>backend/models/roomspace.go</code>, <code>roomspace_member.go</code>, <code>join_request.go</code></p>
+</li>
+<li>schema + role/status constants + helper semantics</li>
+</ul>
+<hr />
+<h2 id="4-core-roomspace-lifecycle-flow">4. Core roomspace lifecycle flow</h2>
+<h2 id="41-create-roomspace">4.1 Create roomspace</h2>
+<p>Frontend:
+- Calls <code>SmartApiService.createRoomspace(...)</code> -&gt; backend <code>/api/roomspaces</code>.</p>
+<p>Backend:
+- <code>RoomspaceHandler.CreateRoomspace</code> uses authenticated <code>user_id</code> as creator.
+- <code>PostgresService.CreateRoomspace</code>:
+  - checks subscription-based roomspace limit
+  - generates unique invite code
+  - creates roomspace record
+  - creates creator membership row with role <code>creator</code></p>
+<p>Result:
+- Creator becomes active member immediately.</p>
+<h2 id="42-list-roomspaces-for-current-user">4.2 List roomspaces for current user</h2>
+<p>Frontend:
+- <code>RoomspaceProvider.loadRoomspaces()</code> fetches and caches list.</p>
+<p>Backend:
+- <code>RoomspaceHandler.GetRoomspaces</code>
+- <code>PostgresService.GetUserRoomspaces(userUID)</code> joins <code>roomspace_members</code> with <code>is_active=true</code>.</p>
+<p>Result:
+- User sees only roomspaces where they are active member.</p>
+<h2 id="43-search-and-request-join-by-invite-code">4.3 Search and request join by invite code</h2>
+<p>Frontend:
+- search code -&gt; <code>/api/roomspaces/code/:code</code>
+- join-by-code -&gt; <code>/api/roomspaces/code/:code/join</code></p>
+<p>Backend:
+- <code>SearchRoomspaceByCode</code> validates existence.
+- <code>JoinRoomspaceByCode</code> creates join request (not direct join).
+- <code>PostgresService.CreateJoinRequest</code> prevents:
+  - duplicate pending request
+  - joining if already member
+  - joining beyond roomspace limit</p>
+<p>Result:
+- Pending approval workflow starts.</p>
+<h2 id="44-process-join-request-approvereject">4.4 Process join request (approve/reject)</h2>
+<p>Frontend:
+- Notification screen calls <code>/api/join-requests/:id/process</code>.</p>
+<p>Backend:
+- <code>NotificationHandler.ProcessJoinRequest</code>
+- <code>PostgresService.ProcessJoinRequest</code> transaction:
+  - validates request is pending
+  - validates processor is roomspace member
+  - if accept: adds requester to <code>roomspace_members</code>
+  - sets processed metadata
+- Sends notifications to requester, processor, and other members.</p>
+<p>Result:
+- Accepted user becomes active member and should then receive roomspace in list.</p>
+<h2 id="45-leave-roomspace">4.5 Leave roomspace</h2>
+<p>Frontend:
+- <code>RoomspaceProvider.leaveRoomspace(roomspaceId)</code></p>
+<p>Backend:
+- <code>RoomspaceHandler.LeaveRoomspace</code>
+- <code>PostgresService.LeaveRoomspace</code></p>
+<p>Leave behavior includes ownership handling:
+- non-creator leaves: membership removal/deactivation
+- creator leaves:
+  - transfer ownership to suitable member if possible
+  - or delete roomspace if no members remain (as per service rules)</p>
+<p>Response includes:
+- <code>ownership_transferred</code>
+- <code>new_creator_id</code>
+- <code>roomspace_deleted</code></p>
+<h2 id="46-remove-another-member">4.6 Remove another member</h2>
+<p>Frontend:
+- remove member call from roomspace details screen</p>
+<p>Backend:
+- <code>RoomspaceHandler.RemoveMember</code>
+- <code>PostgresService.RemoveMemberFromRoomspace</code></p>
+<p>Rules:
+- only creator can remove members
+- creator cannot remove themselves via this route</p>
+<p>Notifications are sent to removed member + creator.</p>
+<hr />
+<h2 id="5-authorization-and-access-control-model">5. Authorization and access control model</h2>
+<h2 id="authentication-layer">Authentication layer</h2>
+<ul>
+<li>Protected routes require valid <code>session_id</code> cookie (<code>AuthMiddleware</code>).</li>
+</ul>
+<h2 id="roomspace-authorization-layer">Roomspace authorization layer</h2>
+<ul>
+<li><code>ValidateRoomspaceMembership()</code> middleware checks:</li>
+<li>URL param <code>:id</code> or query <code>roomspace_id</code></li>
+<li>user must be active member of target roomspace</li>
+<li>if not member -&gt; <code>403</code> forbidden</li>
+</ul>
+<p>This is the key guard that prevents cross-roomspace data access.</p>
+<hr />
+<h2 id="6-frontend-state-model-and-ux-logic">6. Frontend state model and UX logic</h2>
+<p><code>RoomspaceProvider</code> behavior:
+- keeps <code>_roomspaces</code> list and <code>_activeRoomspace</code>
+- supports personal space when <code>_activeRoomspace == null</code>
+- persistent key is user-scoped: <code>active_roomspace_id_&lt;firebaseUid&gt;</code>
+- loads cache first, then network (force/non-force refresh)
+- includes retries for transient network failures</p>
+<p><code>RoomspaceRouter</code> behavior:
+- if user has roomspaces -&gt; roomspace details
+- if no roomspaces but pending join request -&gt; pending state screen
+- else -&gt; roomspace selection/personal space</p>
+<hr />
+<h2 id="7-caching-and-refresh-behavior">7. Caching and refresh behavior</h2>
+<p>Frontend caching:
+- roomspace data cached via provider + shared prefs
+- Smart API layer has cache + stale fallback</p>
+<p>Live refresh sources:
+- manual pull-to-refresh / screen refresh
+- provider <code>refreshRoomspaces()</code>
+- app lifecycle resume refresh (added in main navigation)
+- join-request event-driven refresh hooks (where wired)</p>
+<hr />
+<h2 id="8-roomspace-related-apis-current">8. Roomspace-related APIs (current)</h2>
+<p>Publicly relevant protected APIs:
+- <code>GET /api/roomspaces</code>
+- <code>POST /api/roomspaces</code>
+- <code>GET /api/roomspaces/:id</code>
+- <code>POST /api/roomspaces/:id/join</code>
+- <code>POST /api/roomspaces/:id/leave</code>
+- <code>GET /api/roomspaces/code/:code</code>
+- <code>POST /api/roomspaces/code/:code/join</code>
+- <code>DELETE /api/roomspaces/:id/members</code>
+- <code>GET /api/join-requests</code>
+- <code>GET /api/join-requests/pending</code>
+- <code>POST /api/join-requests/:id/process</code>
+- <code>GET /api/user/roomspaces/count</code></p>
+<hr />
+<h2 id="9-roles-and-statuses-used">9. Roles and statuses used</h2>
+<p>Roomspace member roles (<code>roomspace_member.go</code>):
+- <code>creator</code>
+- <code>admin</code>
+- <code>member</code>
+- <code>pending</code></p>
+<p>Join request statuses (<code>join_request.go</code>):
+- <code>pending</code>
+- <code>approved</code>
+- <code>rejected</code>
+- <code>expired</code>
+- <code>cancelled</code></p>
+<hr />
+<h2 id="10-how-roomspace-ties-to-the-rest-of-app">10. How roomspace ties to the rest of app</h2>
+<p>Most shared endpoints and computations are roomspace-scoped:
+- expenses
+- balances / settlements
+- analytics
+- recurring shared templates
+- payment confirmation flows</p>
+<p>Each of these typically requires:
+1. authenticated session
+2. membership check on roomspace ID</p>
+<p>That makes roomspace the central data partition boundary.</p>
+<hr />
+<h2 id="11-practical-caveats-and-implementation-notes">11. Practical caveats and implementation notes</h2>
+<ol>
+<li><code>roomspace_members.is_active</code> is critical for effective membership; queries rely on it.</li>
+<li>Active roomspace selection is persisted per Firebase user, which avoids cross-user mix-up on same device.</li>
+<li>If backend session expires/restarts, frontend may show cached roomspace until next auth refresh.</li>
+<li>Join acceptance visibility depends on timely refresh/events; periodic refresh reduces need for relogin.</li>
+<li>Legacy <code>RoomspaceService</code> has int-based join helper; current backend IDs are UUID-based and SmartApi paths are the main path now.</li>
+</ol>
+<hr />
+<h2 id="12-exact-frontend-to-backend-method-mapping-roomspace">12. Exact Frontend-to-Backend Method Mapping (Roomspace)</h2>
+<p>Core frontend methods that call backend:</p>
+<ol>
+<li>
+<p>Load user roomspaces:
+- <code>RoomspaceProvider.loadRoomspaces()</code>
+- <code>SmartApiService.getRoomspaces(...)</code>
+- <code>ApiService.getRoomspaces()</code>
+- Endpoint: <code>GET /api/roomspaces</code></p>
+</li>
+<li>
+<p>Create roomspace:
+- UI create action -&gt; <code>SmartApiService.createRoomspace(name, description)</code>
+- <code>ApiService.createRoomspace(...)</code>
+- Endpoint: <code>POST /api/roomspaces</code></p>
+</li>
+<li>
+<p>Search by invite code:
+- <code>SmartApiService.searchRoomspaceByCode(code)</code>
+- <code>ApiService.searchRoomspaceByCode(code)</code>
+- Endpoint: <code>GET /api/roomspaces/code/:code</code></p>
+</li>
+<li>
+<p>Request join by invite code:
+- <code>SmartApiService.joinRoomspaceByCode(code)</code>
+- <code>ApiService.joinRoomspaceByCode(code)</code>
+- Endpoint: <code>POST /api/roomspaces/code/:code/join</code></p>
+</li>
+<li>
+<p>Leave roomspace:
+- <code>RoomspaceProvider.leaveRoomspace(roomspaceId)</code>
+- <code>SmartApiService.leaveRoomspace(roomspaceId)</code>
+- <code>ApiService.leaveRoomspace(roomspaceId)</code>
+- Endpoint: <code>POST /api/roomspaces/:id/leave</code></p>
+</li>
+<li>
+<p>Remove member:
+- <code>SmartApiService.removeMemberFromRoomspace(roomspaceId, memberUid)</code>
+- <code>ApiService.removeMemberFromRoomspace(...)</code>
+- Endpoint: <code>DELETE /api/roomspaces/:id/members</code></p>
+</li>
+<li>
+<p>Join request inbox + process:
+- <code>ApiService.getJoinRequests()</code> -&gt; <code>GET /api/join-requests</code>
+- <code>ApiService.getPendingJoinRequest()</code> -&gt; <code>GET /api/join-requests/pending</code>
+- <code>ApiService.processJoinRequest(id, accept)</code> -&gt; <code>POST /api/join-requests/:id/process</code></p>
+</li>
+</ol>
+<p>Backend handlers receiving these:
+- <code>RoomspaceHandler</code> methods in <code>backend/handlers/roomspace.go</code>
+- <code>NotificationHandler.GetJoinRequests</code>, <code>.GetPendingJoinRequest</code>, <code>.ProcessJoinRequest</code> in <code>backend/handlers/notification.go</code></p>
+<p>Authorization bridge for frontend-backend connection:
+- all roomspace APIs are under protected <code>/api</code> group
+- request must include valid <code>session_id</code> cookie
+- middleware path:
+  - <code>AuthMiddleware</code> validates session
+  - <code>ValidateRoomspaceMembership</code> validates membership for roomspace-scoped routes</p>
+<hr />
+<h2 id="13-one-line-summary">13. One-line summary</h2>
+<p>Roomspace logic is a UUID-based, membership-gated shared context where join requests control entry, middleware enforces access, and provider state/caching controls active-room UX across the app.</p>
+<hr />
+<h2 id="14-database-tables-used-roomspace">14. Database Tables Used (Roomspace)</h2>
+<p>Primary tables:</p>
+<ol>
+<li>
+<p><code>roomspaces</code>
+- Purpose: canonical roomspace entity (<code>id</code>, <code>name</code>, <code>invite_code</code>, <code>creator_id</code>, lifecycle fields)</p>
+</li>
+<li>
+<p><code>roomspace_members</code>
+- Purpose: membership and role mapping (<code>creator/admin/member</code>, active state, invited_by)
+- Core authorization table for roomspace access</p>
+</li>
+<li>
+<p><code>join_requests</code>
+- Purpose: approval workflow for invite-code join requests (pending/approved/rejected/expired)</p>
+</li>
+<li>
+<p><code>notifications</code>
+- Purpose: user-facing events for join requests processed, member actions, reminders</p>
+</li>
+<li>
+<p><code>users</code>
+- Purpose: identity/profile source for names and metadata used in roomspace responses/notifications</p>
+</li>
+</ol>
+<p>Related tables touched indirectly by roomspace-scoped pages:
+- <code>expenses</code>, <code>expense_splits</code>, <code>settlements</code>, <code>user_balances</code>, <code>recurring_expense_templates</code>, <code>recurring_expense_notifications</code>
+- Reason: many roomspace screens aggregate shared data beyond membership metadata.</p></body></html>

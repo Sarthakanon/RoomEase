@@ -33,11 +33,82 @@ import seaborn as sns
 import warnings
 warnings.filterwarnings('ignore')
 
-OUTPUT_DIR = Path("../output")
-FEATURES_DIR = Path("../features_v2")
+def _resolve_data_dirs():
+    cwd = Path.cwd()
+    output_candidates = [
+        cwd / "output_v2",
+        cwd / "output",
+        cwd.parent / "output_v2",
+        cwd.parent / "output",
+        cwd / "dataset-sarthak-ai" / "output_v2",
+        cwd / "dataset-sarthak-ai" / "output",
+    ]
+    features_candidates = [
+        cwd / "features_v2",
+        cwd.parent / "features_v2",
+        cwd / "dataset-sarthak-ai" / "features_v2",
+    ]
+
+    output_dir = next((p for p in output_candidates if (p / "users.csv").exists()), Path("../output_v2"))
+    features_dir = next((p for p in features_candidates if (p / "daily_features_v2.parquet").exists()), Path("../features_v2"))
+    return output_dir, features_dir
+
+
+OUTPUT_DIR, FEATURES_DIR = _resolve_data_dirs()
 MODELS_DIR = Path("../models_v3")
 FIGS_DIR = Path("figs")
 MODELS_DIR.mkdir(exist_ok=True)
+
+
+def _load_v2_expenses():
+    """Load expenses in a schema compatible with this training script."""
+    expense_path = OUTPUT_DIR / "expenses.csv"
+    if expense_path.exists():
+        expenses = pd.read_csv(expense_path, keep_default_na=False)
+    else:
+        rp_path = OUTPUT_DIR / "recurring_payments.csv"
+        if not rp_path.exists():
+            raise FileNotFoundError(
+                f"Neither {expense_path} nor {rp_path} exists."
+            )
+        expenses = pd.read_csv(rp_path, keep_default_na=False).rename(
+            columns={"expected_amount_npr": "amount"}
+        )
+        if "category" not in expenses.columns:
+            expenses["category"] = "General"
+        base = pd.Timestamp("2026-01-01")
+        expenses["date"] = [base + pd.Timedelta(days=i) for i in range(len(expenses))]
+        expenses["is_group_expense"] = False
+        expenses["is_recurring"] = True
+
+    if "date" not in expenses.columns:
+        base = pd.Timestamp("2026-01-01")
+        expenses["date"] = [base + pd.Timedelta(days=i) for i in range(len(expenses))]
+    expenses["date"] = pd.to_datetime(expenses["date"], errors="coerce")
+    expenses["amount"] = pd.to_numeric(expenses["amount"], errors="coerce").fillna(0.0)
+    if "is_group_expense" not in expenses.columns:
+        expenses["is_group_expense"] = False
+    if "is_recurring" not in expenses.columns:
+        expenses["is_recurring"] = False
+    return expenses
+
+
+def _normalize_users(users: pd.DataFrame) -> pd.DataFrame:
+    users = users.rename(columns={
+        "financial_persona": "persona",
+        "monthly_income_npr": "income",
+        "city_tier": "location_tier",
+        "spend_multiplier": "spending_multiplier",
+    }).copy()
+    if "social_tendency" not in users.columns:
+        users["social_tendency"] = users.get("shared_tendency", 0.5)
+    if "consistency" not in users.columns:
+        users["consistency"] = 0.6
+    if "splurge_probability" not in users.columns:
+        users["splurge_probability"] = 0.2
+    if "daily_lambda" not in users.columns:
+        users["daily_lambda"] = 1.0
+    return users
 
 
 def train_monthly_forecast(expenses, users):
@@ -393,8 +464,8 @@ def train_spending_profile(users, expenses):
 
 def main():
     print("Loading data...")
-    users = pd.read_csv(OUTPUT_DIR / "users.csv")
-    expenses = pd.read_csv(OUTPUT_DIR / "expenses.csv", keep_default_na=False)
+    users = _normalize_users(pd.read_csv(OUTPUT_DIR / "users.csv"))
+    expenses = _load_v2_expenses()
     daily_df = pd.read_parquet(FEATURES_DIR / "daily_features_v2.parquet")
 
     monthly_metrics = train_monthly_forecast(expenses, users)

@@ -77,6 +77,20 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		}
 	}
 
+	// Block login immediately for banned users so client can show ban popup.
+	if dbUser.IsBanned {
+		reason := "Unusual activity detected"
+		if dbUser.BanReason != nil && *dbUser.BanReason != "" {
+			reason = *dbUser.BanReason
+		}
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":  "Your account has been suspended due to: " + reason + ". Please contact support for assistance.",
+			"banned": true,
+			"reason": reason,
+		})
+		return
+	}
+
 	// Generate session ID
 	sessionID, err := services.GenerateSessionID()
 	if err != nil {

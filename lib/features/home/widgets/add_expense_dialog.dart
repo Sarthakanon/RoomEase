@@ -89,6 +89,15 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     ExpenseCategory('Other', Icons.more_horiz_rounded),
   ];
 
+  bool get _isEditing => widget.initialData != null;
+
+  String _roommateNameById(String id) {
+    for (final r in widget.roommates) {
+      if (r.id == id) return r.name;
+    }
+    return 'Unknown';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -123,11 +132,18 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
       _selectedCategory = expense.category;
       _splitType = expense.splitType;
       if (expense.payerAmounts.isNotEmpty) {
-        _selectedPayers.addAll(expense.payerAmounts.keys);
+        _selectedPayers.addAll(
+          expense.payerAmounts.keys.where(
+            (id) => widget.roommates.any((r) => r.id == id),
+          ),
+        );
         _payerAmounts.addAll(expense.payerAmounts);
       } else if (expense.paidBy != null && expense.paidBy!.isNotEmpty) {
-        _selectedPayers.add(expense.paidBy!);
-        _payerAmounts[expense.paidBy!] = expense.amount;
+        final paidBy = expense.paidBy!;
+        if (widget.roommates.any((r) => r.id == paidBy)) {
+          _selectedPayers.add(paidBy);
+          _payerAmounts[paidBy] = expense.amount;
+        }
       }
       
       // Fill selected roommates
@@ -265,9 +281,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     }
 
     if (mounted) {
-      setState(() { 
-        _isSubmitting = true; 
-        _errorMessage = null; 
+      setState(() {
+        _isSubmitting = true;
+        _errorMessage = null;
       });
     }
     
@@ -287,18 +303,29 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         recurringConfig: _recurringConfig.isRecurring ? _recurringConfig : null,
       );
       
-      await widget.onSubmit(expense);
-      
-      // Check if widget is still mounted before using context
+      // Close dialog first to avoid using this context across async gaps.
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.of(context).pop();
       }
+
+      // Submit after closing; use parent handlers/messenger for any feedback.
+      Future.microtask(() async {
+        try {
+          await widget.onSubmit(expense);
+        } catch (e) {
+          _scaffoldMessenger?.showSnackBar(
+            SnackBar(
+              content: Text('Failed to add expense: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      });
     } catch (e) {
-      // Check if widget is still mounted before calling setState
       if (mounted) {
-        setState(() { 
-          _isSubmitting = false; 
-          _errorMessage = e.toString(); 
+        setState(() {
+          _isSubmitting = false;
+          _errorMessage = e.toString();
         });
       }
     }
@@ -412,7 +439,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       hint: '0', 
                       icon: Icons.payments_outlined, 
                       isNumeric: true, 
-                      prefix: 'Rs. ', 
+                      prefix: 'Rs.',
                       maxLength: 10,
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                       validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Invalid amount' : null
@@ -475,7 +502,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('Add Expense', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
+          Text(_isEditing ? 'Edit Expense' : 'Add Expense', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A1A2E))),
           Row(
             children: [
               IconButton(
@@ -510,11 +537,31 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
           inputFormatters: inputFormatters,
           decoration: InputDecoration(
             hintText: hint, 
-            prefixText: prefix, 
             hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13), 
             filled: true, 
             fillColor: const Color(0xFFF7F7FB),
-            prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade400),
+            prefixIcon: prefix == null
+                ? Icon(icon, size: 18, color: Colors.grey.shade400)
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(width: 12),
+                      Icon(icon, size: 18, color: Colors.grey.shade400),
+                      const SizedBox(width: 8),
+                      Text(
+                        prefix,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ),
+            prefixIconConstraints: prefix == null
+                ? null
+                : const BoxConstraints(minWidth: 0, minHeight: 0),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             counterText: '', // Hide character counter
           ),
@@ -568,7 +615,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                     spacing: 8,
                     runSpacing: 8,
                     children: _selectedPayers.map((id) {
-                      final rm = widget.roommates.firstWhere((r) => r.id == id);
+                      final rmName = _roommateNameById(id);
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
@@ -576,7 +623,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          rm.name,
+                          rmName,
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: primary),
                         ),
                       );
@@ -587,7 +634,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         if (_selectedPayers.isNotEmpty) ...[
           const SizedBox(height: 10),
           ..._selectedPayers.map((uid) {
-            final rm = widget.roommates.firstWhere((r) => r.id == uid);
+            final rmName = _roommateNameById(uid);
             final current = _payerAmounts[uid] ?? 0;
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -595,7 +642,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                 children: [
                   Expanded(
                     child: Text(
-                      rm.name,
+                      rmName,
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -800,8 +847,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         child: _selectedRoommates.isEmpty 
           ? Text('Tap to select roommates', style: TextStyle(fontSize: 13, color: Colors.grey.shade400))
           : Wrap(spacing: 8, runSpacing: 8, children: _selectedRoommates.map((id) {
-              final rm = widget.roommates.firstWhere((r) => r.id == id);
-              return Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Text(rm.name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: primary)));
+              final rmName = _roommateNameById(id);
+              return Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: Text(rmName, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: primary)));
             }).toList()),
       ),
     );
@@ -846,9 +893,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: const Color(0xFFF7F7FB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFEEEEF2))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: _selectedRoommates.map((id) {
-        final rm = widget.roommates.firstWhere((r) => r.id == id);
+        final rmName = _roommateNameById(id);
         return Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(children: [
-          Expanded(child: Text(rm.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+          Expanded(child: Text(rmName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
           SizedBox(width: 80, height: 36, child: TextFormField(
             initialValue: _customSplits[id]?.toStringAsFixed(0) ?? '0', 
             keyboardType: TextInputType.number, 
@@ -881,7 +928,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     return Column(
       children: [
         if (_errorMessage != null) Padding(padding: const EdgeInsets.only(bottom: 16), child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600))),
-        SizedBox(width: double.infinity, height: 52, child: ElevatedButton(onPressed: _isSubmitting ? null : _submit, style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0), child: _isSubmitting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Add Expense', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)))),
+        SizedBox(width: double.infinity, height: 52, child: ElevatedButton(onPressed: _isSubmitting ? null : _submit, style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0), child: _isSubmitting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Text(_isEditing ? 'Update Expense' : 'Add Expense', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)))),
       ],
     );
   }

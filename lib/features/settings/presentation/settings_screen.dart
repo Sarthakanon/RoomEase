@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../services/firebase_auth_service.dart';
 import '../../../services/api_service.dart';
-import '../../../services/cached_api_service.dart';
 import '../../../providers/roomspace_provider.dart';
 import '../../../models/roomspace_data.dart';
 import '../../subscription/providers/subscription_provider.dart';
@@ -19,14 +18,10 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  String _userName = "Loading...";
-  String _userEmail = "Loading...";
-  bool _notificationsEnabled = true;
   bool _isLoading = true;
 
   final FirebaseAuthService _authService = FirebaseAuthService();
   final ApiService _apiService = ApiService();
-  final CachedApiService _cachedApiService = CachedApiService();
 
   @override
   void initState() {
@@ -36,36 +31,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadUserData() async {
     try {
-      final user = _authService.currentUser;
-      if (user != null) {
-        setState(() {
-          _userName = user.displayName ?? "User";
-          _userEmail = user.email ?? "No email";
-        });
-
-        try {
-          final profile = await _cachedApiService.getUserProfile();
-          if (profile['success'] == true && profile['data'] != null) {
-            final data = profile['data'] as Map<String, dynamic>;
-            _userName = (data['name'] as String?)?.trim().isNotEmpty == true
-                ? data['name'] as String
-                : _userName;
-            _userEmail = (data['email'] as String?)?.trim().isNotEmpty == true
-                ? data['email'] as String
-                : _userEmail;
-          }
-        } catch (_) {}
-
-        // Load roomspaces through provider
-        final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
-        await roomspaceProvider.loadRoomspaces();
-
+      // Load roomspaces through provider
+      final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
+      await roomspaceProvider.loadRoomspaces();
+      if (mounted) {
         setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _userName = "Error loading data";
           _isLoading = false;
         });
       }
@@ -257,13 +231,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Container(color: const Color(0xFFF0F0F0), height: 1),
             ),
           ),
-          body: _isLoading || roomspaceProvider.isLoading
+          body: _isLoading || (roomspaceProvider.isLoading && roomspaceProvider.roomspaces.isEmpty)
               ? Center(child: CircularProgressIndicator(color: primaryColor))
               : ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
-                    _buildProfileHeader(primaryColor),
-                    const SizedBox(height: 24),
                     _buildSectionTitle('ROOM MANAGEMENT'),
                     const SizedBox(height: 12),
                     if (roomspaceProvider.roomspaces.isEmpty)
@@ -290,42 +262,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Text(
       title,
       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.8),
-    );
-  }
-
-  Widget _buildProfileHeader(Color primaryColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7FB),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFEEEEF2)),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: primaryColor.withValues(alpha: 0.1),
-            backgroundImage: _authService.currentUser?.photoURL != null
-                ? NetworkImage(_authService.currentUser!.photoURL!)
-                : null,
-            child: _authService.currentUser?.photoURL == null
-                ? Text(_userName.isNotEmpty ? _userName[0].toUpperCase() : '?',
-                    style: TextStyle(color: primaryColor, fontWeight: FontWeight.w700))
-                : null,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_userName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Color(0xFF1A1A2E))),
-                Text(_userEmail, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -477,14 +413,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       child: Column(
         children: [
-          _switchTile(
-            icon: Icons.notifications_none_rounded,
-            title: 'Push Notifications',
-            value: _notificationsEnabled,
-            onChanged: (val) => setState(() => _notificationsEnabled = val),
-            color: primaryColor,
-          ),
-          _divider(),
           _menuItem(
             icon: Icons.lock_outline_rounded,
             title: 'Change Password',
@@ -499,18 +427,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _switchTile({required IconData icon, required String title, required bool value, required ValueChanged<bool> onChanged, required Color color}) {
-    return SwitchListTile.adaptive(
-      value: value,
-      onChanged: onChanged,
-      activeTrackColor: color.withValues(alpha: 0.5),
-      secondary: Icon(icon, size: 20, color: Colors.grey.shade600),
-      title: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      visualDensity: VisualDensity.compact,
     );
   }
 

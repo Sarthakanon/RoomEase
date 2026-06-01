@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/ban_monitoring_service.dart';
-import 'ban_countdown_dialog.dart';
 
 class BanListenerWidget extends StatefulWidget {
   final Widget child;
@@ -32,18 +31,8 @@ class _BanListenerWidgetState extends State<BanListenerWidget> {
 
   void _setupBanListener() {
     _banSubscription = BanMonitoringService().banNotificationStream.listen((reason) {
-      if (mounted) {
-        _showBanDialog(reason);
-      }
+      debugPrint('🚫 Ban detected: $reason');
     });
-  }
-
-  void _showBanDialog(String reason) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => BanCountdownDialog(reason: reason),
-    );
   }
 
   @override

@@ -10,7 +10,9 @@ class CacheService {
   static const Duration _longCacheDuration = Duration(minutes: 30);
 
   // Cache keys
-  static const String roomspacesKey = 'cached_roomspaces';
+  // Keep this distinct from RoomspaceProvider's raw-list cache key
+  // to avoid format collisions.
+  static const String roomspacesKey = 'cached_roomspaces_api_v1';
   static const String userProfileKey = 'cached_user_profile';
   static const String roomspacePrefix = 'cached_roomspace_';
   static const String balancesPrefix = 'cached_balances_';
@@ -39,8 +41,21 @@ class CacheService {
       final cachedString = prefs.getString(key);
       
       if (cachedString == null) return null;
-      
-      final cacheData = jsonDecode(cachedString) as Map<String, dynamic>;
+
+      final decoded = jsonDecode(cachedString);
+
+      // Legacy/plain payload support: if cached value is not the wrapped cache
+      // envelope, normalize it into a response map directly.
+      if (decoded is! Map<String, dynamic> ||
+          !decoded.containsKey('timestamp') ||
+          !decoded.containsKey('duration') ||
+          !decoded.containsKey('data')) {
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is List) return {'data': decoded, 'success': true};
+        return null;
+      }
+
+      final cacheData = decoded;
       final timestamp = cacheData['timestamp'] as int;
       final duration = cacheData['duration'] as int;
       
@@ -54,7 +69,10 @@ class CacheService {
         }
       }
       
-      return cacheData['data'] as Map<String, dynamic>;
+      final payload = cacheData['data'];
+      if (payload is Map<String, dynamic>) return payload;
+      if (payload is List) return {'data': payload, 'success': true};
+      return null;
     } catch (e) {
       print('Cache read error: $e');
       return null;

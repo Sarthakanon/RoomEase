@@ -20,7 +20,8 @@ class SubscriptionPlansScreen extends StatefulWidget {
 }
 
 class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
-  bool _isYearly = true;
+  // Yearly plans are intentionally disabled for now.
+  bool _isYearly = false;
 
   @override
   void initState() {
@@ -103,10 +104,6 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                       _buildCurrentPlanCard(provider.currentSubscription!, isTablet),
                       SizedBox(height: isTablet ? 32 : 24),
                     ],
-
-                    // Billing toggle
-                    _buildBillingToggle(isTablet),
-                    SizedBox(height: isTablet ? 32 : 24),
 
                     // Plan cards - responsive grid for larger screens
                     if (isDesktop) 

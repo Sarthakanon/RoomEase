@@ -9,7 +9,25 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
-OUTPUT_DIR = Path("../output")
+def _resolve_output_dir() -> Path:
+    """Resolve dataset output directory robustly for both script and notebook runs."""
+    cwd = Path.cwd()
+    candidates = [
+        cwd / "output_v2",
+        cwd / "output",
+        cwd.parent / "output_v2",
+        cwd.parent / "output",
+        cwd / "dataset-sarthak-ai" / "output_v2",
+        cwd / "dataset-sarthak-ai" / "output",
+    ]
+    for c in candidates:
+        if (c / "users.csv").exists():
+            return c
+    # Fall back to historical relative path from this file location.
+    return Path("../output_v2")
+
+
+OUTPUT_DIR = _resolve_output_dir()
 FEATURES_DIR = Path("../features_v2")
 FEATURES_DIR.mkdir(exist_ok=True)
 
@@ -21,9 +39,33 @@ def main():
 
     print("Loading data...")
     users = pd.read_csv(OUTPUT_DIR / "users.csv")
-    expenses = pd.read_csv(OUTPUT_DIR / "expenses.csv", keep_default_na=False)
-    expenses['date'] = pd.to_datetime(expenses['date'])
-    expenses['amount'] = expenses['amount'].astype(float)
+
+    expense_path = OUTPUT_DIR / "expenses.csv"
+    if expense_path.exists():
+        expenses = pd.read_csv(expense_path, keep_default_na=False)
+        expenses['date'] = pd.to_datetime(expenses['date'], errors='coerce')
+        expenses['amount'] = pd.to_numeric(expenses['amount'], errors='coerce').fillna(0.0)
+    else:
+        # V2 fallback: use recurring_payments as source and synthesize daily dates
+        rp_path = OUTPUT_DIR / "recurring_payments.csv"
+        if not rp_path.exists():
+            raise FileNotFoundError(
+                f"Neither {expense_path} nor {rp_path} exists. "
+                "Run dataset creation first."
+            )
+        expenses = pd.read_csv(rp_path, keep_default_na=False)
+        expenses = expenses.rename(
+            columns={
+                'expected_amount_npr': 'amount',
+            }
+        )
+        if 'category' not in expenses.columns:
+            expenses['category'] = 'General'
+        expenses['amount'] = pd.to_numeric(expenses['amount'], errors='coerce').fillna(0.0)
+        base = pd.Timestamp('2026-01-01')
+        expenses['date'] = [base + pd.Timedelta(days=i) for i in range(len(expenses))]
+        expenses['is_recurring'] = True
+        expenses['is_group_expense'] = False
 
     print("Aggregating daily stats per user...")
     daily = expenses.groupby(['user_id', 'date']).agg(
@@ -79,6 +121,21 @@ def main():
     ).astype(int)
 
     print("Merging user profile features...")
+    users = users.rename(columns={
+        'financial_persona': 'persona',
+        'monthly_income_npr': 'income',
+        'city_tier': 'location_tier',
+        'spend_multiplier': 'spending_multiplier',
+    })
+    if 'social_tendency' not in users.columns:
+        users['social_tendency'] = users.get('shared_tendency', 0.5)
+    if 'consistency' not in users.columns:
+        users['consistency'] = 0.6
+    if 'splurge_probability' not in users.columns:
+        users['splurge_probability'] = 0.2
+    if 'daily_lambda' not in users.columns:
+        users['daily_lambda'] = 1.0
+
     user_features = users[['user_id', 'persona', 'age', 'income', 'location_tier',
                             'spending_multiplier', 'activity_rate', 'social_tendency',
                             'consistency', 'splurge_probability', 'daily_lambda']].copy()

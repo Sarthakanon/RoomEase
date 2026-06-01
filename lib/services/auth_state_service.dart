@@ -60,11 +60,10 @@ class AuthStateService {
       final rememberMe = prefs.getBool(_rememberMeKey) ?? false;
       final currentUser = FirebaseAuth.instance.currentUser;
       
-      // User should stay logged in if:
-      // 1. They chose "remember me"
-      // 2. They were previously logged in
-      // 3. Firebase still has their session
-      final shouldStay = isLoggedIn && rememberMe && currentUser != null;
+      // Keep session if user was previously logged in and Firebase still has
+      // a valid local session. Remember-me only controls UI conveniences
+      // (like pre-filling email), not auth session persistence.
+      final shouldStay = isLoggedIn && currentUser != null;
       
       log('Should stay logged in: $shouldStay (logged: $isLoggedIn, remember: $rememberMe, firebase: ${currentUser != null})');
       return shouldStay;

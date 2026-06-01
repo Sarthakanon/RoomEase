@@ -12,6 +12,8 @@ class BanMonitoringService {
   Timer? _banCheckTimer;
   bool _isMonitoring = false;
   final ApiService _apiService = ApiService();
+  bool _banFlowActive = false;
+  bool get banFlowActive => _banFlowActive;
 
   /// Start monitoring user ban status
   /// Checks every 30 seconds if the user is banned
@@ -86,17 +88,18 @@ class BanMonitoringService {
   /// Handle when user is detected as banned
   Future<void> _handleUserBanned(String reason) async {
     try {
+      _banFlowActive = true;
       // Stop monitoring
       stopMonitoring();
       
+      // Notify UI first so dialog can render before auth listener redirects.
+      notifyBanDetected(reason);
+
       // Clear authentication state
       await AuthStateService.clearLoginState();
       await _apiService.clearCookies();
       await FirebaseAuth.instance.signOut();
-      
-      // Show ban notification (this will be handled by the UI layer)
-      notifyBanDetected(reason);
-      
+
       log('User logged out due to ban: $reason');
     } catch (e) {
       log('Error handling user ban: $e');
@@ -110,7 +113,12 @@ class BanMonitoringService {
   Stream<String> get banNotificationStream => _banNotificationController.stream;
   
   void notifyBanDetected(String reason) {
+    _banFlowActive = true;
     _banNotificationController.add(reason);
+  }
+
+  void clearBanFlowFlag() {
+    _banFlowActive = false;
   }
 
   /// Dispose resources

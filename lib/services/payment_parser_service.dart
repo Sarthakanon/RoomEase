@@ -51,10 +51,31 @@ class PaymentParserService {
     try {
       log('Parsing notification from $appName: $notificationText');
 
-      // Check if this is a supported app
-      if (!_isSupportedApp(appName)) {
-        log('Unsupported app: $appName');
-        return null;
+      // Check if this is a supported app.
+      // For SMS flows, allow body-based fallback naming so numeric senders
+      // (e.g. +977...) are not dropped.
+      var resolvedAppName = appName;
+      if (!_isSupportedApp(resolvedAppName)) {
+        if (source.toLowerCase() == 'sms') {
+          final upperText = notificationText.toUpperCase();
+          if (upperText.contains('FONEPAY')) {
+            resolvedAppName = 'FonePay';
+          } else if (upperText.contains('ESEWA')) {
+            resolvedAppName = 'eSewa';
+          } else if (upperText.contains('KHALTI')) {
+            resolvedAppName = 'Khalti';
+          } else if (upperText.contains('IMEPAY')) {
+            resolvedAppName = 'IME Pay';
+          } else if (upperText.contains('CONNECTIPS')) {
+            resolvedAppName = 'ConnectIPS';
+          } else {
+            resolvedAppName = 'Bank SMS';
+          }
+          log('Using SMS fallback app name: $resolvedAppName');
+        } else {
+          log('Unsupported app: $resolvedAppName');
+          return null;
+        }
       }
 
       // Extract amount
@@ -79,7 +100,7 @@ class PaymentParserService {
       return PaymentNotification(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         source: source,
-        appName: appName,
+        appName: resolvedAppName,
         rawText: notificationText,
         amount: amount,
         merchant: merchant,

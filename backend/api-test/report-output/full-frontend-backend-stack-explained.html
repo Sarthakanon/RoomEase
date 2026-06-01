@@ -1,0 +1,177 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RoomEase Frontend + Backend Stack Explained (Beginner Friendly)</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0.6in; }
+h1, h2, h3 { color: #0f172a; margin-top: 16pt; margin-bottom: 8pt; }
+h1 { font-size: 20pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+p { margin: 6pt 0; }
+ul, ol { margin: 6pt 0 6pt 18pt; }
+li { margin: 2pt 0; }
+code { font-family: Consolas, 'Courier New', monospace; background: #f8fafc; padding: 1pt 3pt; border-radius: 3px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt; border-radius: 4px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #cbd5e1; padding: 6pt; text-align: left; }
+th { background: #f1f5f9; }
+blockquote { border-left: 3px solid #94a3b8; margin: 8pt 0; padding: 4pt 10pt; color: #334155; background: #f8fafc; }
+</style></head><body><h1 id="roomease-frontend-backend-stack-explained-beginner-friendly">RoomEase Frontend + Backend Stack Explained (Beginner Friendly)</h1>
+<h2 id="technical-summary-paragraph">Technical Summary Paragraph</h2>
+<p>RoomEase is a client-server mobile app where Flutter (frontend) handles UI and local state, while a Go (Gin) backend handles business logic, database access, and security checks. Firebase Authentication is used for identity proof (Google/email login), then the backend creates its own <code>session_id</code> cookie for protected API access. PostgreSQL (Supabase/local) stores persistent app data, and GORM is the ORM that maps Go structs to database tables and runs migrations. CORS is configured in Gin middleware to allow app/web origins and cookies, and request flow is organized through handlers, services, and middleware.</p>
+<hr />
+<h2 id="1-what-is-frontend-vs-backend-in-this-project">1. What is frontend vs backend in this project?</h2>
+<ol>
+<li>
+<p>Frontend (Flutter, Dart):
+- Renders screens, dialogs, forms, charts.
+- Sends HTTP requests using <code>dio</code>.
+- Stores cookies locally using <code>cookie_jar</code> + <code>dio_cookie_manager</code>.
+- Manages app state via Providers and services.</p>
+</li>
+<li>
+<p>Backend (Go, Gin):
+- Exposes REST APIs under <code>/api/...</code>.
+- Verifies login token, creates/validates sessions.
+- Runs business logic (expenses, balances, roomspaces, analytics, recurring).
+- Reads/writes PostgreSQL through GORM.</p>
+</li>
+</ol>
+<hr />
+<h2 id="2-request-lifecycle-simple-mental-model">2. Request lifecycle (simple mental model)</h2>
+<ol>
+<li>Flutter screen calls <code>ApiService</code> method.</li>
+<li><code>ApiService</code> sends HTTP request to backend base URL.</li>
+<li>Gin router matches endpoint in <code>backend/main.go</code>.</li>
+<li>Middleware runs first (CORS, logging, auth, membership checks).</li>
+<li>Handler executes endpoint logic.</li>
+<li>Handler calls service/database methods.</li>
+<li>GORM executes SQL on PostgreSQL.</li>
+<li>Response JSON returns to Flutter.</li>
+<li>Flutter updates UI/state.</li>
+</ol>
+<hr />
+<h2 id="3-flutter-side-how-backend-is-connected">3. Flutter side: how backend is connected</h2>
+<p>Main connector file:
+- <code>lib/services/api_service.dart</code></p>
+<p>Key points:
+1. Uses <code>Dio(BaseOptions(...))</code> with base URL from <code>AppConstants.backendBaseUrl</code>.
+2. Adds <code>CookieManager</code> so backend session cookies persist.
+3. Adds interceptors for:
+- request/response logging
+- error handling
+- ban detection and auto-handling
+4. Login call:
+- <code>POST /api/auth/login</code> with <code>{ firebase_token: ... }</code>.
+5. After login, all protected APIs rely on cookie session (<code>session_id</code>).</p>
+<p>Why this matters:
+- Frontend does not attach a JWT header for every API.
+- Backend uses cookie-based session auth after login.</p>
+<hr />
+<h2 id="4-gin-go-web-framework-in-this-project">4. Gin (Go web framework) in this project</h2>
+<p>Main file:
+- <code>backend/main.go</code></p>
+<p>What Gin is doing here:
+1. Creates router with <code>gin.Default()</code>.
+2. Registers middleware globally:
+- <code>CORSMiddleware</code>
+- <code>LoggerMiddleware</code>
+3. Defines public routes (example: <code>/api/auth/login</code>, <code>/api/admin/...</code>).
+4. Defines protected group:
+- <code>protected := router.Group("/api")</code>
+- <code>protected.Use(middleware.AuthMiddleware())</code>
+5. Adds feature-specific routes (roomspaces, expenses, analytics, recurring, etc.).</p>
+<hr />
+<h2 id="5-cors-explained-with-your-code">5. CORS explained with your code</h2>
+<p>File:
+- <code>backend/middleware/cors.go</code></p>
+<p>What CORS means:
+- Browser security rule controlling which origins can call your backend.</p>
+<p>Your implementation:
+1. Uses <code>github.com/gin-contrib/cors</code>.
+2. Allows empty <code>Origin</code> (important for many mobile app calls).
+3. Allows local/dev origins (<code>localhost</code>, <code>127.0.0.1</code>, <code>192.168.x.x</code>, etc.).
+4. <code>AllowCredentials: true</code> so cookies can be used.
+5. Allows common methods and headers.</p>
+<p>Why supervisor may ask this:
+- Cookie-based auth + web requires correct CORS and credentials behavior.</p>
+<hr />
+<h2 id="6-gorm-explained-with-your-code">6. GORM explained with your code</h2>
+<p>Files:
+- <code>backend/config/postgres.go</code>
+- <code>backend/services/postgres.go</code>
+- <code>backend/models/*.go</code></p>
+<p>What GORM does:
+1. Connects to PostgreSQL: <code>gorm.Open(postgres.Open(dsn), &amp;gorm.Config{})</code>.
+2. Maps structs to tables using model tags.
+3. Lets you query with chain methods (<code>Where</code>, <code>Find</code>, <code>Preload</code>, <code>Count</code>, etc.).
+4. Runs schema migration via <code>AutoMigrate()</code>.</p>
+<p>Your AutoMigrate flow:
+- <code>PostgresService.AutoMigrate()</code> calls <code>config.DB.AutoMigrate(...)</code> with model list.
+- Also performs post-migrate fixes (invite code generation, QR column backfill).</p>
+<hr />
+<h2 id="7-postgresql-connection-and-environments">7. PostgreSQL connection and environments</h2>
+<p>File:
+- <code>backend/config/postgres.go</code></p>
+<p>Behavior:
+1. Reads <code>POSTGRES_DATABASE_URL</code> from env/config.
+2. If Supabase URL:
+- enforces <code>sslmode=require</code>
+- adds connection query tuning params
+3. If local DB:
+- uses <code>sslmode=disable</code>
+4. Configures pool:
+- <code>SetMaxOpenConns(10)</code>
+- <code>SetMaxIdleConns(5)</code>
+- <code>SetConnMaxLifetime(5m)</code></p>
+<hr />
+<h2 id="8-authentication-architecture-quick">8. Authentication architecture (quick)</h2>
+<ol>
+<li>User signs in with Firebase on Flutter.</li>
+<li>Flutter sends Firebase ID token to backend <code>/api/auth/login</code>.</li>
+<li>Backend verifies token via Firebase Admin SDK.</li>
+<li>Backend creates in-memory session and sets <code>session_id</code> HttpOnly cookie.</li>
+<li>Protected APIs are validated by <code>AuthMiddleware</code>.</li>
+</ol>
+<p>Important:
+- Session store is in-memory (<code>services/session.go</code>), so restart clears sessions.</p>
+<hr />
+<h2 id="9-middleware-chain-and-responsibilities">9. Middleware chain and responsibilities</h2>
+<ol>
+<li>
+<p><code>CORSMiddleware</code>
+- cross-origin rules + credentials</p>
+</li>
+<li>
+<p><code>LoggerMiddleware</code>
+- request/response logs with duration and status</p>
+</li>
+<li>
+<p><code>AuthMiddleware</code> (protected routes)
+- read <code>session_id</code>
+- validate session
+- check ban status from <code>users.is_banned</code>
+- attach <code>user_id</code> to request context</p>
+</li>
+<li>
+<p><code>ValidateRoomspaceMembership</code> (roomspace scoped routes)
+- verifies user belongs to target roomspace</p>
+</li>
+</ol>
+<hr />
+<h2 id="10-project-architecture-pattern-in-backend">10. Project architecture pattern in backend</h2>
+<p>Pattern used:
+1. Handler layer: HTTP input/output (<code>backend/handlers/*</code>)
+2. Service layer: business/database logic (<code>backend/services/*</code>)
+3. Model layer: schema structs (<code>backend/models/*</code>)
+4. Middleware layer: cross-cutting concerns (<code>backend/middleware/*</code>)</p>
+<p>This separation is good for testing and maintenance.</p>
+<hr />
+<h2 id="11-important-practical-caveats-supervisor-friendly-honesty">11. Important practical caveats (supervisor-friendly honesty)</h2>
+<ol>
+<li>Admin routes are currently public in <code>main.go</code> (<code>/api/admin/*</code> has no auth guard yet).</li>
+<li>Session store is in-memory, not Redis/DB-backed.</li>
+<li>Some analytics endpoints rely on external ML bridge and can fail independently.</li>
+<li>Mobile CORS behavior differs from browser behavior; empty origin allowance helps mobile clients.</li>
+</ol>
+<hr />
+<h2 id="12-one-line-summary">12. One-line summary</h2>
+<p>Flutter calls Gin APIs through Dio; Gin uses middleware + handlers + services; GORM maps Go models to PostgreSQL; Firebase proves identity once, then backend cookie sessions secure all protected operations.</p></body></html>

@@ -24,6 +24,8 @@ import 'services/api_service.dart';
 import 'services/performance_service.dart';
 import 'services/loading_service.dart';
 import 'services/offline_expense_service.dart';
+import 'services/payment_notification_service.dart';
+import 'services/sms_detection_service.dart';
 import 'providers/roomspace_provider.dart';
 import 'widgets/ban_listener_widget.dart';
 import 'widgets/auth_state_listener.dart';
@@ -61,6 +63,12 @@ void main() async {
 
     // Initialize persistent cookie storage for API service
     await ApiService().initializePersistentCookies();
+
+    // Initialize payment/SMS detection early so method channel handlers are
+    // attached before the first dashboard load.
+    await PaymentNotificationService.instance.initialize();
+    await SmsDetectionService.initialize(PaymentNotificationService.instance);
+    await SmsDetectionService.startListening();
 
     // Initialize performance optimizations
     await PerformanceService().initialize();

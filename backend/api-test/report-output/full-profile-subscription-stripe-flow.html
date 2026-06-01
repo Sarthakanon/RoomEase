@@ -1,0 +1,209 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RoomEase Profile + Subscription + Stripe Flow</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0.6in; }
+h1, h2, h3 { color: #0f172a; margin-top: 16pt; margin-bottom: 8pt; }
+h1 { font-size: 20pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+p { margin: 6pt 0; }
+ul, ol { margin: 6pt 0 6pt 18pt; }
+li { margin: 2pt 0; }
+code { font-family: Consolas, 'Courier New', monospace; background: #f8fafc; padding: 1pt 3pt; border-radius: 3px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt; border-radius: 4px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #cbd5e1; padding: 6pt; text-align: left; }
+th { background: #f1f5f9; }
+blockquote { border-left: 3px solid #94a3b8; margin: 8pt 0; padding: 4pt 10pt; color: #334155; background: #f8fafc; }
+</style></head><body><h1 id="roomease-profile-subscription-stripe-flow">RoomEase Profile + Subscription + Stripe Flow</h1>
+<h2 id="technical-summary-paragraph">Technical Summary Paragraph</h2>
+<p>Profile and subscription in RoomEase are implemented as authenticated account-domain services on top of Firebase identity and backend session authorization. Profile data is read/written through <code>/api/user/profile</code>, with frontend caching, optimistic UI refresh, and auxiliary Cloudinary uploads for QR/profile assets. Subscription status is primarily persisted in the <code>users</code> table (<code>subscription_plan</code>, <code>subscription_expiry</code>) and managed via subscription endpoints plus payment verification endpoints. Stripe is integrated as a payment-intent verification layer, while final subscription state transitions are handled by backend subscription/payment handlers. The architecture is functional but currently mixes test-oriented Stripe setup and eSewa-oriented verification paths, so production hardening is still needed.</p>
+<hr />
+<h2 id="1-profile-system-flow">1. Profile system flow</h2>
+<h2 id="backend">Backend</h2>
+<p>Handler: <code>backend/handlers/user.go</code>
+- <code>GetProfile</code> -&gt; <code>GET /api/user/profile</code>
+- <code>UpdateProfile</code> -&gt; <code>PUT /api/user/profile</code></p>
+<p>Data source:
+- <code>PostgresService.GetUserByFirebaseUID(...)</code>
+- <code>PostgresService.UpdateUser(...)</code></p>
+<h2 id="frontend">Frontend</h2>
+<p>Main screen:
+- <code>lib/features/profile/presentation/profile_screen.dart</code></p>
+<p>Load flow:
+1. Reads Firebase current user for baseline name/email/photo.
+2. Calls <code>SmartApiService.getUserProfile()</code> to override with backend profile fields.
+3. Caches profile data locally for faster tab switching.</p>
+<p>Update flow:
+1. User edits name/phone/QR.
+2. Calls <code>SmartApiService.updateUserProfile(...)</code>.
+3. For photo/QR image upload, uploads file first then updates profile URL.
+4. Forces state refresh for dependent screens and emits realtime profile update event.</p>
+<hr />
+<h2 id="2-profile-database-tables">2. Profile database tables</h2>
+<ol>
+<li><code>users</code>
+- columns used in profile context:
+  - <code>firebase_uid</code>
+  - <code>email</code>
+  - <code>name</code>
+  - <code>phone</code>
+  - <code>qr_image_url</code>
+  - <code>is_banned</code>, <code>ban_reason</code>, <code>banned_at</code>
+  - <code>subscription_plan</code>, <code>subscription_expiry</code></li>
+</ol>
+<p>No separate profile table exists; profile is user-row driven.</p>
+<hr />
+<h2 id="3-subscription-domain-flow">3. Subscription domain flow</h2>
+<h2 id="backend-endpoints">Backend endpoints</h2>
+<p>Handler: <code>backend/handlers/subscription_handler.go</code></p>
+<ul>
+<li><code>GET /api/subscription/current</code></li>
+<li>derives current plan/status from <code>users</code> table</li>
+<li>
+<p>auto-downgrades expired plans to free</p>
+</li>
+<li>
+<p><code>POST /api/subscription/cancel</code></p>
+</li>
+<li>
+<p>marks expiry end-of-period behavior</p>
+</li>
+<li>
+<p><code>POST /api/subscription/reactivate</code></p>
+</li>
+<li>
+<p>clears expiry for reactivation</p>
+</li>
+<li>
+<p><code>GET /api/subscription/history</code></p>
+</li>
+<li>reads <code>subscription_payments</code> records</li>
+</ul>
+<h2 id="frontend_1">Frontend</h2>
+<ul>
+<li><code>SubscriptionProvider</code> (<code>lib/features/subscription/providers/subscription_provider.dart</code>)</li>
+<li><code>SubscriptionService</code> (<code>lib/features/subscription/services/subscription_service.dart</code>)</li>
+</ul>
+<p>Behavior:
+- Initializes with safe default free plan.
+- Attempts backend sync; gracefully falls back if API/path fails.
+- Computes roomspace entitlement limits from active plan.
+- Supports upgrade/cancel/reactivate/history flows.</p>
+<hr />
+<h2 id="4-stripe-setup-and-payment-flow-current-implementation">4. Stripe setup and payment flow (current implementation)</h2>
+<h2 id="frontend-stripe-package">Frontend Stripe package</h2>
+<ul>
+<li><code>flutter_stripe</code> via <code>lib/services/stripe_payment_service.dart</code></li>
+</ul>
+<p>Client flow:
+1. call backend create intent endpoint (<code>/api/payment/stripe/create-intent</code>)
+2. initialize Stripe payment sheet with client secret
+3. present payment sheet
+4. on success call subscription verification/update flow in app logic</p>
+<h2 id="backend-stripe-handler">Backend Stripe handler</h2>
+<ul>
+<li><code>backend/handlers/stripe_handler.go</code></li>
+</ul>
+<p>Endpoints:
+- <code>POST /api/payment/stripe/create-intent</code>
+- <code>POST /api/payment/stripe/verify</code>
+- <code>POST /api/payment/stripe/subscription/verify</code></p>
+<p>Important current state:
+1. Stripe secret key is hardcoded in code (test key) in handler init.
+2. Subscription verify endpoint verifies payment intent success, but comment notes final subscription activation should be done by main backend flow.
+3. Frontend currently chains Stripe verification then calls subscription verify endpoint that follows existing payment-record path.</p>
+<hr />
+<h2 id="5-esewa-coexistence">5. eSewa coexistence</h2>
+<p>Subscription and settlement payment verification also exists via eSewa handlers:
+- <code>backend/handlers/esewa_handler.go</code></p>
+<p>So payment stack is mixed-mode:
+- Stripe payment intent path
+- eSewa verification path</p>
+<p>The frontend subscription service currently supports both, with Stripe as one branch.</p>
+<hr />
+<h2 id="6-exact-frontend-to-backend-method-mapping">6. Exact frontend-to-backend method mapping</h2>
+<h2 id="profile-mapping">Profile mapping</h2>
+<ol>
+<li>
+<p>Load profile:
+- <code>ProfileScreen._loadProfileData()</code>
+- <code>SmartApiService.getUserProfile()</code>
+- <code>ApiService.get('/api/user/profile')</code></p>
+</li>
+<li>
+<p>Update profile:
+- <code>ProfileScreen._saveProfile()</code>
+- <code>SmartApiService.updateUserProfile(...)</code>
+- <code>ApiService.updateUserProfile(...)</code>
+- <code>PUT /api/user/profile</code></p>
+</li>
+<li>
+<p>Upload QR/profile photo:
+- upload file (Cloudinary service)
+- update URL via profile update API</p>
+</li>
+</ol>
+<h2 id="subscription-mapping">Subscription mapping</h2>
+<ol>
+<li>
+<p>Current subscription:
+- <code>SubscriptionService.getCurrentSubscription()</code>
+- <code>ApiService.get('/api/subscription/current')</code></p>
+</li>
+<li>
+<p>Cancel:
+- <code>SubscriptionService.cancelSubscription()</code>
+- <code>ApiService.post('/api/subscription/cancel')</code></p>
+</li>
+<li>
+<p>Reactivate:
+- <code>SubscriptionService.reactivateSubscription()</code>
+- <code>ApiService.post('/api/subscription/reactivate')</code></p>
+</li>
+<li>
+<p>History:
+- <code>SubscriptionService.getSubscriptionHistory()</code>
+- <code>ApiService.get('/api/subscription/history')</code></p>
+</li>
+<li>
+<p>Stripe create intent:
+- <code>StripePaymentService._createPaymentIntent()</code>
+- <code>ApiService.post('/api/payment/stripe/create-intent')</code></p>
+</li>
+<li>
+<p>Stripe subscription verification path:
+- <code>SubscriptionService.processPayment(method='stripe')</code>
+- <code>ApiService.post('/api/payment/stripe/subscription/verify')</code>
+- then update path via <code>ApiService.post('/api/payments/subscription/verify')</code></p>
+</li>
+</ol>
+<hr />
+<h2 id="7-database-tables-used-profilesubscriptionpayment">7. Database tables used (profile/subscription/payment)</h2>
+<p>Primary tables:
+1. <code>users</code>
+- profile fields, ban state, current subscription plan/expiry</p>
+<ol start="2">
+<li>
+<p><code>subscription_payments</code>
+- subscription transaction history</p>
+</li>
+<li>
+<p><code>balance_settlements</code>
+- settlement payment records (roommate settlement payments)</p>
+</li>
+</ol>
+<p>Related cross-feature tables:
+4. <code>notifications</code> (payment reminders, system notifications)
+5. <code>roomspace_members</code> (plan-driven roomspace usage checks rely on roomspace count)
+6. <code>roomspaces</code> (usage count for plan limits)</p>
+<hr />
+<h2 id="8-implementation-notes-hardening-points">8. Implementation notes / hardening points</h2>
+<ol>
+<li>Stripe key management should move to secure env vars (not hardcoded).</li>
+<li>Stripe webhook-based confirmation is not the main path in this code; verification is request-driven.</li>
+<li>Subscription provider intentionally falls back to free defaults when APIs fail, which can hide backend issues from users.</li>
+<li>Plan-limit enforcement is partly computed frontend-side; authoritative server checks should remain enforced.</li>
+</ol>
+<hr />
+<h2 id="9-one-line-summary">9. One-line summary</h2>
+<p>Profile is user-row centric and session-protected, while subscription is plan-state persisted on users plus payment-history tables, with Stripe/eSewa verification flows bridging payment completion to subscription state updates.</p></body></html>

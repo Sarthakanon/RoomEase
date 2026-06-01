@@ -21,32 +21,51 @@ class PaymentNotificationService {
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   PaymentNotificationSettings _settings = PaymentNotificationSettings();
   final List<PaymentNotification> _pendingNotifications = [];
+  bool _isInitialized = false;
+  bool _isMonitoringStarted = false;
 
   // Callback for when user wants to add expense
   Function(PaymentNotification)? onExpenseRequested;
 
   /// Initialize the payment notification service
   Future<void> initialize() async {
-    try {
-      // Initialize local notifications
-      await _initializeLocalNotifications();
-      
-      // Load settings
-      await _loadSettings();
-      
-      // Initialize sub-services
-      await NotificationListenerService.initialize(this);
-      await SmsDetectionService.initialize(this);
-      
-      // Start monitoring if enabled
-      if (_settings.isEnabled) {
-        await startMonitoring();
-      }
-      
-      log('Payment notification service initialized');
-    } catch (e) {
-      log('Error initializing payment notification service: $e');
+    if (_isInitialized) {
+      log('Payment notification service already initialized');
+      return;
     }
+    // Load settings first so monitoring behavior is deterministic.
+    await _loadSettings();
+
+    // Initialize local notifications, but never let this block SMS setup.
+    try {
+      await _initializeLocalNotifications();
+    } catch (e) {
+      log('Local notification init failed (continuing with SMS setup): $e');
+    }
+
+    // Initialize channel listeners independently so SMS path always works.
+    try {
+      await NotificationListenerService.initialize(this);
+    } catch (e) {
+      log('Notification listener init failed: $e');
+    }
+    try {
+      await SmsDetectionService.initialize(this);
+    } catch (e) {
+      log('SMS detection init failed: $e');
+    }
+
+    // Start monitoring if enabled.
+    if (_settings.isEnabled) {
+      try {
+        await startMonitoring();
+      } catch (e) {
+        log('Start monitoring failed: $e');
+      }
+    }
+
+    _isInitialized = true;
+    log('Payment notification service initialized');
   }
 
   /// Initialize local notifications for showing expense suggestions
@@ -83,6 +102,18 @@ class PaymentNotificationService {
       }
     } catch (e) {
       log('Error requesting notification permissions: $e');
+    }
+  }
+
+  Future<bool> _areSystemNotificationsEnabled() async {
+    try {
+      final androidPlugin = _localNotifications.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin == null) return true;
+      final enabled = await androidPlugin.areNotificationsEnabled();
+      return enabled ?? true;
+    } catch (_) {
+      return true;
     }
   }
 
@@ -159,6 +190,10 @@ class PaymentNotificationService {
 
   /// Start monitoring notifications and SMS
   Future<void> startMonitoring() async {
+    if (_isMonitoringStarted) {
+      log('Payment monitoring already started');
+      return;
+    }
     try {
       if (_settings.notificationMonitoringEnabled) {
         await NotificationListenerService.startListening();
@@ -169,6 +204,7 @@ class PaymentNotificationService {
         // Process recent SMS messages
         await SmsDetectionService.processRecentSms();
       }
+      _isMonitoringStarted = true;
       
       log('Payment monitoring started');
     } catch (e) {
@@ -181,6 +217,7 @@ class PaymentNotificationService {
     try {
       await NotificationListenerService.stopListening();
       await SmsDetectionService.stopListening();
+      _isMonitoringStarted = false;
       log('Payment monitoring stopped');
     } catch (e) {
       log('Error stopping payment monitoring: $e');
@@ -222,6 +259,14 @@ class PaymentNotificationService {
       try {
         await PaymentDialogService.showPaymentDetected(notification);
         log('✅ Successfully showed in-app dialog');
+        // Also show a system notification so users still get phone-level alerts.
+        // This preserves visibility when they miss/dismiss the popup quickly.
+        try {
+          await _showExpenseSuggestionNotification(notification);
+          log('✅ Also showed system notification after in-app dialog');
+        } catch (systemErr) {
+          log('⚠️ Could not show additional system notification: $systemErr');
+        }
       } catch (e) {
         log('❌ In-app dialog failed (app in background): $e');
         // Fallback to system notification
@@ -261,10 +306,16 @@ class PaymentNotificationService {
       return false;
     }
     
-    // Check if app is enabled
-    if (_settings.enabledApps.isNotEmpty && 
+    // Check if app is enabled.
+    // For SMS with numeric/unknown sender names, allow processing if payment
+    // basics are present so real transactions are not silently dropped.
+    if (_settings.enabledApps.isNotEmpty &&
         !_settings.enabledApps.contains(notification.appName)) {
-      return false;
+      final isSmsSource = notification.source.toLowerCase() == 'sms';
+      final hasAmount = (notification.amount ?? 0) > 0;
+      if (!(isSmsSource && hasAmount)) {
+        return false;
+      }
     }
     
     // Check if merchant is enabled (if merchant filtering is active)
@@ -283,6 +334,11 @@ class PaymentNotificationService {
     final merchant = notification.merchant ?? 'Unknown merchant';
     
     try {
+      final enabled = await _areSystemNotificationsEnabled();
+      if (!enabled) {
+        log('System notifications are disabled at OS level');
+        return;
+      }
       
       const androidDetails = AndroidNotificationDetails(
         'payment_suggestions',
@@ -546,10 +602,12 @@ class PaymentNotificationService {
   Future<Map<String, bool>> checkPermissions() async {
     final notificationPermission = await NotificationListenerService.isNotificationListenerEnabled();
     final smsPermission = await SmsDetectionService.hasSmsPermission();
+    final localNotificationPermission = await _areSystemNotificationsEnabled();
     
     return {
       'notification': notificationPermission,
       'sms': smsPermission,
+      'local_notification': localNotificationPermission,
     };
   }
 
@@ -557,10 +615,13 @@ class PaymentNotificationService {
   Future<Map<String, bool>> requestPermissions() async {
     final notificationPermission = await NotificationListenerService.requestNotificationPermission();
     final smsPermission = await SmsDetectionService.requestSmsPermission();
+    await _requestNotificationPermissions();
+    final localNotificationPermission = await _areSystemNotificationsEnabled();
     
     return {
       'notification': notificationPermission,
       'sms': smsPermission,
+      'local_notification': localNotificationPermission,
     };
   }
 

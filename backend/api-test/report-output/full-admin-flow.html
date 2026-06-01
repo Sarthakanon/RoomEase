@@ -1,0 +1,194 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RoomEase Full Admin Flow (A to Z)</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0.6in; }
+h1, h2, h3 { color: #0f172a; margin-top: 16pt; margin-bottom: 8pt; }
+h1 { font-size: 20pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+p { margin: 6pt 0; }
+ul, ol { margin: 6pt 0 6pt 18pt; }
+li { margin: 2pt 0; }
+code { font-family: Consolas, 'Courier New', monospace; background: #f8fafc; padding: 1pt 3pt; border-radius: 3px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt; border-radius: 4px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #cbd5e1; padding: 6pt; text-align: left; }
+th { background: #f1f5f9; }
+blockquote { border-left: 3px solid #94a3b8; margin: 8pt 0; padding: 4pt 10pt; color: #334155; background: #f8fafc; }
+</style></head><body><h1 id="roomease-full-admin-flow-a-to-z">RoomEase Full Admin Flow (A to Z)</h1>
+<h2 id="technical-summary-paragraph">Technical Summary Paragraph</h2>
+<p>The RoomEase admin subsystem is an operational oversight layer exposed through <code>/api/admin/*</code> endpoints. It provides system-level visibility (user/roomspace/expense/analytics aggregates) and moderation controls (ban/unban/check ban status). Ban enforcement is runtime-coupled with the global auth middleware: once a user is marked banned in PostgreSQL, protected API requests are denied and session invalidation is triggered. On the client, ban detection is handled through API interceptors plus periodic checks, then user logout and ban UI messaging are initiated.</p>
+<p>Important current state: admin endpoints are currently public in routing and should be protected before production.</p>
+<hr />
+<h2 id="1-backend-files-involved">1. Backend files involved</h2>
+<ol>
+<li>
+<p><code>backend/main.go</code>
+- Registers admin routes under <code>/api/admin</code>
+- Currently places these routes in public group (no auth middleware)</p>
+</li>
+<li>
+<p><code>backend/handlers/admin_handler.go</code>
+- Implements all admin endpoints (stats, users, roomspaces, expenses, analytics, ban/unban)</p>
+</li>
+<li>
+<p><code>backend/middleware/auth.go</code>
+- Not directly guarding admin routes right now, but enforces ban on protected APIs</p>
+</li>
+<li>
+<p><code>backend/models/user.go</code>
+- Stores <code>is_banned</code>, <code>ban_reason</code>, <code>banned_at</code></p>
+</li>
+</ol>
+<hr />
+<h2 id="2-admin-api-surface-and-behavior">2. Admin API surface and behavior</h2>
+<h3 id="21-system-overview">2.1 System overview</h3>
+<ul>
+<li><code>GET /api/admin/stats</code></li>
+<li>Returns:</li>
+<li>total users</li>
+<li>total roomspaces</li>
+<li>total expenses</li>
+<li>total expense amount</li>
+<li>banned users count</li>
+<li>last updated timestamp</li>
+</ul>
+<h3 id="22-user-management">2.2 User management</h3>
+<ul>
+<li><code>GET /api/admin/users</code></li>
+<li>paginated list</li>
+<li>optional search by name/email (<code>ILIKE</code>)</li>
+<li><code>GET /api/admin/users/:userId</code></li>
+<li>detailed user + roomspace count + expense count</li>
+<li><code>POST /api/admin/users/:userId/ban</code></li>
+<li>body includes reason</li>
+<li>sets ban fields</li>
+<li><code>POST /api/admin/users/:userId/unban</code></li>
+<li>clears ban fields</li>
+<li><code>GET /api/admin/users/:userId/ban-status</code></li>
+<li>lightweight endpoint used by app-side monitoring</li>
+</ul>
+<h3 id="23-roomspace-oversight">2.3 Roomspace oversight</h3>
+<ul>
+<li><code>GET /api/admin/roomspaces</code></li>
+<li>paginated roomspace list</li>
+<li>includes creator preload and active member count</li>
+<li><code>GET /api/admin/roomspaces/:roomspaceId</code></li>
+<li>roomspace detail + members + total/ count metrics</li>
+</ul>
+<h3 id="24-expense-oversight">2.4 Expense oversight</h3>
+<ul>
+<li><code>GET /api/admin/expenses</code></li>
+<li>paginated shared expenses with payer/roomspace preload</li>
+<li><code>GET /api/admin/personal-expenses</code></li>
+<li>paginated personal expenses with user preload</li>
+</ul>
+<h3 id="25-admin-analytics">2.5 Admin analytics</h3>
+<ul>
+<li><code>GET /api/admin/analytics</code></li>
+<li>Returns:</li>
+<li>user growth by day (last 30 days)</li>
+<li>category breakdown</li>
+<li>subscription distribution</li>
+<li>active roomspaces in last 7 days</li>
+</ul>
+<hr />
+<h2 id="3-ban-flow-end-to-end">3. Ban flow (end-to-end)</h2>
+<h3 id="step-a-admin-bans-a-user">Step A: Admin bans a user</h3>
+<ol>
+<li>Admin calls <code>POST /api/admin/users/:userId/ban</code></li>
+<li>Handler finds user by <code>firebase_uid</code></li>
+<li>Updates:
+- <code>is_banned = true</code>
+- <code>ban_reason = &lt;reason&gt;</code>
+- <code>banned_at = now</code></li>
+</ol>
+<h3 id="step-b-user-tries-protected-api">Step B: User tries protected API</h3>
+<ol>
+<li>Request hits <code>AuthMiddleware</code></li>
+<li>Middleware validates session cookie</li>
+<li>Middleware calls <code>checkUserBanStatus(userUID)</code></li>
+<li>If banned:
+- session deleted from session store
+- response <code>403</code> with banned/logout-required payload</li>
+</ol>
+<h3 id="step-c-frontend-reacts">Step C: Frontend reacts</h3>
+<ol>
+<li><code>ApiService</code> interceptors detect ban patterns (<code>403</code>, banned flags, error text)</li>
+<li>Ban monitoring/notification service triggers ban event</li>
+<li>UI shows ban dialog and user is signed out</li>
+</ol>
+<p>This creates both proactive (polling) and reactive (interceptor) ban handling.</p>
+<hr />
+<h2 id="4-frontend-admin-related-behavior-existing">4. Frontend admin-related behavior (existing)</h2>
+<p>There is no full admin dashboard UI in the Flutter app by default.
+Current client-side admin integration mainly includes:</p>
+<ol>
+<li>
+<p>Ban status check at login:
+- <code>ApiService.login(...)</code> -&gt; <code>_checkUserBanStatus(user.uid)</code>
+- calls <code>GET /api/admin/users/:userId/ban-status</code></p>
+</li>
+<li>
+<p>Periodic ban monitoring:
+- <code>BanMonitoringService</code> polls every ~30 seconds</p>
+</li>
+<li>
+<p>Ban UX:
+- <code>BanListenerWidget</code> + <code>BanCountdownDialog</code>
+- auto-logout and user messaging</p>
+</li>
+</ol>
+<p>So admin data display endpoints exist primarily backend-side (for admin panel, scripts, or API tools), while app currently consumes mostly ban-status path.</p>
+<hr />
+<h2 id="5-database-tables-used-in-admin-subsystem">5. Database tables used in admin subsystem</h2>
+<ol>
+<li>
+<p><code>users</code>
+- moderation fields (<code>is_banned</code>, <code>ban_reason</code>, <code>banned_at</code>)
+- admin list/search/detail source</p>
+</li>
+<li>
+<p><code>roomspaces</code>
+- roomspace listing/detail and totals</p>
+</li>
+<li>
+<p><code>roomspace_members</code>
+- member counts and roomspace user mapping</p>
+</li>
+<li>
+<p><code>expenses</code>
+- system totals, admin expense list, roomspace expense metrics</p>
+</li>
+<li>
+<p><code>personal_expenses</code>
+- admin personal expense listing</p>
+</li>
+<li>
+<p><code>subscription_payments</code> / <code>users.subscription_plan</code>
+- subscription distribution and admin business visibility</p>
+</li>
+<li>
+<p>Other related support tables may be queried indirectly for aggregates depending on endpoint evolution.</p>
+</li>
+</ol>
+<hr />
+<h2 id="6-security-posture-and-immediate-hardening-needed">6. Security posture and immediate hardening needed</h2>
+<p>Current risk:
+- <code>main.go</code> defines admin routes as public.</p>
+<p>Recommended fixes:
+1. Move <code>/api/admin/*</code> under protected group.
+2. Add admin role/claim middleware (not just authenticated user).
+3. Add audit log for admin actions (ban/unban/view sensitive records).
+4. Apply pagination caps and stricter query validation.
+5. Consider IP allowlist/rate limits for admin endpoints.</p>
+<hr />
+<h2 id="7-supervisor-ready-explanation-of-how-data-is-displayed">7. Supervisor-ready explanation of “how data is displayed”</h2>
+<p>Admin data display pipeline:
+1. API request hits admin handler.
+2. Handler runs paginated/aggregated GORM queries.
+3. Preload is used for relational display fields (creator, payer, user).
+4. Response is standardized JSON (<code>success</code>, <code>data</code>, optional <code>pagination</code>).
+5. Consumer (admin panel/app/tool) renders tables/charts from this response.</p>
+<hr />
+<h2 id="8-one-line-summary">8. One-line summary</h2>
+<p>Admin flow in RoomEase is API-driven moderation and observability: handlers read aggregated data from PostgreSQL via GORM, ban flags are enforced by auth middleware on protected APIs, and frontend ban monitoring ensures immediate user lockout experience.</p></body></html>

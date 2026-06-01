@@ -246,7 +246,9 @@ class _MobileDashboardState extends State<MobileDashboard>
     // Always load notifications, profile, and personal expenses
     futures['notifications'] = _smartApi.getNotifications(forceRefresh: forceRefresh);
     futures['userProfile'] = _smartApi.getUserProfile(forceRefresh: forceRefresh);
-    futures['personalExpenses'] = _smartApi.getPersonalExpenses(limit: 3, offset: 0, forceRefresh: forceRefresh);
+    // Fetch a wider window, then sort client-side for reliable "newest first"
+    // regardless of backend default ordering.
+    futures['personalExpenses'] = _smartApi.getPersonalExpenses(limit: 50, offset: 0, forceRefresh: forceRefresh);
     futures['personalExpensesMonthly'] = _smartApi.getPersonalExpenses(
       limit: 500,
       offset: 0,
@@ -256,7 +258,8 @@ class _MobileDashboardState extends State<MobileDashboard>
     
     // Load roomspace-specific data if in a roomspace
     if (!isPersonalSpace && activeRoomspaceId != null) {
-      futures['roomspaceExpenses'] = _smartApi.getRoomspaceExpenses(activeRoomspaceId, limit: 3, forceRefresh: forceRefresh);
+      // Fetch a wider window, then sort client-side for reliable "newest first".
+      futures['roomspaceExpenses'] = _smartApi.getRoomspaceExpenses(activeRoomspaceId, limit: 50, forceRefresh: forceRefresh);
       futures['balances'] = _smartApi.getRoomspaceBalances(activeRoomspaceId, forceRefresh: true);
       futures['members'] = _smartApi.getRoomspaceMembers(activeRoomspaceId, forceRefresh: forceRefresh);
     }
@@ -712,9 +715,10 @@ class _MobileDashboardState extends State<MobileDashboard>
   Future<void> _handleExpenseSubmission(ExpenseData expense) async {
     await performOperationWithRefresh(
       () async {
+        final roomspaceId = _currentRoomspaceId!;
         final requests = ExpenseCreateRequest.fromExpenseDataBatch(
           expense,
-          _currentRoomspaceId!,
+          roomspaceId,
         );
         for (final request in requests) {
           debugPrint('Creating expense with paid_by: ${request.paidBy}');
@@ -731,7 +735,7 @@ class _MobileDashboardState extends State<MobileDashboard>
             payerAmounts[fallbackPayer] = expense.amount;
           }
           await _apiService.createRecurringExpenseTemplate({
-            'roomspace_id': _currentRoomspaceId!,
+            'roomspace_id': roomspaceId,
             'title': expense.title,
             'description': expense.description,
             'amount': expense.amount,
@@ -748,12 +752,27 @@ class _MobileDashboardState extends State<MobileDashboard>
         // Clear cache and trigger immediate refresh
         _cachedDashboardData = null;
         _lastDataLoad = null;
+        _currentFuture = null;
+        _isLoading = false;
+
+        // Force-refresh relevant screens so recent activity immediately reflects
+        // the newest expense at the top.
+        _state.forceRefresh(ScreenKeys.dashboard);
+        _state.forceRefresh(ScreenKeys.personalExpenses);
+        _state.forceRefresh(ScreenKeys.roomspaceExpenses(roomspaceId));
+        _state.forceRefresh(ScreenKeys.roomspaceBalances(roomspaceId));
         
         // Notify real-time service to update all listeners
         _realTimeService.notifyExpenseCreated(
-          _currentRoomspaceId!,
+          roomspaceId,
           expense.toJson(),
         );
+
+        // Pull a fresh snapshot now (do not wait for passive refresh cycle).
+        await _loadDashboardData(forceRefresh: true);
+        if (mounted) {
+          setState(() {});
+        }
       },
       successMessage: 'Added: ${expense.title} · Rs. ${expense.amount.toStringAsFixed(2)}',
       errorMessage: 'Failed to add expense',
@@ -916,6 +935,8 @@ class _MobileDashboardState extends State<MobileDashboard>
           .toList();
     }
 
+    final recentActivityRoomspaceExpenses = roomspaceExpenses;
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1012,7 +1033,11 @@ class _MobileDashboardState extends State<MobileDashboard>
 
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: _buildRecentActivityList(primaryColor, personalExpenses, roomspaceExpenses),
+            child: _buildRecentActivityList(
+              primaryColor,
+              personalExpenses,
+              recentActivityRoomspaceExpenses,
+            ),
           ),
         ],
       ),
@@ -1535,6 +1560,42 @@ class _MobileDashboardState extends State<MobileDashboard>
     Map<String, dynamic> personalExpenses, 
     Map<String, dynamic> roomspaceExpenses,
   ) {
+    DateTime _parseExpenseDate(dynamic raw) {
+      if (raw is DateTime) return raw;
+      if (raw is int) {
+        return raw > 1000000000000
+            ? DateTime.fromMillisecondsSinceEpoch(raw)
+            : DateTime.fromMillisecondsSinceEpoch(raw * 1000);
+      }
+      if (raw is String && raw.isNotEmpty) {
+        final parsed = DateTime.tryParse(raw);
+        if (parsed != null) return parsed;
+      }
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    DateTime _extractBestDate(Map<String, dynamic> expense) {
+      final candidates = [
+        expense['created_at'],
+        expense['createdAt'],
+        expense['updated_at'],
+        expense['updatedAt'],
+        expense['timestamp'],
+        expense['date'],
+      ];
+      for (final candidate in candidates) {
+        final parsed = _parseExpenseDate(candidate);
+        if (parsed.millisecondsSinceEpoch != 0) return parsed;
+      }
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    int _extractSortableId(Map<String, dynamic> expense) {
+      final raw = expense['id'];
+      if (raw is int) return raw;
+      return int.tryParse(raw?.toString() ?? '') ?? 0;
+    }
+
     // Extract expense data
     final personalExpensesList = personalExpenses['data'] as List<dynamic>? ?? [];
     final roomspaceExpensesList = roomspaceExpenses['data'] as List<dynamic>? ?? [];
@@ -1548,6 +1609,7 @@ class _MobileDashboardState extends State<MobileDashboard>
     final personalError = personalExpenses['error'] as String?;
     final roomspaceError = roomspaceExpenses['error'] as String?;
     final hasError = personalError != null || roomspaceError != null;
+    final hasAnyData = personalExpensesList.isNotEmpty || roomspaceExpensesList.isNotEmpty;
     
     if (isLoading) {
       return const Column(
@@ -1559,7 +1621,7 @@ class _MobileDashboardState extends State<MobileDashboard>
       );
     }
 
-    if (hasError) {
+    if (hasError && !hasAnyData) {
       final errorMessage = personalError ?? roomspaceError ?? 'Unknown error';
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
@@ -1594,20 +1656,13 @@ class _MobileDashboardState extends State<MobileDashboard>
     for (final expense in personalExpensesList) {
       if (expense is! Map<String, dynamic>) continue;
       
-      final createdAt = expense['created_at'] as String?;
-      DateTime date = DateTime.now();
-      if (createdAt != null) {
-        try {
-          date = DateTime.parse(createdAt);
-        } catch (e) {
-          // Use current time if parsing fails
-        }
-      }
+      final date = _extractBestDate(expense);
       
       combined.add({
         'type': 'personal',
         'data': expense,
         'date': date,
+        'sortId': _extractSortableId(expense),
       });
     }
     
@@ -1615,25 +1670,22 @@ class _MobileDashboardState extends State<MobileDashboard>
     for (final expense in roomspaceExpensesList) {
       if (expense is! Map<String, dynamic>) continue;
       
-      final createdAt = expense['created_at'] as String?;
-      DateTime date = DateTime.now();
-      if (createdAt != null) {
-        try {
-          date = DateTime.parse(createdAt);
-        } catch (e) {
-          // Use current time if parsing fails
-        }
-      }
+      final date = _extractBestDate(expense);
       
       combined.add({
         'type': 'shared',
         'data': expense,
         'date': date,
+        'sortId': _extractSortableId(expense),
       });
     }
     
-    // Sort by date (newest first)
-    combined.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    // Sort by date (newest first), then by id (higher/newer id first) for ties.
+    combined.sort((a, b) {
+      final byDate = (b['date'] as DateTime).compareTo(a['date'] as DateTime);
+      if (byDate != 0) return byDate;
+      return (b['sortId'] as int).compareTo(a['sortId'] as int);
+    });
     
     // Take only the most recent 5
     final recent = combined.take(5).toList();

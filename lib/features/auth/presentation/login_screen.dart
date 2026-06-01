@@ -24,6 +24,96 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isGoogleLoading = false; // Track Google sign-in loading state
   bool _isEmailLoading = false; // Track email/password login loading state
 
+  bool _isBanError(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('suspended') || lower.contains('banned');
+  }
+
+  String _extractBanReason(String message) {
+    final dueToIndex = message.toLowerCase().indexOf('due to:');
+    if (dueToIndex != -1) {
+      final reason = message.substring(dueToIndex + 7).trim();
+      final supportIndex = reason.toLowerCase().indexOf('please contact support');
+      if (supportIndex != -1) {
+        return reason.substring(0, supportIndex).trim().replaceAll(RegExp(r'[. ]+$'), '');
+      }
+      return reason.replaceAll(RegExp(r'[. ]+$'), '');
+    }
+    return 'Your account has been suspended. Please contact support.';
+  }
+
+  Future<void> _showBanDialog(String reason) async {
+    if (!mounted) return;
+    final primary = Theme.of(context).colorScheme.primary;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEECEC),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(Icons.block_rounded, color: Color(0xFFD93025), size: 32),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Account Suspended',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A1A2E),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                reason,
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                  color: Color(0xFF4A4A68),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    elevation: 0,
+                    backgroundColor: primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -37,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleSuccess(userCredential) async {
-    if (_rememberMe) await AuthStateService.saveLoginState(userCredential.user?.email ?? '', true);
+    await AuthStateService.saveLoginState(userCredential.user?.email ?? '', _rememberMe);
     
     // Reset providers for the new user
     final subscriptionProvider = Provider.of<SubscriptionProvider>(context, listen: false);
@@ -78,13 +168,17 @@ class _LoginScreenState extends State<LoginScreen> {
         if (errorMessage.startsWith('Exception: ')) {
           errorMessage = errorMessage.substring(11);
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        if (_isBanError(errorMessage)) {
+          await _showBanDialog(_extractBanReason(errorMessage));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _isEmailLoading = false);
@@ -114,13 +208,17 @@ class _LoginScreenState extends State<LoginScreen> {
         if (errorMessage.startsWith('Exception: ')) {
           errorMessage = errorMessage.substring(11);
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        if (_isBanError(errorMessage)) {
+          await _showBanDialog(_extractBanReason(errorMessage));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
     }
   }
@@ -208,7 +306,17 @@ class _LoginScreenState extends State<LoginScreen> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Checkbox(value: _rememberMe, activeColor: primary, side: BorderSide(color: Colors.grey.shade300, width: 1.5), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)), onChanged: (v) => setState(() => _rememberMe = v ?? false)),
+            Checkbox(
+              value: _rememberMe,
+              activeColor: primary,
+              side: BorderSide(color: Colors.grey.shade300, width: 1.5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              onChanged: (v) async {
+                final value = v ?? false;
+                setState(() => _rememberMe = value);
+                await AuthStateService.setRememberMe(value);
+              },
+            ),
             Text('Remember me', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
           ],
         ),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/auth_state_service.dart';
 import '../services/api_service.dart';
+import '../services/ban_monitoring_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../main.dart' show navigatorKey;
 
@@ -63,6 +64,7 @@ class _BanCountdownDialogState extends State<BanCountdownDialog> {
           (route) => false,
         );
       }
+      BanMonitoringService().clearBanFlowFlag();
     } catch (e) {
       print('❌ Error during logout: $e');
       // Force navigation even if logout fails
@@ -74,6 +76,7 @@ class _BanCountdownDialogState extends State<BanCountdownDialog> {
           (route) => false,
         );
       }
+      BanMonitoringService().clearBanFlowFlag();
     }
   }
 

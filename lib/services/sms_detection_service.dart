@@ -1,13 +1,18 @@
 import 'dart:developer';
+import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'payment_notification_service.dart';
 import 'payment_parser_service.dart';
+import 'payment_dialog_service.dart';
 
 class SmsDetectionService {
   static const MethodChannel _channel = MethodChannel('sms_detection_channel');
   static PaymentNotificationService? _paymentService;
   static bool _isListening = false;
+  static Timer? _pendingSmsPollTimer;
+  static int? _lastProcessedTimestamp;
 
   // Supported bank SMS senders in Nepal
   static const List<String> supportedSenders = [
@@ -85,8 +90,15 @@ class SmsDetectionService {
     switch (call.method) {
       case 'onSmsReceived':
         log('📱 Processing SMS method call');
-        final args = call.arguments as Map<String, dynamic>;
-        _handleNativeSms(args);
+        final rawArgs = call.arguments;
+        if (rawArgs is! Map) {
+          log('❌ SMS args are not a Map. Received type: ${rawArgs.runtimeType}');
+          return;
+        }
+        final args = rawArgs.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        await _handleNativeSms(args);
         break;
       default:
         log('❓ Unknown SMS method call: ${call.method}');
@@ -94,7 +106,7 @@ class SmsDetectionService {
   }
 
   /// Handle SMS from native Android code
-  static void _handleNativeSms(Map<String, dynamic> args) {
+  static Future<void> _handleNativeSms(Map<String, dynamic> args) async {
     try {
       log('🔥 SMS RECEIVED IN FLUTTER!');
       log('📦 SMS Args: $args');
@@ -108,7 +120,7 @@ class SmsDetectionService {
       }
 
       log('📱 Received SMS from $sender: $body');
-      _processSmsMessage(sender, body);
+      await _processSmsMessage(sender, body);
     } catch (e, stackTrace) {
       log('❌ CRITICAL ERROR handling native SMS: $e');
       log('Stack trace: $stackTrace');
@@ -158,6 +170,7 @@ class SmsDetectionService {
       log('🚀 Starting SMS listener via method channel...');
       await _channel.invokeMethod('startSmsListener');
       _isListening = true;
+      _startPendingSmsPolling();
       log('✅ SMS listener started successfully');
     } catch (e) {
       log('❌ Error starting SMS listener: $e');
@@ -169,14 +182,37 @@ class SmsDetectionService {
     try {
       await _channel.invokeMethod('stopSmsListener');
       _isListening = false;
+      _pendingSmsPollTimer?.cancel();
+      _pendingSmsPollTimer = null;
       log('SMS listener stopped');
     } catch (e) {
       log('Error stopping SMS listener: $e');
     }
   }
 
+  static void _startPendingSmsPolling() {
+    _pendingSmsPollTimer?.cancel();
+    _pendingSmsPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        final raw = await _channel.invokeMethod<String>('getPendingSmsPayload');
+        if (raw == null || raw.isEmpty) return;
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map) return;
+        final args = decoded.map((k, v) => MapEntry(k.toString(), v));
+        final ts = (args['timestamp'] as num?)?.toInt();
+        if (ts != null && _lastProcessedTimestamp == ts) return;
+        _lastProcessedTimestamp = ts;
+        log('📬 Processing pending SMS payload via polling fallback');
+        await _handleNativeSms(args);
+        await _channel.invokeMethod('clearPendingSmsPayload');
+      } catch (e) {
+        log('Pending SMS polling error: $e');
+      }
+    });
+  }
+
   /// Process SMS message for payment detection
-  static void _processSmsMessage(String sender, String body) {
+  static Future<void> _processSmsMessage(String sender, String body) async {
     try {
       log('🔍 Processing SMS from $sender: $body');
 
@@ -195,7 +231,7 @@ class SmsDetectionService {
       log('✅ SMS passed initial checks - proceeding with parsing');
 
       // Determine app name from sender
-      final appName = _getAppNameFromSender(sender);
+      final appName = _getAppNameFromSender(sender, body);
       log('📱 App name determined: $appName');
       
       // Parse the SMS for payment information
@@ -207,7 +243,16 @@ class SmsDetectionService {
 
       if (paymentNotification != null) {
         log('🎉 Payment detected from SMS: ${paymentNotification.amount} from ${paymentNotification.appName}');
-        
+
+        // VIVA-safe direct dialog path: try showing popup immediately.
+        // This bypasses deeper service-state races and ensures UX consistency.
+        try {
+          await PaymentDialogService.showPaymentDetected(paymentNotification);
+          log('✅ Direct popup path succeeded from SMS detection');
+        } catch (e) {
+          log('⚠️ Direct popup path failed, falling back to service flow: $e');
+        }
+
         // Send to payment notification service with additional error handling
         try {
           log('📤 Sending to payment service...');
@@ -271,14 +316,17 @@ class SmsDetectionService {
   }
 
   /// Get app name from SMS sender
-  static String _getAppNameFromSender(String sender) {
+  static String _getAppNameFromSender(String sender, String body) {
     final upperSender = sender.toUpperCase();
+    final upperBody = body.toUpperCase();
     
     // Map common sender patterns to app names
     if (upperSender.contains('ESEWA')) return 'eSewa';
     if (upperSender.contains('KHALTI')) return 'Khalti';
     if (upperSender.contains('IMEPAY')) return 'IME Pay';
-    if (upperSender.contains('FONEPAY')) return 'FonePay';
+    if (upperSender.contains('FONEPAY') || upperBody.contains('FONEPAY')) {
+      return 'FonePay';
+    }
     if (upperSender.contains('IPAY')) return 'iPay';
     if (upperSender.contains('CONNECTIPS')) return 'ConnectIPS';
     
@@ -296,6 +344,12 @@ class SmsDetectionService {
     if (upperSender.contains('NIB')) return 'Nepal Investment Bank';
     if (upperSender.contains('MACHHAPUCHCHHRE')) return 'Machhapuchchhre Bank';
     
+    // Body-based fallback when sender is numeric/unknown
+    if (upperBody.contains('ESEWA')) return 'eSewa';
+    if (upperBody.contains('KHALTI')) return 'Khalti';
+    if (upperBody.contains('IMEPAY')) return 'IME Pay';
+    if (upperBody.contains('CONNECTIPS')) return 'ConnectIPS';
+
     // Default to sender if no specific mapping found
     return sender;
   }

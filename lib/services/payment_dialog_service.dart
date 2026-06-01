@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:developer';
+import '../main.dart' show navigatorKey;
 import '../models/payment_notification.dart';
 import '../models/expense_models.dart';
 import '../providers/roomspace_provider.dart';
@@ -30,23 +31,38 @@ class PaymentDialogService {
     log('Payment detected: ${payment.appName} - Rs. ${payment.amount}');
     log('App foreground state: $_isAppInForeground');
     log('Context available: ${_currentContext != null}');
-    
+
+    // Prefer in-app dialog whenever app has any active navigator context.
+    // This is more reliable than tab-specific contexts.
+    final navCtx = navigatorKey.currentContext;
+    if (navCtx != null && navCtx.mounted) {
+      setContext(navCtx);
+      log('Showing in-app dialog using global navigator context');
+      await _showInAppDialog(payment);
+      return;
+    }
+
     if (_isAppInForeground && _currentContext != null) {
-      // Show in-app dialog
       log('Showing in-app dialog for payment');
       await _showInAppDialog(payment);
-    } else {
-      // App is in background or context not available - let system notification handle it
-      log('App in background or context unavailable, letting system notification handle it');
-      throw Exception('App in background - use system notification');
+      return;
     }
+
+    // App is in background or no dialog context available.
+    log('App in background or context unavailable, letting system notification handle it');
+    throw Exception('App in background - use system notification');
   }
   
   /// Show in-app dialog for payment detection
   static Future<void> _showInAppDialog(PaymentNotification payment) async {
-    if (_currentContext == null) return;
+    if (_currentContext == null) {
+      throw Exception('Payment dialog context unavailable');
+    }
     
     final context = _currentContext!;
+    if (!context.mounted) {
+      throw Exception('Payment dialog context is not mounted');
+    }
     final amount = payment.amount?.toStringAsFixed(0) ?? 'Unknown';
     final merchant = payment.merchant ?? payment.appName;
     
@@ -184,6 +200,9 @@ class PaymentDialogService {
       }
     } catch (e) {
       log('Error showing payment dialog: $e');
+      // Bubble up to PaymentNotificationService so it can fallback
+      // to system notification instead of silently dropping this event.
+      rethrow;
     }
   }
   

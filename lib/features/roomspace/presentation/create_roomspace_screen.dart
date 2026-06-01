@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../services/roomspace_service.dart';
 import '../../../providers/roomspace_provider.dart';
@@ -34,6 +35,10 @@ class CreateRoomspaceScreen extends StatefulWidget {
 }
 
 class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
+  static const int _roomNameMaxLength = 20;
+  static const int _notesMaxLength = 60;
+  static final RegExp _addressPattern = RegExp(r'^\s*[^,]+\s*,\s*[^,]+\s*$');
+
   final _formKey = GlobalKey<FormState>();
   final _roomNameController = TextEditingController();
   final _addressController = TextEditingController();
@@ -163,11 +168,52 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
                   children: [
                     _buildCounter(roomspaceProvider, maxRoomspaces),
                     const SizedBox(height: 32),
-                    _buildField(controller: _roomNameController, label: 'Room Name', hint: 'e.g. Dream Suite', icon: Icons.home_outlined, isDisabled: isDisabled, validator: (v) => v!.isEmpty ? 'Name required' : null),
+                    _buildField(
+                      controller: _roomNameController,
+                      label: 'Room Name',
+                      hint: 'e.g. Dream Suite',
+                      icon: Icons.home_outlined,
+                      isDisabled: isDisabled,
+                      maxLength: _roomNameMaxLength,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Name required';
+                        if (v.trim().length > _roomNameMaxLength) {
+                          return 'Room name must be at most $_roomNameMaxLength characters';
+                        }
+                        return null;
+                      },
+                    ),
                     const SizedBox(height: 16),
-                    _buildField(controller: _addressController, label: 'Address', hint: 'e.g. 5th Ave, NY', icon: Icons.location_on_outlined, isDisabled: isDisabled, validator: (v) => v!.isEmpty ? 'Address required' : null),
+                    _buildField(
+                      controller: _addressController,
+                      label: 'Address',
+                      hint: 'e.g. Baneshwor, Kathmandu',
+                      icon: Icons.location_on_outlined,
+                      isDisabled: isDisabled,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Address required';
+                        if (!_addressPattern.hasMatch(v.trim())) {
+                          return 'Use format: place,city';
+                        }
+                        return null;
+                      },
+                    ),
                     const SizedBox(height: 16),
-                    _buildField(controller: _descriptionController, label: 'Notes (Optional)', hint: 'Room rules, etc.', icon: Icons.notes_rounded, isDisabled: isDisabled, maxLines: 3),
+                    _buildField(
+                      controller: _descriptionController,
+                      label: 'Notes (Optional)',
+                      hint: 'Room rules, etc.',
+                      icon: Icons.notes_rounded,
+                      isDisabled: isDisabled,
+                      maxLines: 3,
+                      maxLength: _notesMaxLength,
+                      validator: (v) {
+                        if (v != null && v.length > _notesMaxLength) {
+                          return 'Notes must be at most $_notesMaxLength characters';
+                        }
+                        return null;
+                      },
+                    ),
                     const SizedBox(height: 48),
                     _buildSubmit(isDisabled, primaryColor),
                   ],
@@ -196,7 +242,16 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
     );
   }
 
-  Widget _buildField({required TextEditingController controller, required String label, required String hint, required IconData icon, required bool isDisabled, int maxLines = 1, String? Function(String?)? validator}) {
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    required bool isDisabled,
+    int maxLines = 1,
+    int? maxLength,
+    String? Function(String?)? validator,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -205,6 +260,10 @@ class _CreateRoomspaceScreenState extends State<CreateRoomspaceScreen> {
         TextFormField(
           controller: controller,
           maxLines: maxLines,
+          maxLength: maxLength,
+          inputFormatters: maxLength != null
+              ? [LengthLimitingTextInputFormatter(maxLength)]
+              : null,
           validator: validator,
           enabled: !isDisabled,
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),

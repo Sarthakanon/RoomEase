@@ -3,6 +3,7 @@ package com.example.room_ease
 import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.Context
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
@@ -60,6 +61,15 @@ class MainActivity : FlutterFragmentActivity() {
                 "processRecentSms" -> {
                     // For now, just return success
                     // Could implement reading recent SMS from content provider
+                    result.success(true)
+                }
+                "getPendingSmsPayload" -> {
+                    val prefs = getSharedPreferences("sms_detection_store", Context.MODE_PRIVATE)
+                    result.success(prefs.getString("pending_sms_payload", null))
+                }
+                "clearPendingSmsPayload" -> {
+                    val prefs = getSharedPreferences("sms_detection_store", Context.MODE_PRIVATE)
+                    prefs.edit().remove("pending_sms_payload").apply()
                     result.success(true)
                 }
                 else -> {

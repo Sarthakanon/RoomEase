@@ -95,6 +95,7 @@ class HelpSupportScreen extends StatelessWidget {
                 children: [
                   ExpansionPanelRadio(
                     value: 'faq_1',
+                    backgroundColor: Colors.white,
                     headerBuilder: _faqHeader('Why is my balance not updating?'),
                     body: _faqBody(
                       'Make sure all roommates are in the same roomspace and expenses are split correctly. '
@@ -103,6 +104,7 @@ class HelpSupportScreen extends StatelessWidget {
                   ),
                   ExpansionPanelRadio(
                     value: 'faq_2',
+                    backgroundColor: Colors.white,
                     headerBuilder: _faqHeader('Why are analytics empty?'),
                     body: _faqBody(
                       'Analytics needs enough recent expense history to detect trends. Add more personal/shared expenses '
@@ -111,6 +113,7 @@ class HelpSupportScreen extends StatelessWidget {
                   ),
                   ExpansionPanelRadio(
                     value: 'faq_3',
+                    backgroundColor: Colors.white,
                     headerBuilder: _faqHeader('Can I use RoomEase for personal expenses only?'),
                     body: _faqBody(
                       'Yes. You can track personal expenses without roomspaces. Roomspace mode adds shared expense and settlement features.',
@@ -118,6 +121,7 @@ class HelpSupportScreen extends StatelessWidget {
                   ),
                   ExpansionPanelRadio(
                     value: 'faq_4',
+                    backgroundColor: Colors.white,
                     headerBuilder: _faqHeader('How do I recover a deleted expense?'),
                     body: _faqBody(
                       'If deletion approval/recovery is enabled in your workflow, check recent actions or ask roomspace admins. '

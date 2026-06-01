@@ -105,8 +105,15 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
 
       String? activeId = provider.getActiveRoomspaceId();
       if (activeId == null) {
-        activeId = provider.roomspaces.first.id;
-        await provider.setActiveRoomspace(activeId);
+        // User is intentionally in Personal Space; do not force roomspace context.
+        setState(() {
+          _roomspace = null;
+          _members = [];
+          _joinRequests = [];
+          _isCreator = false;
+          _isLoading = false;
+        });
+        return;
       }
 
       final detailsRes = await _cachedApi.getRoomspaceMembers(
@@ -124,7 +131,10 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
           try {
             final joinRequestsRes = await _apiService.getJoinRequests();
             if (joinRequestsRes['success'] == true && joinRequestsRes['data'] != null) {
-              joinRequests = joinRequestsRes['data'] as List<dynamic>;
+              final allJoinRequests = joinRequestsRes['data'] as List<dynamic>;
+              joinRequests = allJoinRequests
+                  .where((req) => _extractRoomspaceIdFromJoinRequest(req) == activeId)
+                  .toList();
             }
           } catch (e) {
             print('Error loading join requests: $e');
@@ -166,6 +176,28 @@ class _RoomspaceDetailsScreenState extends State<RoomspaceDetailsScreen> with Au
     } catch (e) {
       setState(() { _error = e.toString(); _isLoading = false; });
     }
+  }
+
+  String _extractRoomspaceIdFromJoinRequest(dynamic req) {
+    if (req is! Map) return '';
+    final map = req.map((k, v) => MapEntry(k.toString(), v));
+
+    final direct = (map['roomspace_id'] ?? '').toString();
+    if (direct.isNotEmpty) return direct;
+
+    final roomspace = map['roomspace'];
+    if (roomspace is Map) {
+      final nested = (roomspace['id'] ?? '').toString();
+      if (nested.isNotEmpty) return nested;
+    }
+
+    final dataField = map['data'];
+    if (dataField is Map) {
+      final nested = (dataField['roomspace_id'] ?? '').toString();
+      if (nested.isNotEmpty) return nested;
+    }
+
+    return '';
   }
 
   Future<void> _removeMember(String uid, String name) async {

@@ -3,6 +3,8 @@ package com.example.room_ease
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
 import io.flutter.plugin.common.MethodChannel
@@ -35,6 +37,9 @@ class SmsReceiver : BroadcastReceiver() {
                     // Check if this looks like a payment SMS
                     if (isPaymentSms(sender, body)) {
                         Log.d(TAG, "Payment SMS detected, sending to Flutter")
+                        context?.let {
+                            persistPendingSms(it, sender, body)
+                        }
                         
                         // Send to Flutter if method channel is available
                         methodChannel?.let { channel ->
@@ -45,7 +50,14 @@ class SmsReceiver : BroadcastReceiver() {
                             )
                             
                             try {
-                                channel.invokeMethod("onSmsReceived", smsData)
+                                Handler(Looper.getMainLooper()).post {
+                                    try {
+                                        channel.invokeMethod("onSmsReceived", smsData)
+                                        Log.d(TAG, "✅ SMS payload delivered to Flutter channel")
+                                    } catch (invokeError: Exception) {
+                                        Log.e(TAG, "❌ Error invoking Flutter method on main thread: ${invokeError.message}")
+                                    }
+                                }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error sending SMS to Flutter: ${e.message}")
                             }
@@ -60,6 +72,26 @@ class SmsReceiver : BroadcastReceiver() {
                 Log.e(TAG, "Error processing SMS: ${e.message}")
             }
         }
+    }
+
+    private fun persistPendingSms(context: Context, sender: String, body: String) {
+        try {
+            val prefs = context.getSharedPreferences("sms_detection_store", Context.MODE_PRIVATE)
+            val json = """{"sender":"${escapeJson(sender)}","body":"${escapeJson(body)}","timestamp":${System.currentTimeMillis()}}"""
+            prefs.edit().putString("pending_sms_payload", json).apply()
+            Log.d(TAG, "💾 Pending SMS persisted for Flutter polling fallback")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error persisting pending SMS: ${e.message}")
+        }
+    }
+
+    private fun escapeJson(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
     }
     
     private fun isPaymentSms(sender: String, body: String): Boolean {

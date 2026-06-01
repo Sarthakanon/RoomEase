@@ -31,11 +31,13 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   // Cache analytics data to prevent reloading
   Map<String, dynamic>? _cachedAnalyticsData;
   DateTime? _lastDataLoad;
+  Future<Map<String, dynamic>>? _analyticsFuture;
   static const Duration _cacheValidDuration = Duration(minutes: 5);
   
   @override
   void initState() {
     super.initState();
+    _analyticsFuture = _loadAnalyticsData();
     _primeCachedAnalytics();
     
     // Listen for roomspace changes
@@ -82,6 +84,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     
     // Force refresh analytics when roomspace changes
     _state.forceRefresh(ScreenKeys.analytics);
+    _analyticsFuture = _loadAnalyticsData(forceRefresh: true);
     setState(() {}); // Trigger rebuild to refresh UI
   }
 
@@ -99,6 +102,22 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     debugPrint('🌐 Loading fresh analytics data...');
     final roomspaceProvider = Provider.of<RoomspaceProvider>(context, listen: false);
     final activeRoomspaceId = roomspaceProvider.getActiveRoomspaceId();
+
+    // Cache-first behavior: on normal opens, render cached summary immediately.
+    if (!forceRefresh) {
+      final cachedSummary = await _analyticsService.getCachedSummary(roomspaceId: activeRoomspaceId);
+      if (cachedSummary != null) {
+        final cachedData = {
+          'summary': cachedSummary,
+          'roomspaceId': activeRoomspaceId,
+          'lastUpdated': DateTime.now(),
+          'isUsingCache': true,
+        };
+        _cachedAnalyticsData = cachedData;
+        _lastDataLoad = DateTime.now();
+        return cachedData;
+      }
+    }
 
     try {
       final summary = await _analyticsService.getSummary(roomspaceId: activeRoomspaceId);
@@ -146,7 +165,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
               _buildHeader(activeRoomspace?.name),
               Expanded(
                 child: FutureBuilder<Map<String, dynamic>>(
-                  future: _loadAnalyticsData(),
+                  future: _analyticsFuture,
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return _buildErrorState();
@@ -157,7 +176,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                         onRefresh: () async {
                           _cachedAnalyticsData = null;
                           _lastDataLoad = null;
+                          _analyticsFuture = _loadAnalyticsData(forceRefresh: true);
                           setState(() {}); // Trigger rebuild with fresh data
+                          await _analyticsFuture;
                         },
                         child: _buildAnalyticsContent(context, snapshot.data!),
                       );

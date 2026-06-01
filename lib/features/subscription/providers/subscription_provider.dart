@@ -1,4 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../models/subscription_models.dart';
 import '../services/subscription_service.dart';
 
@@ -10,6 +13,8 @@ class SubscriptionProvider with ChangeNotifier {
   Map<String, dynamic>? _roomspaceUsage;
   bool _isLoading = false;
   String? _error;
+  static const String _subscriptionCachePrefix = 'cached_subscription_';
+  static const String _usageCachePrefix = 'cached_subscription_usage_';
 
   // Getters
   UserSubscription? get currentSubscription => _currentSubscription;
@@ -26,11 +31,14 @@ class SubscriptionProvider with ChangeNotifier {
 
   /// Initialize subscription data
   Future<void> initialize() async {
+    // Load cached data first for offline/fast startup.
+    await _loadFromCache();
+
     // Initialize with default values first to avoid null states
-    _currentSubscription = _createDefaultFreeSubscription();
-    _roomspaceUsage = {
+    _currentSubscription ??= _createDefaultFreeSubscription();
+    _roomspaceUsage ??= {
       'current': 0,
-      'max': 2,
+      'max': _currentSubscription?.limits.maxRoomspaces ?? 2,
       'canCreate': true,
       'percentage': 0.0,
     };
@@ -62,6 +70,7 @@ class SubscriptionProvider with ChangeNotifier {
     try {
       _setLoading(true);
       _currentSubscription = await _subscriptionService.getCurrentSubscription();
+      await _saveSubscriptionCache();
       _error = null; // Clear any previous errors
     } catch (e) {
       // Don't show error for subscription loading since API might not be implemented yet
@@ -78,6 +87,7 @@ class SubscriptionProvider with ChangeNotifier {
   Future<void> loadRoomspaceUsage() async {
     try {
       _roomspaceUsage = await _subscriptionService.getRoomspaceUsage();
+      await _saveUsageCache();
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading roomspace usage: $e');
@@ -262,5 +272,54 @@ class SubscriptionProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
     debugPrint('🔄 SubscriptionProvider: State reset for new user');
+  }
+
+  String _currentUid() {
+    return FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
+  }
+
+  Future<void> _saveSubscriptionCache() async {
+    try {
+      if (_currentSubscription == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '$_subscriptionCachePrefix${_currentUid()}',
+        jsonEncode(_currentSubscription!.toJson()),
+      );
+    } catch (e) {
+      debugPrint('Failed to cache subscription: $e');
+    }
+  }
+
+  Future<void> _saveUsageCache() async {
+    try {
+      if (_roomspaceUsage == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '$_usageCachePrefix${_currentUid()}',
+        jsonEncode(_roomspaceUsage),
+      );
+    } catch (e) {
+      debugPrint('Failed to cache subscription usage: $e');
+    }
+  }
+
+  Future<void> _loadFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedSub = prefs.getString('$_subscriptionCachePrefix${_currentUid()}');
+      final cachedUsage = prefs.getString('$_usageCachePrefix${_currentUid()}');
+
+      if (cachedSub != null) {
+        final parsed = jsonDecode(cachedSub) as Map<String, dynamic>;
+        _currentSubscription = UserSubscription.fromJson(parsed);
+      }
+      if (cachedUsage != null) {
+        final parsed = jsonDecode(cachedUsage) as Map<String, dynamic>;
+        _roomspaceUsage = parsed;
+      }
+    } catch (e) {
+      debugPrint('Failed to load cached subscription data: $e');
+    }
   }
 }

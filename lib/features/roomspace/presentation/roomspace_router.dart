@@ -90,18 +90,8 @@ class _RoomspaceRouterState extends State<RoomspaceRouter> {
       );
     }
 
-    if (_hasRoomspace &&
-        roomspaceProvider.activeRoomspace == null &&
-        roomspaceProvider.roomspaces.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (!mounted) return;
-        await roomspaceProvider.setActiveRoomspace(roomspaceProvider.roomspaces.first.id);
-        if (mounted) setState(() {});
-      });
-    }
-
-    // Personal Space view only when there truly is no roomspace context to show.
-    if (roomspaceProvider.isPersonalSpace && !_hasRoomspace) {
+    // Respect explicit Personal Space mode even if user has joined roomspaces.
+    if (roomspaceProvider.isPersonalSpace) {
       return _buildPersonalSpaceScreen(primaryColor);
     }
 

@@ -1,0 +1,219 @@
+<!doctype html><html><head><meta charset="utf-8"><title>RoomEase Full Settings Flow (A to Z)</title><style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0.6in; }
+h1, h2, h3 { color: #0f172a; margin-top: 16pt; margin-bottom: 8pt; }
+h1 { font-size: 20pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+p { margin: 6pt 0; }
+ul, ol { margin: 6pt 0 6pt 18pt; }
+li { margin: 2pt 0; }
+code { font-family: Consolas, 'Courier New', monospace; background: #f8fafc; padding: 1pt 3pt; border-radius: 3px; }
+pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt; border-radius: 4px; overflow-x: auto; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+th, td { border: 1px solid #cbd5e1; padding: 6pt; text-align: left; }
+th { background: #f1f5f9; }
+blockquote { border-left: 3px solid #94a3b8; margin: 8pt 0; padding: 4pt 10pt; color: #334155; background: #f8fafc; }
+</style></head><body><h1 id="roomease-full-settings-flow-a-to-z">RoomEase Full Settings Flow (A to Z)</h1>
+<h2 id="technical-summary-paragraph">Technical Summary Paragraph</h2>
+<p>RoomEase Settings is a user-control surface that combines account actions (change password, logout), roomspace management shortcuts (switch/create/join/leave), and app behavior configuration (payment-detection notification settings, monitoring permissions toggles). Architecturally, it is frontend-driven through <code>SettingsScreen</code> and related service/provider calls, with selective backend persistence where needed (profile fetch, session logout, roomspace APIs, payment notification records). Password security flows remain Firebase-auth native (reauth + update), while backend session lifecycle is independently managed via <code>/api/auth/logout</code> cookie invalidation.</p>
+<hr />
+<h2 id="1-main-settings-frontend-files">1. Main settings frontend files</h2>
+<ol>
+<li>
+<p><code>lib/features/settings/presentation/settings_screen.dart</code>
+- Main settings page UI
+- Loads Firebase user + backend profile
+- Exposes change password, payment detection settings, roomspace controls, logout</p>
+</li>
+<li>
+<p><code>lib/features/settings/presentation/payment_notification_settings_screen.dart</code>
+- Settings for payment auto-detection feature
+- Enables/disables detection, notification monitoring, SMS monitoring
+- Manages minimum amount and allowed apps/merchants</p>
+</li>
+<li>
+<p><code>lib/services/firebase_auth_service.dart</code>
+- Implements <code>changePassword(...)</code> and Firebase signout</p>
+</li>
+<li>
+<p><code>lib/providers/roomspace_provider.dart</code>
+- Roomspace state load/refresh/leave/clear from settings actions</p>
+</li>
+<li>
+<p><code>lib/services/api_service.dart</code>
+- Backend logout and roomspace API calls used by provider/service chain</p>
+</li>
+</ol>
+<hr />
+<h2 id="2-settings-data-load-flow">2. Settings data-load flow</h2>
+<p>When Settings opens:
+1. <code>SettingsScreen.initState()</code> calls <code>_loadUserData()</code>
+2. Reads Firebase current user (<code>FirebaseAuthService.currentUser</code>) for quick name/email baseline
+3. Calls <code>_cachedApiService.getUserProfile()</code> to sync name/email from backend profile
+4. Calls <code>RoomspaceProvider.loadRoomspaces()</code> to show active roomspaces and management options</p>
+<p>Result:
+- Settings screen reflects Firebase identity + backend profile + current roomspace context.</p>
+<hr />
+<h2 id="3-change-password-flow">3. Change password flow</h2>
+<p>UI trigger:
+- <code>SettingsScreen._showChangePasswordDialog()</code></p>
+<p>Execution path:
+1. User enters current/new/confirm password
+2. Validates <code>new == confirm</code>
+3. Calls <code>FirebaseAuthService.changePassword(currentPassword, newPassword)</code>
+4. Service performs:
+- <code>EmailAuthProvider.credential(user.email, currentPassword)</code>
+- <code>user.reauthenticateWithCredential(...)</code>
+- <code>user.updatePassword(newPassword)</code></p>
+<p>Important:
+- No backend password-update endpoint is called.
+- Password storage/verification is fully Firebase Auth managed.</p>
+<hr />
+<h2 id="4-logout-flow">4. Logout flow</h2>
+<p>UI trigger:
+- <code>SettingsScreen._showLogoutDialog()</code></p>
+<p>Execution path:
+1. Reset local providers:
+- <code>SubscriptionProvider.reset()</code>
+- <code>RoomspaceProvider.clear()</code>
+2. Backend session logout:
+- <code>ApiService.logout()</code> -&gt; <code>POST /api/auth/logout</code>
+3. Firebase logout:
+- <code>FirebaseAuthService.signOut()</code>
+4. Cookie cleanup:
+- <code>ApiService.clearCookies()</code>
+5. Navigate to <code>/login</code></p>
+<p>Security model:
+- Backend session (<code>session_id</code>) invalidated server-side
+- Firebase local auth state cleared client-side</p>
+<hr />
+<h2 id="5-roomspace-management-from-settings">5. Roomspace management from Settings</h2>
+<p>Settings provides roomspace controls via provider/service chain:</p>
+<ol>
+<li>
+<p>Load roomspaces:
+- <code>RoomspaceProvider.loadRoomspaces()</code>
+- <code>GET /api/roomspaces</code></p>
+</li>
+<li>
+<p>Leave a roomspace:
+- <code>RoomspaceProvider.leaveRoomspace(roomspace.id)</code>
+- <code>POST /api/roomspaces/:id/leave</code>
+- Followed by <code>loadRoomspaces(forceRefresh: true)</code> for UI consistency</p>
+</li>
+<li>
+<p>Create/join/switch flows:
+- Delegated to existing roomspace feature routes/services
+- Settings acts as an entrypoint, not a separate backend flow</p>
+</li>
+</ol>
+<hr />
+<h2 id="6-payment-detection-settings-flow">6. Payment detection settings flow</h2>
+<p>Page:
+- <code>PaymentNotificationSettingsScreen</code></p>
+<p>Capability areas:
+1. Master enable/disable of payment detection
+2. Notification monitoring toggle
+3. SMS monitoring toggle
+4. Minimum amount threshold
+5. Allowed payment apps filter
+6. Allowed merchants filter
+7. Test-run helpers and payment history link</p>
+<p>Data persistence:
+- Uses <code>PaymentNotificationService</code> and related APIs/storage paths
+- Works with payment-notification records and processing status endpoints</p>
+<p>Related backend endpoints (from current API surface):
+- <code>POST /api/payment-notifications</code>
+- <code>GET /api/payment-notifications</code>
+- <code>GET /api/payment-notifications/:id</code>
+- <code>PUT /api/payment-notifications/:id/processed</code>
+- <code>DELETE /api/payment-notifications/:id</code></p>
+<hr />
+<h2 id="7-exact-frontend-method-mapping-settings">7. Exact frontend method mapping (Settings)</h2>
+<ol>
+<li>
+<p>Open settings user/profile data:
+- <code>SettingsScreen._loadUserData()</code>
+- <code>FirebaseAuthService.currentUser</code>
+- <code>CachedApiService.getUserProfile()</code></p>
+</li>
+<li>
+<p>Change password:
+- <code>SettingsScreen._showChangePasswordDialog()</code>
+- <code>FirebaseAuthService.changePassword(...)</code></p>
+</li>
+<li>
+<p>Logout:
+- <code>SettingsScreen._showLogoutDialog()</code>
+- <code>ApiService.logout()</code> -&gt; <code>POST /api/auth/logout</code>
+- <code>FirebaseAuthService.signOut()</code>
+- <code>ApiService.clearCookies()</code></p>
+</li>
+<li>
+<p>Leave roomspace:
+- <code>SettingsScreen._leaveRoomspace(...)</code>
+- <code>RoomspaceProvider.leaveRoomspace(...)</code>
+- backend <code>POST /api/roomspaces/:id/leave</code></p>
+</li>
+<li>
+<p>Payment notification settings:
+- <code>PaymentNotificationSettingsScreen</code> actions
+- <code>PaymentNotificationService</code> update/load flows
+- payment notification API family calls (create/get/update/delete)</p>
+</li>
+</ol>
+<hr />
+<h2 id="8-backend-files-involved-indirectly-via-settings-actions">8. Backend files involved indirectly via settings actions</h2>
+<ol>
+<li>
+<p><code>backend/handlers/auth.go</code>
+- <code>Logout</code> handler for <code>/api/auth/logout</code></p>
+</li>
+<li>
+<p><code>backend/handlers/roomspace.go</code>
+- Leave roomspace action and related membership operations</p>
+</li>
+<li>
+<p><code>backend/handlers/payment_notification.go</code>
+- Payment-notification CRUD/process endpoints used by settings-related monitoring features</p>
+</li>
+<li>
+<p><code>backend/middleware/auth.go</code>
+- Protects settings-triggered APIs with session validation</p>
+</li>
+</ol>
+<hr />
+<h2 id="9-database-tables-used-and-purpose-settings">9. Database tables used and purpose (Settings)</h2>
+<p>Primary tables touched by settings-driven operations:</p>
+<ol>
+<li>
+<p><code>users</code>
+- Profile data shown in settings (name/email) and account flags</p>
+</li>
+<li>
+<p><code>roomspaces</code>
+- Roomspace entities displayed/managed from settings entrypoints</p>
+</li>
+<li>
+<p><code>roomspace_members</code>
+- Membership updates during leave operations</p>
+</li>
+<li>
+<p><code>join_requests</code>
+- Indirectly relevant when settings routes to join/manage flows</p>
+</li>
+<li>
+<p><code>payment_notifications</code>
+- Detected transaction records used by payment notification settings/history/processing</p>
+</li>
+<li>
+<p><code>notifications</code>
+- General app notifications indirectly tied to roomspace/payment actions</p>
+</li>
+</ol>
+<p>Session note:
+- <code>session_id</code> is cookie + in-memory session store, not a PostgreSQL table in current implementation.</p>
+<hr />
+<h2 id="10-one-line-summary">10. One-line summary</h2>
+<p>Settings is a hybrid control plane: Firebase handles credential-level actions (change password), backend handles session and domain actions (logout, roomspace membership, payment-notification data), and providers/services keep UI state synchronized.</p></body></html>

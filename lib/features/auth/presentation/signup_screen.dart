@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../controllers/auth_controller.dart';
 import '../../../providers/roomspace_provider.dart';
@@ -15,6 +16,13 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  static const int _fullNameMaxLength = 50;
+  static const int _passwordMinLength = 6;
+  static const int _passwordMaxLength = 64;
+  static final RegExp _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$');
+  static final RegExp _passwordHasNumber = RegExp(r'[0-9]');
+  static final RegExp _passwordHasSpecialChar = RegExp(r'[!@#$%^&*(),.?":{}|<>_\-\\/\[\];`~+=]');
+
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -215,6 +223,11 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Widget _buildField(TextEditingController ctrl, String label, IconData icon, {bool isPassword = false, bool isConfirm = false}) {
+    final isName = label == 'Full Name';
+    final isEmail = label == 'Email';
+    final isPasswordField = label == 'Password';
+    final isConfirmPasswordField = label == 'Confirm Password';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -223,6 +236,11 @@ class _SignupScreenState extends State<SignupScreen> {
         TextFormField(
           controller: ctrl,
           obscureText: isPassword && (isConfirm ? _obscureConfirmPassword : _obscurePassword),
+          inputFormatters: [
+            if (isName) LengthLimitingTextInputFormatter(_fullNameMaxLength),
+            if (isPasswordField || isConfirmPasswordField)
+              LengthLimitingTextInputFormatter(_passwordMaxLength),
+          ],
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
           decoration: InputDecoration(
             hintText: 'Enter your $label',
@@ -230,6 +248,8 @@ class _SignupScreenState extends State<SignupScreen> {
             filled: true,
             fillColor: const Color(0xFFF7F7FB),
             prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade400),
+            errorMaxLines: 4,
+            errorStyle: const TextStyle(height: 1.25),
             suffixIcon: isPassword ? IconButton(icon: Icon((isConfirm ? _obscureConfirmPassword : _obscurePassword) ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: Colors.grey.shade400), onPressed: () => setState(() { if (isConfirm) {
               _obscureConfirmPassword = !_obscureConfirmPassword;
             } else {
@@ -239,6 +259,30 @@ class _SignupScreenState extends State<SignupScreen> {
           ),
           validator: (v) {
             if (v!.isEmpty) return '$label required';
+            if (isName) {
+              final trimmed = v.trim();
+              if (trimmed.length < 2) return 'Full Name must be at least 2 characters';
+              if (trimmed.length > _fullNameMaxLength) {
+                return 'Full Name must be at most $_fullNameMaxLength characters';
+              }
+            }
+            if (isEmail) {
+              final email = v.trim();
+              if (!_emailPattern.hasMatch(email)) {
+                return 'Enter a valid email address (example@domain.com)';
+              }
+            }
+            if (isPasswordField || isConfirmPasswordField) {
+              if (v.length < _passwordMinLength) {
+                return 'Password must be at least $_passwordMinLength characters';
+              }
+              if (!_passwordHasNumber.hasMatch(v)) {
+                return 'Password must include at least one number';
+              }
+              if (!_passwordHasSpecialChar.hasMatch(v)) {
+                return 'Password must include at least one special character';
+              }
+            }
             if (isConfirm && v != _passwordController.text) return 'Passwords mismatch';
             return null;
           },

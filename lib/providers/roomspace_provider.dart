@@ -46,6 +46,7 @@ class RoomspaceProvider extends ChangeNotifier {
   static const int _maxRetries = 3;
   static const Duration _retryDelay = Duration(seconds: 2);
   static const Duration _cacheExpiration = Duration(hours: 24);
+  Future<void>? _roomspacesLoadInFlight;
 
   String _activeRoomspaceStorageKey() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -77,6 +78,32 @@ class RoomspaceProvider extends ChangeNotifier {
   /// Includes retry logic for network failures
   /// Loads cached data first if available, then fetches fresh data
   Future<void> loadRoomspaces({int retryCount = 0, bool forceRefresh = false}) async {
+    if (retryCount == 0 && _roomspacesLoadInFlight != null) {
+      print('⏳ loadRoomspaces de-duplicated (in-flight)');
+      return _roomspacesLoadInFlight!;
+    }
+
+    if (retryCount == 0) {
+      final future = _loadRoomspacesInternal(
+        retryCount: retryCount,
+        forceRefresh: forceRefresh,
+      );
+      _roomspacesLoadInFlight = future;
+      try {
+        await future;
+      } finally {
+        _roomspacesLoadInFlight = null;
+      }
+      return;
+    }
+
+    return _loadRoomspacesInternal(
+      retryCount: retryCount,
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  Future<void> _loadRoomspacesInternal({int retryCount = 0, bool forceRefresh = false}) async {
     print('🔄 Loading roomspaces... (forceRefresh: $forceRefresh, retryCount: $retryCount)');
     _isLoading = true;
     _error = null;

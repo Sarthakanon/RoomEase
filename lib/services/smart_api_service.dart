@@ -23,6 +23,7 @@ class SmartApiService {
   final OfflineExpenseService _offlineExpenseService = OfflineExpenseService();
   final ConnectivityService _connectivityService = ConnectivityService();
   final LocalDatabaseService _localDb = LocalDatabaseService();
+  final Map<String, Future<Map<String, dynamic>>> _inFlightFetches = {};
 
   // Expose dio for direct API calls when needed
   get dio => _api.dio;
@@ -125,7 +126,15 @@ class SmartApiService {
     Duration? customRefreshInterval,
     bool forceRefresh = false,
   }) async {
-    try {
+    final requestKey = '$screenKey|$cacheKey|$forceRefresh';
+    final inFlight = _inFlightFetches[requestKey];
+    if (inFlight != null) {
+      debugPrint('⏳ Smart fetch de-duplicated (in-flight): $screenKey');
+      return inFlight;
+    }
+
+    final fetchFuture = () async {
+      try {
       // Set loading state
       _state.setLoading(screenKey, true);
       _state.clearError(screenKey);
@@ -157,20 +166,26 @@ class SmartApiService {
       debugPrint('✅ Smart fetch completed: $screenKey');
       return data;
       
-    } catch (e) {
-      _state.setLoading(screenKey, false);
-      _state.setError(screenKey, e.toString());
-      
-      // Try to return cached data as fallback
-      final cachedData = await _cache.get<Map<String, dynamic>>(cacheKey);
-      if (cachedData != null) {
-        debugPrint('📦 Smart fetch fallback to cache: $screenKey');
-        return cachedData;
+      } catch (e) {
+        _state.setLoading(screenKey, false);
+        _state.setError(screenKey, e.toString());
+        
+        // Try to return cached data as fallback
+        final cachedData = await _cache.get<Map<String, dynamic>>(cacheKey);
+        if (cachedData != null) {
+          debugPrint('📦 Smart fetch fallback to cache: $screenKey');
+          return cachedData;
+        }
+        
+        debugPrint('❌ Smart fetch failed: $screenKey - $e');
+        rethrow;
+      } finally {
+        _inFlightFetches.remove(requestKey);
       }
-      
-      debugPrint('❌ Smart fetch failed: $screenKey - $e');
-      rethrow;
-    }
+    }();
+
+    _inFlightFetches[requestKey] = fetchFuture;
+    return fetchFuture;
   }
 
   /// Get user profile with smart caching
